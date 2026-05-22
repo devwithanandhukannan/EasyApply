@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  job_seeker
+  company_admin
+  company_hr
+  admin
+}
+
+model User {
+  id           String        @id @default(uuid())
+  mobileNumber String        @unique
+  email        String?       @unique   // added for profile
+  fullName     String?                 // added for profile
+  role         UserRole      @default(job_seeker)
+  isVerified   Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  otps         Otp[]
+  
+  // Profile relations (new)
+  jobSeekerProfile JobSeekerProfile?
+  skills           Skill[]
+  education        Education[]
+  experience       Experience[]
+  projects         Project[]
+  certifications   Certification[]
+  languages        Language[]
+  achievements     Achievement[]
+}
+
+model Otp {
+  id           String   @id @default(uuid())
+  mobileNumber String
+  otpHash      String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([mobileNumber])
+}
+
+// New profile models below
+
+model JobSeekerProfile {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Basic info
+  phone        String?
+  location     String?
+  linkedin     String?
+  github       String?
+  portfolio    String?
+  bio          String?
+  profilePic   String?
+  
+  // Job Preferences
+  preferredRoles         String[]
+  preferredIndustries    String[]
+  jobType                String?
+  experienceLevel        String?
+  expectedSalary         String?
+  workLocationPreference String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Skill {
+  id        String   @id @default(uuid())
+  name      String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Education {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institution String
+  degree      String
+  field       String
+  location    String?
+  startMonth  String?
+  startYear   String?
+  endMonth    String?
+  endYear     String?
+  cgpa        String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Experience {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company     String
+  role        String
+  location    String?
+  startMonth  String?
+  startYear   String?
+  endMonth    String?
+  endYear     String?
+  current     Boolean  @default(false)
+  description String?
+  skillsUsed  String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Project {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  description  String
+  technologies String[]
+  githubLink   String?
+  liveLink     String?
+  startDate    String?
+  endDate      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Certification {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  organization String
+  issueDate    String?
+  credentialUrl String?
+  createdAt    DateTime @default(now())
+}
+
+model Language {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  language   String
+  proficiency String
+  createdAt  DateTime @default(now())
+}
+
+model Achievement {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  year        String?
+  createdAt   DateTime @default(now())
+}
