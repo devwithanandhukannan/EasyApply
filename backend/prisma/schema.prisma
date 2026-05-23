@@ -6,6 +6,10 @@ datasource db {
   provider = "postgresql"
 }
 
+// ==========================================
+// ENUMS & CONFIGURATION DEFINITIONS
+// ==========================================
+
 enum UserRole {
   job_seeker
   company_admin
@@ -13,26 +17,66 @@ enum UserRole {
   admin
 }
 
+enum JobPostingStatus {
+  active
+  closed
+  paused
+}
+
+enum ApplicationStatus {
+  applied
+  reviewed
+  shortlisted
+  interview
+  offer
+  hired
+  rejected
+}
+
+enum InterviewStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+}
+
+enum Verdict {
+  shortlist
+  reject
+  on_hold
+  next_round
+}
+
+enum OfferStatus {
+  sent
+  accepted
+  declined
+  negotiation
+}
+
+enum AvailabilityStatus {
+  available
+  not_available
+  spot_available
+}
+
+// ==========================================
+// 1. AUTHENTICATION & CORE USER ENTITIES
+// ==========================================
+
 model User {
-  id           String        @id @default(uuid())
-  mobileNumber String        @unique
-  email        String?       @unique   // added for profile
-  fullName     String?                 // added for profile
-  role         UserRole      @default(job_seeker)
-  isVerified   Boolean       @default(false)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  otps         Otp[]
-  
-  // Profile relations (new)
+  id           String    @id @default(uuid())
+  mobileNumber String    @unique
+  role         UserRole  @default(job_seeker)
+  isVerified   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  otps             Otp[]
   jobSeekerProfile JobSeekerProfile?
-  skills           Skill[]
-  education        Education[]
-  experience       Experience[]
-  projects         Project[]
-  certifications   Certification[]
-  languages        Language[]
-  achievements     Achievement[]
+  teamMemberships  TeamMember[]
+  feedbacksGiven   InterviewFeedback[]
 }
 
 model Otp {
@@ -40,126 +84,264 @@ model Otp {
   mobileNumber String
   otpHash      String
   expiresAt    DateTime
+  purpose      String   // e.g., "authentication" | "company_registration"
   createdAt    DateTime @default(now())
   userId       String?
-  user         User?    @relation(fields: [userId], references: [id])
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([mobileNumber])
 }
 
-// New profile models below
+// ==========================================
+// 2. JOB SEEKER PROFILE & RESUME DATA
+// ==========================================
 
 model JobSeekerProfile {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  // Basic info
-  phone        String?
-  location     String?
-  linkedin     String?
-  github       String?
-  portfolio    String?
-  bio          String?
-  profilePic   String?
-  
-  // Job Preferences
-  preferredRoles         String[]
-  preferredIndustries    String[]
-  jobType                String?
-  experienceLevel        String?
-  expectedSalary         String?
-  workLocationPreference String?
-  
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName           String
+  email              String             @unique
+  profilePhotoUrl    String?
+  location           String?
+  phone              String?
+  linkedin           String?
+  github             String?
+  portfolio          String?
+  bio                String?
+  availabilityStatus AvailabilityStatus @default(available)
+  jobPreferences     Json?              // e.g., { roles: [], industries: [], expectedSalary: "" }
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Profile Sub-sections
+  resumes        Resume[]
+  skills         Skill[]
+  education      Education[]
+  experience     Experience[]
+  projects       Project[]
+  certifications Certification[]
+  languages      Language[]
+  achievements   Achievement[]
+  applications   Application[]
+}
+
+model Resume {
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  name               String
+  source             String           // "built" | "uploaded"
+  filePath           String?          // Relative VPS disk target path
+  isPrimary          Boolean          @default(false)
+
+  // ATS Analysis & Structural Data Extraction
+  atsScore      Int?
+  content       Json?                 // Sections layout: { contactInfo, skills[], experience[] }
+  aiSuggestions Json?                 // Gap optimization rules: { missingSections: [], keywordGaps: [] }
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  applications Application[]
 }
 
 model Skill {
-  id        String   @id @default(uuid())
-  name      String
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id                 String           @id @default(uuid())
+  name               String
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
 }
 
 model Education {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  institution String
-  degree      String
-  field       String
-  location    String?
-  startMonth  String?
-  startYear   String?
-  endMonth    String?
-  endYear     String?
-  cgpa        String?
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  institution        String
+  degree             String
+  field              String
+  location           String?
+  startMonth         String?
+  startYear          String?
+  endMonth           String?
+  endYear            String?
+  cgpa               String?
+  description        String?          @db.Text
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 }
 
 model Experience {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company     String
-  role        String
-  location    String?
-  startMonth  String?
-  startYear   String?
-  endMonth    String?
-  endYear     String?
-  current     Boolean  @default(false)
-  description String?
-  skillsUsed  String[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  company            String
+  role               String
+  location           String?
+  startMonth         String?
+  startYear          String?
+  endMonth           String?
+  endYear            String?
+  current            Boolean          @default(false)
+  description        String?          @db.Text
+  skillsUsed         String[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 }
 
 model Project {
-  id           String   @id @default(uuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name         String
-  description  String
-  technologies String[]
-  githubLink   String?
-  liveLink     String?
-  startDate    String?
-  endDate      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  name               String
+  description        String           @db.Text
+  technologies       String[]
+  githubLink         String?
+  liveLink           String?
+  startDate          String?
+  endDate            String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 }
 
 model Certification {
-  id           String   @id @default(uuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name         String
-  organization String
-  issueDate    String?
-  credentialUrl String?
-  createdAt    DateTime @default(now())
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  name               String
+  organization       String
+  issueDate          String?
+  credentialUrl      String?
+  createdAt          DateTime         @default(now())
 }
 
 model Language {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  language   String
-  proficiency String
-  createdAt  DateTime @default(now())
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  language           String
+  proficiency        String
+  createdAt          DateTime         @default(now())
 }
 
 model Achievement {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
-  year        String?
-  createdAt   DateTime @default(now())
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?          @db.Text
+  year               String?
+  createdAt          DateTime         @default(now())
+}
+
+// ==========================================
+// 3. COMPANY & PIPELINE MANAGEMENT
+// ==========================================
+
+model Company {
+  id                 String   @id @default(uuid())
+  name               String   @unique
+  industry           String
+  size               String
+  email              String   @unique // Official workspace identity context
+  mobileNumber       String
+  logoUrl            String?  @db.Text // Base64 buffer context or direct storage disk path string
+  registrationNumber String?  // Stores GST/Business registration parameters
+  isVerified         Boolean  @default(false) // Master admin workspace authorization status
+  isEmailVerified    Boolean  @default(false) // Outgoing SMTP transaction verification link state
+  verificationBadge  String   @default("none") // "none" | "pending" | "verified"
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  teamMembers TeamMember[]
+  jobPostings JobPosting[]
+
+  @@index([email])
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   // e.g., "admin" | "hr_manager" | "interviewer" | "viewer"
+  status    String   @default("active") // e.g., "invited" | "active" | "deactivated"
+  createdAt DateTime @default(now())
+}
+
+model JobPosting {
+  id             String           @id @default(uuid())
+  companyId      String
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title          String
+  description    String           @db.Text
+  jobType        String           // e.g., "full_time" | "part_time" | "contract" | "spot"
+  requiredSkills Json             // Structural array for parsing and semantic filtering
+  status         JobPostingStatus @default(active)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  applications Application[]
+}
+
+model Application {
+  id                 String            @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile  @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  jobPostingId       String
+  jobPosting         JobPosting        @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  resumeId           String
+  resume             Resume            @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  status             ApplicationStatus @default(applied)
+  appliedAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  interviews   Interview[]
+  offerLetters OfferLetter[]
+}
+
+// ==========================================
+// 4. INTERVIEWS, FEEDBACK, & OFFERS
+// ==========================================
+
+model Interview {
+  id              String          @id @default(uuid())
+  applicationId   String
+  application     Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  scheduledTime   DateTime
+  durationMinutes Int             @default(15)
+  livekitRoomName String
+  status          InterviewStatus @default(scheduled)
+  recordingPath   String?         // Path string targeting recorded assets on VPS disk
+  createdAt       DateTime        @default(now())
+
+  feedbacks InterviewFeedback[]
+}
+
+model InterviewFeedback {
+  id                    String    @id @default(uuid())
+  interviewId           String
+  interview             Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  interviewerId         String
+  interviewer           User      @relation(fields: [interviewerId], references: [id], onDelete: Cascade)
+  technicalRating       Int       // 1-5 scalar evaluation
+  communicationRating   Int       // 1-5 scalar evaluation
+  problemSolvingRating  Int       // 1-5 scalar evaluation
+  verdict               Verdict
+  notes                 String?   @db.Text
+  createdAt             DateTime  @default(now())
+}
+
+model OfferLetter {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  content       Json        // Flexible custom payload model structural tracking
+  filePath      String      // System relative layout tracking parameters
+  status        OfferStatus @default(sent)
+  sentAt        DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }

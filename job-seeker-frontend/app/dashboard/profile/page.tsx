@@ -150,45 +150,53 @@ export default function ProfilePage() {
 
   // Fetch profile on mount
   useEffect(() => {
-    const fetchProfile = async () => {
-      setLoading(true);
-      try {
-        const response = await api.get('/jobseeker/profile');
-        const data = response.data;
-        setBasicInfo({
-          fullName: data.fullName || '',
-          email: data.email || '',
-          phone: data.phone || '',
-          location: data.location || '',
-          linkedin: data.linkedin || '',
-          github: data.github || '',
-          portfolio: data.portfolio || '',
-          bio: data.bio || '',
-        });
-        setProfileImage(data.profilePic || null);
-        setPreferences({
-          roles: data.preferences?.roles || [],
-          industries: data.preferences?.industries || [],
-          jobType: data.preferences?.jobType || '',
-          experience: data.preferences?.experience || '',
-          expectedSalary: data.preferences?.expectedSalary || '',
-          workLocationPreference: data.preferences?.workLocationPreference || '',
-        });
-        setSkills(data.skills || []);
-        setEducation(data.education?.length ? data.education : education);
-        setExperience(data.experience?.length ? data.experience : experience);
-        setProjects(data.projects?.length ? data.projects : projects);
-        setCertifications(data.certifications?.length ? data.certifications : certifications);
-        setLanguages(data.languages?.length ? data.languages : languages);
-        setAchievements(data.achievements?.length ? data.achievements : achievements);
-      } catch (error) {
-        console.error('Failed to load profile:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
-  }, []);
+  const fetchProfile = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/jobseeker/profile');
+      const data = response.data;
+      
+      setBasicInfo({
+        fullName: data.fullName || '',
+        email: data.email || '',
+        phone: data.phone || '',
+        location: data.location || '',
+        linkedin: data.linkedin || '',
+        github: data.github || '',
+        portfolio: data.portfolio || '',
+        bio: data.bio || '',
+      });
+      
+      setProfileImage(data.profilePic || null);
+      
+      setPreferences({
+        roles: data.preferences?.roles || [],
+        industries: data.preferences?.industries || [],
+        jobType: data.preferences?.jobType || '',
+        experience: data.preferences?.experience || '',
+        expectedSalary: data.preferences?.expectedSalary || '',
+        workLocationPreference: data.preferences?.workLocationPreference || '',
+      });
+      
+      setSkills(data.skills || []);
+      
+      // Only set if data exists, otherwise keep initial state
+      if (data.education?.length) setEducation(data.education);
+      if (data.experience?.length) setExperience(data.experience);
+      if (data.projects?.length) setProjects(data.projects);
+      if (data.certifications?.length) setCertifications(data.certifications);
+      if (data.languages?.length) setLanguages(data.languages);
+      if (data.achievements?.length) setAchievements(data.achievements);
+      
+    } catch (error) {
+      console.error('Failed to load profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  fetchProfile();
+}, []); // Empty array is correct now - no state dependencies
 
   // Image handling
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
