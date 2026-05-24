@@ -56,9 +56,11 @@ export interface ResumeListItem {
 // ─── API calls ────────────────────────────────────────────────────────────
 export const uploadResume = (file: File, name?: string, jobDescription?: string) => {
   const form = new FormData();
+  // Aligns to your backend controller upload.single('resume') configuration
   form.append('resume', file);
   if (name) form.append('name', name);
   if (jobDescription) form.append('jobDescription', jobDescription);
+
   return api.post<{ success: boolean; data: ResumeListItem }>('/jobseeker/resumes/upload', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 90_000,
@@ -66,14 +68,24 @@ export const uploadResume = (file: File, name?: string, jobDescription?: string)
 };
 
 export const generateCV = (customPrompt?: string, jobDescription?: string) =>
-  api.post<{ success: boolean; data: ResumeListItem }>('/jobseeker/resumes/generate', { customPrompt, jobDescription }, { timeout: 90_000 });
+  api.post<{ success: boolean; data: ResumeListItem }>(
+    '/jobseeker/resumes/generate', 
+    { customPrompt, jobDescription }, 
+    { timeout: 90_000 }
+  );
 
 export const convertToEditable = (id: string) =>
-  api.post<{ success: boolean; data: ResumeListItem }>(`/jobseeker/resumes/${id}/convert`, {}, { timeout: 60_000 });
+  api.post<{ success: boolean; data: ResumeListItem }>(
+    `/jobseeker/resumes/${id}/convert`, 
+    {}, 
+    { timeout: 60_000 }
+  );
 
 export const optimizeForJD = (id: string, jobDescription: string) =>
   api.post<{ success: boolean; data: { htmlContent: string; notes: string; keywordsInserted: string[] } }>(
-    `/jobseeker/resumes/${id}/optimize`, { jobDescription }, { timeout: 90_000 }
+    `/jobseeker/resumes/${id}/optimize`, 
+    { jobDescription }, 
+    { timeout: 90_000 }
   );
 
 export const getKeywordSuggestions = (id: string) =>
@@ -82,7 +94,9 @@ export const getKeywordSuggestions = (id: string) =>
   );
 
 export const restoreVersion = (id: string, versionId: string) =>
-  api.patch<{ success: boolean; data: { htmlContent: string } }>(`/jobseeker/resumes/${id}/restore/${versionId}`);
+  api.patch<{ success: boolean; data: { htmlContent: string } }>(
+    `/jobseeker/resumes/${id}/restore/${versionId}`
+  );
 
 export const getAllResumes = () =>
   api.get<{ success: boolean; data: ResumeListItem[] }>('/jobseeker/resumes');

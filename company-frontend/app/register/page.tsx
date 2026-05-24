@@ -17,9 +17,10 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { AxiosError } from 'axios';
+import { useRouter } from 'next/navigation'; // Added for clean postwar routing
 import api from '../lib/axios';
 
-type Step = 'company' | 'contact' | 'verify' | 'additional';
+type Step = 'company' | 'contact' | 'verify' | 'additional' | 'success';
 
 interface CompanyData {
   companyName: string;
@@ -54,6 +55,7 @@ const companySizes = [
 ];
 
 function RegisterPageComponent() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>('company');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -188,8 +190,9 @@ function RegisterPageComponent() {
         industry: formData.industry,
         companySize: formData.companySize,
         email: formData.email,
-        password: formData.password,
-        gstNumber: formData.gstNumber
+        password: formData.password, // This flows directly into your backend JSON parser
+        gstNumber: formData.gstNumber,
+        mobileNumber: formData.mobileNumber
       };
 
       multipartPayload.append('companyData', JSON.stringify(analyticalPayload));
@@ -206,8 +209,7 @@ function RegisterPageComponent() {
       });
 
       if (response.data.success) {
-        alert('Corporate shell registered! Please check your verification link inbox to activate.');
-        // Optional tracking reset or router push goes here
+        setStep('success');
       }
     } catch (error) {
       const err = error as AxiosError<{ message?: string }>;
@@ -241,8 +243,10 @@ function RegisterPageComponent() {
 
   const renderProgressBar = () => {
     const steps = ['company', 'contact', 'verify', 'additional'];
-    const currentIndex = steps.indexOf(step);
+    const currentIndex = steps.indexOf(step as any);
     
+    if (step === 'success') return null;
+
     return (
       <div className="mb-8">
         <div className="flex items-center justify-between">
@@ -289,7 +293,7 @@ function RegisterPageComponent() {
         {renderProgressBar()}
 
         {/* Error Notification Context Block */}
-        {errorMessage && (
+        {errorMessage && step !== 'success' && (
           <div className="mb-6 bg-red-950/40 border border-red-900 rounded-xl p-4 text-sm text-red-400 text-center font-medium">
             {errorMessage}
           </div>
@@ -660,20 +664,44 @@ function RegisterPageComponent() {
               </div>
             </form>
           )}
+
+          {/* Success Step */}
+          {step === 'success' && (
+            <div className="text-center py-8 space-y-5">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-950/50 border border-green-500/30 rounded-full text-green-400 mb-2 animate-pulse">
+                <Check size={32} />
+              </div>
+              <h2 className="text-xl font-semibold text-white">Verification Link Dispatched!</h2>
+              <p className="text-sm text-gray-400 max-w-md mx-auto leading-relaxed">
+                We have sent an activation link to <span className="text-white font-medium">{formData.email}</span>. 
+                Please verify your corporate email to complete registration and unlock your hiring dashboard workspace.
+              </p>
+              <div className="pt-4">
+                <button
+                  onClick={() => router.push('/login')}
+                  className="w-full sm:w-auto px-8 py-3 bg-white text-black rounded-xl font-medium hover:bg-gray-100 transition-colors text-sm shadow-lg shadow-white/5"
+                >
+                  Proceed to Sign In
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-600 mb-3">
-            By continuing, you agree to our Terms &amp; Privacy Policy
-          </p>
-          <p className="text-sm text-gray-500">
-            Already have an account?{' '}
-            <a href="/login" className="text-white hover:underline font-medium">
-              Sign in
-            </a>
-          </p>
-        </div>
+        {step !== 'success' && (
+          <div className="mt-6 text-center">
+            <p className="text-xs text-gray-600 mb-3">
+              By continuing, you agree to our Terms &amp; Privacy Policy
+            </p>
+            <p className="text-sm text-gray-500">
+              Already have an account?{' '}
+              <a href="/login" className="text-white hover:underline font-medium">
+                Sign in
+              </a>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

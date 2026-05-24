@@ -23,7 +23,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // The endpoint verifies the HTTP cookie directly
         const response = await api.get('/auth/me');
         if (response.data.success) {
           setIsAuthenticated(true);

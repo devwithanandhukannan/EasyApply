@@ -246,6 +246,7 @@ model Company {
   size               String
   email              String   @unique // Official workspace identity context
   mobileNumber       String
+  passwordHash       String
   logoUrl            String?  @db.Text // Base64 buffer context or direct storage disk path string
   registrationNumber String?  // Stores GST/Business registration parameters
   isVerified         Boolean  @default(false) // Master admin workspace authorization status
@@ -273,18 +274,29 @@ model TeamMember {
 }
 
 model JobPosting {
-  id             String           @id @default(uuid())
-  companyId      String
-  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  title          String
-  description    String           @db.Text
-  jobType        String           // e.g., "full_time" | "part_time" | "contract" | "spot"
-  requiredSkills Json             // Structural array for parsing and semantic filtering
-  status         JobPostingStatus @default(active)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                 String           @id @default(uuid())
+  companyId          String
+  company            Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title              String
+  department         String?
+  description        String           @db.Text
+  jobType            String           // "Full-time" | "Part-time" | "Contract" | "Freelance" | "Spot"
+  locationType       String?          // "On-site" | "Remote" | "Hybrid"
+  location           String?          // City name
+  experienceRequired String?          // e.g., "2-5 years"
+  requiredSkills     Json             // Array of skills
+  salaryRange        String?
+  deadline           DateTime?
+  openings           Int              @default(1)
+  status             JobPostingStatus @default(active)
+  metadata           Json?            // Additional flexible data
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   applications Application[]
+
+  @@index([companyId])
+  @@index([status])
 }
 
 model Application {

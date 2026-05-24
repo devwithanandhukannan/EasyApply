@@ -4,9 +4,6 @@ import Groq from 'groq-sdk';
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const MODEL = 'llama-3.3-70b-versatile';
 
-// ──────────────────────────────────────────────────────────────────────────
-// Analyse uploaded resume — returns 6 scores + full ATS report
-// ──────────────────────────────────────────────────────────────────────────
 export const analyzeResume = async (rawText: string, jobDescription?: string) => {
   const jdSection = jobDescription
     ? `\nTarget Job Description:\n"""\n${jobDescription}\n"""\n`
@@ -71,9 +68,6 @@ Rules:
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// Generate fresh CV from user profile
-// ──────────────────────────────────────────────────────────────────────────
 export const generateFreshCV = async (
   profile: any,
   customPrompt?: string,
@@ -125,9 +119,6 @@ Return ONLY valid JSON:
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// Optimise existing HTML resume for a job description
-// ──────────────────────────────────────────────────────────────────────────
 export const optimizeForJD = async (htmlContent: string, jobDescription: string) => {
   const prompt = `You are a professional resume optimizer.
 
@@ -163,9 +154,6 @@ Return ONLY valid JSON:
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// Suggest clickable ATS keywords for current resume content
-// ──────────────────────────────────────────────────────────────────────────
 export const suggestKeywords = async (htmlContent: string) => {
   const prompt = `Analyze this resume and return ATS keyword suggestions.
 Return ONLY valid JSON.
@@ -194,9 +182,6 @@ ${htmlContent}
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
 
-// ──────────────────────────────────────────────────────────────────────────
-// Convert parsedData → HTML (uploaded resume → editor)
-// ──────────────────────────────────────────────────────────────────────────
 export const convertToHTML = async (parsedData: any) => {
   const prompt = `Convert this structured resume data into a clean, professional HTML resume.
 The layout should closely match the user's original CV style.
@@ -218,4 +203,46 @@ Return: { "htmlContent": "<html>" }`;
   });
   const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
   return result.htmlContent ?? '';
+};
+
+export const generateJobDescription = async (
+  roughDescription: string,
+  title?: string,
+  skills?: string[]
+) => {
+  const skillsList = skills && skills.length > 0 ? skills.join(', ') : 'core technical operations';
+  
+  const prompt = `You are an expert technical recruiter and senior copywriter. 
+Optimize and expand this rough job description into a highly engaging, professional markdown job posting.
+
+Target Job Title: ${title || 'Software Engineer'}
+Target Skills: ${skillsList}
+Rough Notes/Description: 
+"""
+${roughDescription}
+"""
+
+Create a comprehensive job description with:
+1. **Role Overview** - Compelling 2-3 sentence summary
+2. **Key Responsibilities** - 5-7 specific, action-oriented bullet points
+3. **Required Qualifications** - Must-have skills and experience
+4. **Preferred Qualifications** - Nice-to-have skills
+5. **What We Offer** - Benefits and perks (if mentioned in rough notes)
+
+Guidelines:
+- Use strong action verbs (lead, architect, drive, implement, etc.)
+- Quantify where possible (team size, scale, impact)
+- Make it ATS-friendly with relevant keywords
+- Keep tone professional but engaging
+- Use markdown formatting (headers, bullets, bold)
+- Output ONLY the formatted job description, no metadata or explanations`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.3,
+    max_tokens: 2000,
+  });
+
+  return completion.choices[0]?.message?.content || roughDescription;
 };
