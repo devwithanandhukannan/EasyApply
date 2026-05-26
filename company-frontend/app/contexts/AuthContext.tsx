@@ -45,22 +45,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initializeAuth();
-  }, []); // Empty dependency array - runs once
+  }, []);
 
   // Route protection - runs when auth state or pathname changes
   useEffect(() => {
     if (isLoading) return; // Don't redirect while loading
 
-    const publicPaths = ['/', '/login', '/signup'];
+    // FIX: Add invitation workflows to public whitelist exceptions
+    const publicPaths = ['/', '/login', '/signup', '/accept-invite', '/set-password', '/verify-email'];
     const isPublicPath = publicPaths.includes(pathname);
     const isDashboardPath = pathname.startsWith('/dashboard');
 
-    if (isAuthenticated && isPublicPath) {
+    if (isAuthenticated && (pathname === '/login' || pathname === '/signup')) {
       router.replace('/dashboard');
     } else if (!isAuthenticated && isDashboardPath) {
       router.replace('/login');
     }
-  }, [isAuthenticated, isLoading, pathname]); // Removed router from deps
+  }, [isAuthenticated, isLoading, pathname]);
 
   const login = (loginPayload: any) => {
     if (loginPayload.user && loginPayload.company) {
@@ -69,7 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(loginPayload);
     }
     setIsAuthenticated(true);
-    // Navigation is handled by useEffect
   };
 
   const logout = async () => {

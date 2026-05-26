@@ -42,7 +42,8 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
 // Company Authentication
 export const authenticateCompany = async (req: Request, res: Response, next: NextFunction) => {
   const token = req.cookies?.accessToken;
-
+  console.log(token);
+  
   if (!token) {
     return res.status(401).json({ success: false, message: 'Company session unauthorized or expired' });
   }

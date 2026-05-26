@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.routes.ts';
 import jobseekerRoutes from './routes/jobseeker.routes.ts';
 import companyAuthRoutes from './routes/companyAuth.routes.ts';
 import companyJobRoutes from './routes/company.routes.ts'
+import publicJobRoutes from './routes/publicJobs.routes.ts'; 
 
 const app = express();
 app.use(cookieParser());
@@ -36,9 +37,11 @@ app.use(express.json({ limit: '10mb' }));
 
 // ─── API ROUTE ROUTING REGISTER ──────────────────────────────────────────
 app.use('/api/auth', authRoutes);
-app.use('/api/jobseeker', jobseekerRoutes); // Clean entry for profile & /resumes/***
+app.use('/api/jobseeker', jobseekerRoutes);
 app.use('/api/company/auth', companyAuthRoutes);
 app.use('/api/company/jobs', companyJobRoutes);
+app.use('/api/company/', companyJobRoutes);
+app.use('/api/jobs', publicJobRoutes); 
 
 app.get('/', (_req, res) => res.send('Backend Running'));
 

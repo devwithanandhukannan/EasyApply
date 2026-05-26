@@ -10,11 +10,25 @@ datasource db {
 // ENUMS & CONFIGURATION DEFINITIONS
 // ==========================================
 
-enum UserRole {
-  job_seeker
-  company_admin
-  company_hr
-  admin
+enum RequestStatus {
+  pending
+  approved
+  declined
+}
+
+enum InterviewStatus {
+  scheduled
+  in_progress
+  completed
+  cancelled
+  reschedule_requested
+  confirmed
+}
+
+enum InterviewFormat {
+  video
+  coding_test
+  mixed
 }
 
 enum JobPostingStatus {
@@ -31,13 +45,6 @@ enum ApplicationStatus {
   offer
   hired
   rejected
-}
-
-enum InterviewStatus {
-  scheduled
-  in_progress
-  completed
-  cancelled
 }
 
 enum Verdict {
@@ -65,12 +72,15 @@ enum AvailabilityStatus {
 // ==========================================
 
 model User {
-  id           String    @id @default(uuid())
-  mobileNumber String    @unique
-  role         UserRole  @default(job_seeker)
-  isVerified   Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  mobileNumber String   @unique
+  password     String?
+  roles        Int      @default(1)   // default Job Seeker
+  isVerified   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Relations
   otps             Otp[]
@@ -244,22 +254,17 @@ model Company {
   name               String   @unique
   industry           String
   size               String
-  email              String   @unique // Official workspace identity context
-  mobileNumber       String
-  passwordHash       String
-  logoUrl            String?  @db.Text // Base64 buffer context or direct storage disk path string
-  registrationNumber String?  // Stores GST/Business registration parameters
-  isVerified         Boolean  @default(false) // Master admin workspace authorization status
-  isEmailVerified    Boolean  @default(false) // Outgoing SMTP transaction verification link state
+  logoUrl            String?  @db.Text
+  registrationNumber String?
+  isVerified         Boolean  @default(false)
   verificationBadge  String   @default("none") // "none" | "pending" | "verified"
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   // Relations
-  teamMembers TeamMember[]
-  jobPostings JobPosting[]
-
-  @@index([email])
+  teamMembers      TeamMember[]
+  jobPostings      JobPosting[]
+  interviewBatches InterviewBatch[]
 }
 
 model TeamMember {
@@ -268,8 +273,8 @@ model TeamMember {
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      String   // e.g., "admin" | "hr_manager" | "interviewer" | "viewer"
-  status    String   @default("active") // e.g., "invited" | "active" | "deactivated"
+  role      String   // e.g., "admin" | "hr_manager" | "interviewer" | "viewer" (company-specific)
+  status    String   @default("active") // "invited" | "active" | "deactivated"
   createdAt DateTime @default(now())
 }
 
@@ -293,7 +298,8 @@ model JobPosting {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  applications Application[]
+  applications     Application[]
+  interviewBatches InterviewBatch[]
 
   @@index([companyId])
   @@index([status])
@@ -319,18 +325,53 @@ model Application {
 // 4. INTERVIEWS, FEEDBACK, & OFFERS
 // ==========================================
 
+model InterviewBatch {
+  id                   String   @id @default(uuid())
+  companyId            String
+  company              Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  jobPostingId         String?
+  jobPosting           JobPosting? @relation(fields: [jobPostingId], references: [id])
+  startTime            DateTime
+  slotDuration         Int          // minutes
+  interviewFormat      InterviewFormat
+  interviewerIds       String[]
+  selectedCandidateIds String[]     // application IDs
+  status               String       @default("scheduled")
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  interviews Interview[]
+}
+
 model Interview {
   id              String          @id @default(uuid())
   applicationId   String
   application     Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  batchId         String?
+  batch           InterviewBatch? @relation(fields: [batchId], references: [id])
   scheduledTime   DateTime
   durationMinutes Int             @default(15)
-  livekitRoomName String
+  format          InterviewFormat @default(video)
+  interviewerIds  String[]
+  livekitRoomName String          @unique
+  joinLink        String
   status          InterviewStatus @default(scheduled)
-  recordingPath   String?         // Path string targeting recorded assets on VPS disk
+  recordingPath   String?
   createdAt       DateTime        @default(now())
+  feedbacks       InterviewFeedback[]
+  rescheduleRequests RescheduleRequest[]
+}
 
-  feedbacks InterviewFeedback[]
+model RescheduleRequest {
+  id            String         @id @default(uuid())
+  interviewId   String
+  interview     Interview      @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  requestedBy   String         @default("job_seeker") // "job_seeker" or "company"
+  proposedTime  DateTime
+  candidateNote String?        @db.Text
+  status        RequestStatus  @default(pending)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 model InterviewFeedback {

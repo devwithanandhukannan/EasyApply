@@ -13,6 +13,7 @@ import {
   User,
   ChevronDown,
   LogOut,
+  Search,
   Settings,
   Home
 } from 'lucide-react';
@@ -51,17 +52,15 @@ export default function Sidebar({ user }: SidebarProps) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const menuItems = [
-    { icon: Home, label: 'Dashboard', href: '/dashboard' },
-    { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
-    { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
-    { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
-    { icon: Star, label: 'Recommended', href: '/dashboard/recommended' },
-    { icon: Bell, label: 'Notifications', href: '/dashboard/notifications' },
-    { icon: DollarSign, label: 'Salary Insights', href: '/dashboard/salary' },
-    { icon: User, label: 'Profile', href: '/dashboard/profile' },
-    { icon: Settings, label: 'Settings', href: '/dashboard/settings' },
-  ];
+// Update the menuItems array in app/components/Sidebar.tsx
+const menuItems = [
+  { icon: Home, label: 'Dashboard', href: '/dashboard' },
+  { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' }, // ADD THIS
+  { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
+  { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
+  { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
+  { icon: User, label: 'Profile', href: '/dashboard/profile' },
+];
 
   const handleLogout = () => {
     logout();

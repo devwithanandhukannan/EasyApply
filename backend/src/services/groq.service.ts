@@ -246,3 +246,130 @@ Guidelines:
 
   return completion.choices[0]?.message?.content || roughDescription;
 };
+
+export const rankCandidates = async (
+  jobDescription: string,
+  requiredSkills: any,           // Json field from JobPosting (array stored as Prisma Json)
+  candidates: Array<{
+    applicationId: string;
+    candidateName: string;
+    skills: string[];
+    experience: any[];
+    education: any[];
+    projects: any[];
+    certifications: string[];
+    atsScore: number | null;
+    resumeContent: any;
+  }>,
+  topN: number,
+) => {
+  const skillsList = Array.isArray(requiredSkills)
+    ? requiredSkills.join(', ')
+    : JSON.stringify(requiredSkills);
+
+  const prompt = `You are a senior technical recruiter and talent acquisition specialist.
+Evaluate the following job applicants against the job description and rank them.
+
+Job Description:
+"""
+${jobDescription}
+"""
+
+Required Skills: ${skillsList}
+
+Applicants (${candidates.length} total):
+${JSON.stringify(candidates, null, 2)}
+
+Instructions:
+- Rank ALL ${candidates.length} candidates by fit for this role
+- Return the TOP ${topN} candidates only in the "rankings" array
+- Score each candidate 0-100 based on skill match, experience relevance, and overall fit
+- Be specific — reference actual skills, companies, and projects from their profiles
+
+Return ONLY valid JSON:
+{
+  "summary": "2-3 sentence overview of the applicant pool quality",
+  "rankings": [
+    {
+      "rank": 1,
+      "applicationId": "<exact applicationId from input>",
+      "score": 92,
+      "matchReason": "Concise explanation of why this candidate is a strong fit",
+      "strengths": ["specific strength 1", "specific strength 2", "specific strength 3"],
+      "gaps": ["missing skill or experience 1", "missing skill 2"],
+      "recommendation": "Strongly recommend" | "Recommend" | "Consider" | "Do not recommend"
+    }
+  ]
+}
+
+Rules:
+- applicationId must match EXACTLY from the input — do not alter it
+- rank starts from 1 (best) to ${topN}
+- strengths: 2-4 specific points referencing their actual profile
+- gaps: honest assessment of what they lack for this role (empty array if none)
+- recommendation must be one of the four exact strings above`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.2,
+    max_tokens: 4096,
+    response_format: { type: 'json_object' },
+  });
+
+  return JSON.parse(completion.choices[0]?.message?.content ?? '{"rankings":[],"summary":""}');
+};
+
+export const rankCandidatesAgainstQuery = async (
+  queryDescription: string,
+  requiredSkills: string[],
+  candidates: Array<{
+    id: string;
+    fullName: string;
+    skills: string[];
+    experience: any[];
+    education: any[];
+    projects: any[];
+    certifications: string[];
+    atsScore: number | null;
+  }>,
+  topN: number,
+) => {
+  const skillsStr = requiredSkills.join(', ');
+  const prompt = `You are a technical recruiter. Rank the following candidates for the role described below.
+
+Role Description:
+"""
+${queryDescription}
+"""
+
+Required Skills: ${skillsStr}
+
+Candidates:
+${JSON.stringify(candidates, null, 2)}
+
+Return ONLY valid JSON:
+{
+  "summary": "brief overview of the candidate pool",
+  "rankings": [
+    {
+      "rank": 1,
+      "candidateId": "exact id from input",
+      "score": 92,
+      "matchReason": "why this candidate fits",
+      "strengths": ["strength1", "strength2"],
+      "gaps": ["gap1"],
+      "recommendation": "Strongly recommend"
+    }
+  ]
+}`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.2,
+    max_tokens: 4096,
+    response_format: { type: 'json_object' },
+  });
+  return JSON.parse(completion.choices[0]?.message?.content ?? '{"rankings":[],"summary":""}');
+};

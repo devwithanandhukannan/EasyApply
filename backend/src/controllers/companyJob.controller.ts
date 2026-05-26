@@ -63,7 +63,6 @@ export const getAllCompanyJobs = async (req: Request, res: Response) => {
       where: { companyId },
       orderBy: { createdAt: 'desc' }
     });
-    console.log(postings);
     
     const formattedJobs = postings.map(job => ({
       ...job,

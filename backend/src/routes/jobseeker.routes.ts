@@ -1,4 +1,3 @@
-// src/routes/jobseeker.routes.ts
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -14,7 +13,29 @@ import {
   getAllResumes, getResumeById, updateResume, restoreVersion, deleteResume,
 } from '../controllers/resume.controller.ts';
 
+import {
+  applyToJob,
+  getMyApplications,
+  getApplicationDetails,
+  withdrawApplication,
+} from '../controllers/application.controller.ts';
+
+import {
+  getPublicJobs,
+  getPublicJobDetails,
+} from '../controllers/publicJobs.controller.ts';
+
+// New Feature: Import interview workflow controller tracking methods
+import {
+  getMyScheduledInterviews,
+  confirmInterviewPresence,
+  requestInterviewReschedule,
+} from '../controllers/interview.controller.ts';
+
 const router = express.Router();
+
+router.get('/jobs/public', getPublicJobs);
+router.get('/jobs/public/:id', getPublicJobDetails);
 
 // Enforce authentication globally for all nested jobseeker endpoints
 router.use(authenticateToken);
@@ -60,5 +81,16 @@ router.get('/resumes', getAllResumes);
 router.get('/resumes/:id', getResumeById);
 router.put('/resumes/:id', updateResume);
 router.delete('/resumes/:id', deleteResume);
+
+// ─── APPLICATION ENDPOINTS ───────────────────────────────────────────────
+router.post('/applications/apply', resumeUpload.single('newResume'), applyToJob);
+router.get('/applications', getMyApplications);
+router.get('/applications/:id', getApplicationDetails);
+router.delete('/applications/:id', withdrawApplication);
+
+// ─── INTERVIEW WORKFLOW ENDPOINTS ────────────────────────────────────────
+router.get('/interviews', getMyScheduledInterviews);
+router.post('/interviews/:id/confirm', confirmInterviewPresence);
+router.post('/interviews/:id/reschedule', requestInterviewReschedule);
 
 export default router;
