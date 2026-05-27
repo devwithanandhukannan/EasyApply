@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { Mail, Lock, ArrowRight, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, ShieldAlert, CheckCircle2, Building2, Users } from 'lucide-react';
 import { AxiosError } from 'axios';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
 
+// Define explicit operational login configurations 
+type LoginType = 'admin' | 'team';
+
 export default function LoginPage() {
   const { login } = useAuth();
+  const [loginType, setLoginType] = useState<LoginType>('admin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,8 +47,13 @@ export default function LoginPage() {
     setEmailSuccessMessage(null);
     setIsSubmitting(true);
 
+    // 🎯 Switch target endpoint based on active portal state context
+    const targetEndpoint = loginType === 'admin' 
+      ? '/company/auth/login' 
+      : '/company/team/login';
+
     try {
-      const res = await api.post('/company/auth/login', { email, password });
+      const res = await api.post(targetEndpoint, { email, password });
       
       if (res.data?.success) {
         login(res.data.user);
@@ -59,7 +68,7 @@ export default function LoginPage() {
       } else {
         setErrorMessage(
           error.response?.data?.message || 
-          'Invalid corporate credentials or unverified account status.'
+          'Invalid credentials or unverified account status.'
         );
       }
     } finally {
@@ -94,12 +103,46 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         
         {/* Header Icon & Branding */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl mb-4">
             <span className="text-black font-semibold text-xl">J</span>
           </div>
           <h1 className="text-2xl font-semibold text-white mb-2">Welcome Back</h1>
           <p className="text-gray-500 text-sm">Sign in to manage your company dashboard</p>
+        </div>
+
+        {/* ─── ROLE SELECTOR SWITCH ─── */}
+        <div className="bg-[#1c1c1e] p-1.5 rounded-xl border border-[#2c2c2e] flex items-center mb-6">
+          <button
+            type="button"
+            onClick={() => {
+              setLoginType('admin');
+              setErrorMessage(null);
+            }}
+            className={`flex-1 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
+              loginType === 'admin' 
+                ? 'bg-[#2c2c2e] text-white shadow-sm border border-[#3c3c3e]' 
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <Building2 size={14} />
+            <span>Company Admin</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLoginType('team');
+              setErrorMessage(null);
+            }}
+            className={`flex-1 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
+              loginType === 'team' 
+                ? 'bg-[#2c2c2e] text-white shadow-sm border border-[#3c3c3e]' 
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <Users size={14} />
+            <span>Team Member</span>
+          </button>
         </div>
 
         {/* Informational Verification Success Block */}
@@ -118,8 +161,8 @@ export default function LoginPage() {
               <span className="flex-1">{errorMessage}</span>
             </div>
             
-            {/* Conditional Action Link for Resending Mail */}
-            {isUnverified && (
+            {/* Conditional Action Link for Resending Mail (Only applicable to Admin users) */}
+            {isUnverified && loginType === 'admin' && (
               <div className="pl-8">
                 <button
                   type="button"
@@ -143,7 +186,7 @@ export default function LoginPage() {
             {/* Email Field Wrapper Context */}
             <div>
               <label className="block text-sm font-medium text-gray-400 mb-2">
-                Official Email Address
+                {loginType === 'admin' ? 'Official Email Address' : 'Invited Email Address'}
               </label>
               <div className="relative">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
@@ -203,7 +246,7 @@ export default function LoginPage() {
               disabled={isSubmitting}
               className="w-full bg-white text-black py-3.5 rounded-xl font-medium hover:bg-gray-100 disabled:bg-[#2c2c2e] disabled:text-gray-600 transition-colors flex items-center justify-center space-x-2 text-sm mt-2"
             >
-              <span>{isSubmitting ? 'Authenticating...' : 'Sign In'}</span>
+              <span>{isSubmitting ? 'Authenticating...' : `Sign In as ${loginType === 'admin' ? 'Admin' : 'Member'}`}</span>
               {!isSubmitting && <ArrowRight size={18} />}
             </button>
             

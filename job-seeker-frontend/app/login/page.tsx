@@ -1,15 +1,20 @@
 'use client';
 import { useState } from 'react';
-import { Smartphone, MessageCircle, ArrowRight, Shield } from 'lucide-react';
+import { Smartphone, MessageCircle, ArrowRight, Shield, User, Mail } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import api from '@/app/lib/axios';
 import dynamic from 'next/dynamic';
 
 function LoginPageComponent() {
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [step, setStep] = useState<'phone' | 'otp' | 'profile_setup'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Local state vectors for custom structural data updates
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+
   const { login, isLoading: authLoading } = useAuth();
 
   const handlePhoneSubmit = async (e: React.FormEvent) => {
@@ -50,11 +55,80 @@ function LoginPageComponent() {
         otp: enteredOtp,
       });
 
-      const { user } = response.data;
-      login(user);
+      const { user, token } = response.data;
+
+      // Commit token storage temporarily if your interceptor relies on localStorage
+      if (token) {
+        localStorage.setItem('token', token);
+      }
+
+      // Query verification against the precise profile routing architecture
+      try {
+        const profileRes = await api.get('/jobseeker/profile');
+        const profile = profileRes.data;
+
+        if (!profile.fullName || !profile.email) {
+          setStep('profile_setup');
+        } else {
+          login(user);
+        }
+      } catch (profileErr: any) {
+        // If profile is missing completely (404), switch onto setup stream
+        if (profileErr.response?.status === 404) {
+          setStep('profile_setup');
+        } else {
+          throw profileErr;
+        }
+      }
     } catch (error) {
       console.log(error);
       alert('Invalid OTP');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSubmitting(true);
+
+      // Structure object mapping precisely to your backend transaction expectations
+      const payload = {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phoneNumber.trim(),
+        skills: [],
+        education: [],
+        experience: [],
+        projects: [],
+        certifications: [],
+        languages: [],
+        achievements: [],
+        preferences: {
+          roles: [],
+          industries: [],
+          jobType: '',
+          experience: '',
+          expectedSalary: '',
+          workLocationPreference: ''
+        }
+      };
+
+      // Wrap compilation properties inside a valid form-data wrapper boundary
+      const formData = new FormData();
+      formData.append('profileData', JSON.stringify(payload));
+
+      await api.put('/jobseeker/profile', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      // Synchronize context tracking state vectors on complete
+      const finalProfileCheck = await api.get('/jobseeker/profile');
+      login(finalProfileCheck.data);
+    } catch (error) {
+      console.log(error);
+      alert('Failed to update registration profile details.');
     } finally {
       setIsSubmitting(false);
     }
@@ -90,13 +164,17 @@ function LoginPageComponent() {
           <div className="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl mb-6">
             <span className="text-black font-semibold text-xl">J</span>
           </div>
-          <h1 className="text-2xl font-semibold text-white mb-2">Welcome Back</h1>
-          <p className="text-gray-500 text-sm">Sign in to access your job portal</p>
+          <h1 className="text-2xl font-semibold text-white mb-2">
+            {step === 'profile_setup' ? 'Complete Profile' : 'Welcome Back'}
+          </h1>
+          <p className="text-gray-500 text-sm">
+            {step === 'profile_setup' ? 'Enter credentials to finalize database indexing' : 'Sign in to access your job portal'}
+          </p>
         </div>
 
         {/* Main Card */}
         <div className="bg-[#1c1c1e] rounded-2xl p-8 border border-[#2c2c2e]">
-          {step === 'phone' ? (
+          {step === 'phone' && (
             <form onSubmit={handlePhoneSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-3">
@@ -136,7 +214,9 @@ function LoginPageComponent() {
                 {!isSubmitting && <ArrowRight size={18} />}
               </button>
             </form>
-          ) : (
+          )}
+
+          {step === 'otp' && (
             <form onSubmit={handleOtpSubmit} className="space-y-5">
               <div>
                 <div className="flex items-center justify-between mb-3">
@@ -193,6 +273,57 @@ function LoginPageComponent() {
                 className="w-full text-sm text-gray-500 hover:text-white font-medium disabled:text-gray-700 transition-colors"
               >
                 Didn&apos;t receive OTP? Resend
+              </button>
+            </form>
+          )}
+
+          {step === 'profile_setup' && (
+            <form onSubmit={handleProfileSubmit} className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                    <User size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Anandhu Kannan"
+                    className="w-full pl-12 pr-4 py-3.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                    <Mail size={18} />
+                  </div>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="w-full pl-12 pr-4 py-3.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !fullName || !email}
+                className="w-full bg-white text-black py-3.5 rounded-xl font-medium hover:bg-gray-100 disabled:bg-[#2c2c2e] disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2 text-sm"
+              >
+                <span>{isSubmitting ? 'Saving Profile...' : 'Complete Registration'}</span>
+                {!isSubmitting && <ArrowRight size={18} />}
               </button>
             </form>
           )}

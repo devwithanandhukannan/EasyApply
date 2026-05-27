@@ -1,13 +1,10 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, 
   FileText, 
   Briefcase, 
   Calendar, 
-  Star, 
-  Bell, 
-  DollarSign,
   Menu,
   X,
   User,
@@ -52,15 +49,14 @@ export default function Sidebar({ user }: SidebarProps) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-// Update the menuItems array in app/components/Sidebar.tsx
-const menuItems = [
-  { icon: Home, label: 'Dashboard', href: '/dashboard' },
-  { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' }, // ADD THIS
-  { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
-  { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
-  { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
-  { icon: User, label: 'Profile', href: '/dashboard/profile' },
-];
+  const menuItems = [
+    { icon: Home, label: 'Dashboard', href: '/dashboard' },
+    { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' },
+    { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
+    { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
+    { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
+    { icon: User, label: 'Profile', href: '/dashboard/profile' },
+  ];
 
   const handleLogout = () => {
     logout();
@@ -76,18 +72,18 @@ const menuItems = [
     <>
       {/* Mobile Header */}
       {isMobile && (
-        <div className="fixed top-0 left-0 right-0 bg-[#1c1c1e] border-b border-[#2c2c2e] p-4 flex items-center justify-between z-50 h-16">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-black font-semibold text-sm">J</span>
+        <div className="fixed top-0 left-0 right-0 bg-black border-b border-zinc-900 px-5 flex items-center justify-between z-50 h-16 font-mono">
+          <div className="flex items-center space-x-3">
+            <div className="w-7 w-7 bg-white rounded flex items-center justify-center">
+              <span className="text-black font-bold text-xs tracking-tighter">J</span>
             </div>
-            <span className="text-white font-semibold">JobPortal</span>
+            <span className="text-white font-bold text-xs uppercase tracking-widest">JobPortal</span>
           </div>
           <button
             onClick={() => setShowMobileMenu(!showMobileMenu)}
-            className="p-2 hover:bg-[#2c2c2e] rounded-lg transition-colors text-gray-400 hover:text-white"
+            className="p-1.5 hover:bg-zinc-900 rounded-lg transition-colors text-zinc-400 hover:text-white"
           >
-            {showMobileMenu ? <X size={20} /> : <Menu size={20} />}
+            {showMobileMenu ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
       )}
@@ -95,7 +91,7 @@ const menuItems = [
       {/* Mobile Overlay */}
       {isMobile && showMobileMenu && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 top-16"
+          className="fixed inset-0 bg-black/80 backdrop-blur-xs切换 z-40 top-16"
           onClick={() => setShowMobileMenu(false)}
         />
       )}
@@ -104,119 +100,119 @@ const menuItems = [
       <div
         className={`${
           isMobile
-            ? `fixed top-16 left-0 right-0 h-[calc(100vh-64px)] bg-[#1c1c1e] border-b border-[#2c2c2e] overflow-y-auto z-40 transform transition-transform duration-300 ${
+            ? `fixed top-16 left-0 right-0 h-[calc(100vh-64px)] bg-black border-b border-zinc-900 overflow-y-auto z-40 transform transition-transform duration-200 ${
                 showMobileMenu ? 'translate-x-0' : '-translate-x-full'
               }`
-            : `fixed top-0 left-0 h-screen bg-[#1c1c1e] border-r border-[#2c2c2e] transition-all duration-300 z-50 flex flex-col ${
-                isCollapsed ? 'w-20' : 'w-72'
+            : `fixed top-0 left-0 h-screen bg-black border-r border-zinc-900 transition-all duration-300 z-50 flex flex-col ${
+                isCollapsed ? 'w-20' : 'w-64'
               }`
-        }`}
+        } font-mono`}
       >
         {/* Desktop Header */}
         {!isMobile && (
-          <div className="p-4 border-b border-[#2c2c2e] flex items-center justify-between sticky top-0 bg-[#1c1c1e]">
+          <div className="p-5 border-b border-zinc-900/60 flex items-center justify-between sticky top-0 bg-black">
             {!isCollapsed && (
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                  <span className="text-black font-semibold text-sm">J</span>
+              <div className="flex items-center space-x-3">
+                <div className="w-7 h-7 bg-white rounded flex items-center justify-center">
+                  <span className="text-black font-bold text-xs tracking-tighter">J</span>
                 </div>
-                <span className="text-white font-semibold text-lg">JobPortal</span>
+                <span className="text-white font-bold text-xs uppercase tracking-widest">JobPortal</span>
               </div>
             )}
             {isCollapsed && (
-              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center mx-auto">
-                <span className="text-black font-semibold text-sm">J</span>
+              <div className="w-7 h-7 bg-white rounded flex items-center justify-center mx-auto">
+                <span className="text-black font-bold text-xs tracking-tighter">J</span>
               </div>
             )}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className={`p-2 hover:bg-[#2c2c2e] rounded-lg transition-colors text-gray-400 hover:text-white ${
-                isCollapsed ? 'absolute top-4 right-2' : ''
+              className={`p-1.5 hover:bg-zinc-900 rounded border border-transparent hover:border-zinc-800 transition-colors text-zinc-500 hover:text-white ${
+                isCollapsed ? 'mx-auto mt-0.5' : ''
               }`}
             >
-              {isCollapsed ? <Menu size={20} /> : <X size={20} />}
+              {isCollapsed ? <Menu size={16} /> : <X size={16} />}
             </button>
           </div>
         )}
 
         {/* User Account Info */}
-        <div className="p-4 border-b border-[#2c2c2e]">
-          <div className="relative">
-            <button
-              onClick={() => !isCollapsed && !isMobile && setShowUserMenu(!showUserMenu)}
-              className={`w-full flex items-center space-x-3 p-3 hover:bg-[#2c2c2e] rounded-xl transition-colors ${
-                isCollapsed ? 'justify-center' : ''
-              }`}
-              title={isCollapsed ? user?.name || 'User' : ''}
-            >
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-                {user?.avatar ? (
-                  <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
-                ) : (
-                  <User size={20} className="text-white" />
-                )}
-              </div>
-              {!isCollapsed && (
-                <>
-                  <div className="flex-1 text-left">
-                    <p className="text-white text-sm font-medium truncate">
-                      {user?.name || 'User Name'}
-                    </p>
-                    <p className="text-gray-500 text-xs truncate">{user?.email || 'user@email.com'}</p>
-                  </div>
-                  <ChevronDown
-                    size={16}
-                    className={`text-gray-500 transition-transform ${
-                      showUserMenu ? 'rotate-180' : ''
-                    }`}
-                  />
-                </>
-              )}
-            </button>
-
-            {/* User Dropdown Menu */}
-            {showUserMenu && !isCollapsed && !isMobile && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-[#000000] border border-[#2c2c2e] rounded-xl overflow-hidden shadow-xl z-50">
-                <Link
-                  href="/dashboard/profile"
-                  onClick={() => setShowUserMenu(false)}
-                  className="flex items-center space-x-3 px-4 py-3 hover:bg-[#1c1c1e] transition-colors text-gray-300 hover:text-white"
-                >
-                  <User size={16} />
-                  <span className="text-sm">View Profile</span>
-                </Link>
-                <Link
-                  href="/dashboard/settings"
-                  onClick={() => setShowUserMenu(false)}
-                  className="flex items-center space-x-3 px-4 py-3 hover:bg-[#1c1c1e] transition-colors text-gray-300 hover:text-white"
-                >
-                  <Settings size={16} />
-                  <span className="text-sm">Settings</span>
-                </Link>
-                <button 
-                  onClick={handleLogout}
-                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-[#1c1c1e] transition-colors text-red-500 hover:text-red-400 border-t border-[#2c2c2e]"
-                >
-                  <LogOut size={16} />
-                  <span className="text-sm">Logout</span>
-                </button>
-              </div>
-            )}
-
-            {/* Mobile User Menu */}
-            {isMobile && (
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#2c2c2e]">
-                <div>
-                  <p className="text-white text-xs font-medium">Account</p>
-                </div>
-              </div>
-            )}
+        {/* User Account Info */}
+<div className="p-4 border-b border-zinc-900/60">
+  <div className="relative">
+    <button
+      onClick={() => !isCollapsed && !isMobile && setShowUserMenu(!showUserMenu)}
+      className={`w-full flex items-center space-x-3 p-2 hover:bg-zinc-950 border border-transparent hover:border-zinc-900 rounded-lg transition-all ${
+        isCollapsed ? 'justify-center' : ''
+      }`}
+      title={isCollapsed ? user?.name || 'User' : ''}
+    >
+      <div className="w-8 h-8 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center flex-shrink-0 overflow-hidden">
+        {/* 🎯 Safe optional chaining to prevent undefined profile crashes */}
+        {user?.jobSeekerProfile?.profilePhotoUrl ? (
+          <img 
+            src={user.jobSeekerProfile.profilePhotoUrl} 
+            alt={user?.name || 'User'} 
+            className="w-full h-full object-cover" 
+          />
+        ) : (
+          <User size={14} className="text-zinc-400" />
+        )}
+      </div>
+      {!isCollapsed && (
+        <>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-zinc-200 text-xs font-semibold truncate uppercase tracking-tight">
+              {/* 🎯 Fallback matrix if the inner setup profile isn't indexed yet */}
+              {user?.jobSeekerProfile?.fullName || user?.name || 'User Profile'}
+            </p>
+            <p className="text-zinc-600 text-[10px] truncate mt-0.5">
+              {user?.jobSeekerProfile?.email || user?.email || 'unconfigured@identity.net'}
+            </p>
           </div>
-        </div>
+          <ChevronDown
+            size={12}
+            className={`text-zinc-600 transition-transform duration-200 ${
+              showUserMenu ? 'rotate-180 text-white' : ''
+            }`}
+          />
+        </>
+      )}
+    </button>
+
+    {/* User Dropdown Menu */}
+    {showUserMenu && !isCollapsed && !isMobile && (
+      <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-950 border border-zinc-900 rounded-lg overflow-hidden shadow-2xl z-50 p-1 space-y-0.5">
+        <Link
+          href="/dashboard/profile"
+          onClick={() => setShowUserMenu(false)}
+          className="flex items-center space-x-2 px-3 py-2 rounded hover:bg-zinc-900 text-zinc-400 hover:text-white transition-colors text-xs uppercase font-medium"
+        >
+          <User size={14} />
+          <span>View Profile</span>
+        </Link>
+        <Link
+          href="/dashboard/settings"
+          onClick={() => setShowUserMenu(false)}
+          className="flex items-center space-x-2 px-3 py-2 rounded hover:bg-zinc-900 text-zinc-400 hover:text-white transition-colors text-xs uppercase font-medium"
+        >
+          <Settings size={14} />
+          <span>Settings</span>
+        </Link>
+        <button 
+          onClick={handleLogout}
+          className="w-full flex items-center space-x-2 px-3 py-2 rounded hover:bg-red-950/20 text-zinc-500 hover:text-red-400 border-t border-zinc-900/60 mt-1 pt-2 text-xs uppercase font-medium"
+        >
+          <LogOut size={14} />
+          <span>Logout</span>
+        </button>
+      </div>
+    )}
+  </div>
+</div>
 
         {/* Navigation Menu */}
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <ul className={isMobile ? 'space-y-2' : 'space-y-1'}>
+        <nav className="flex-1 p-4 overflow-y-auto space-y-1">
+          <ul className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -226,15 +222,15 @@ const menuItems = [
                   <Link
                     href={item.href}
                     onClick={handleNavClick}
-                    className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
+                    className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all text-xs uppercase tracking-wide border font-medium ${
                       isActive
-                        ? 'bg-white text-black shadow-lg'
-                        : 'text-gray-400 hover:bg-[#2c2c2e] hover:text-white'
+                        ? 'bg-zinc-900 text-white border-zinc-800 shadow-sm'
+                        : 'text-zinc-500 border-transparent hover:text-zinc-200 hover:bg-zinc-950/50'
                     } ${isCollapsed ? 'justify-center' : ''}`}
                     title={isCollapsed ? item.label : ''}
                   >
-                    <Icon size={20} />
-                    {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
+                    <Icon size={16} className={isActive ? 'text-white' : 'text-zinc-500'} />
+                    {!isCollapsed && <span>{item.label}</span>}
                   </Link>
                 </li>
               );
@@ -244,38 +240,38 @@ const menuItems = [
 
         {/* Footer - App Version (Desktop only) */}
         {!isCollapsed && !isMobile && (
-          <div className="p-4 border-t border-[#2c2c2e]">
-            <div className="text-center">
-              <p className="text-gray-600 text-xs">JobPortal v1.0</p>
-              <p className="text-gray-700 text-xs mt-1">© 2024 All rights reserved</p>
+          <div className="p-4 border-t border-zinc-900/60 bg-black">
+            <div className="text-center text-[10px] tracking-tight text-zinc-700">
+              <p className="uppercase font-bold tracking-widest text-zinc-600">JobPortal v1.0</p>
+              <p className="mt-0.5">Evaluation Token Matrix</p>
             </div>
           </div>
         )}
 
         {/* Mobile Footer Actions */}
         {isMobile && (
-          <div className="p-4 border-t border-[#2c2c2e] space-y-2">
+          <div className="p-4 border-t border-zinc-900 bg-black grid grid-cols-3 gap-2">
             <Link
               href="/dashboard/profile"
               onClick={handleNavClick}
-              className="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-[#2c2c2e] transition-colors text-sm"
+              className="flex flex-col items-center justify-center p-3 rounded-lg border border-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-950 text-[10px] uppercase font-bold space-y-1"
             >
-              <User size={16} />
-              <span>View Profile</span>
+              <User size={14} />
+              <span>Profile</span>
             </Link>
             <Link
               href="/dashboard/settings"
               onClick={handleNavClick}
-              className="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-[#2c2c2e] transition-colors text-sm"
+              className="flex flex-col items-center justify-center p-3 rounded-lg border border-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-950 text-[10px] uppercase font-bold space-y-1"
             >
-              <Settings size={16} />
+              <Settings size={14} />
               <span>Settings</span>
             </Link>
             <button 
               onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-500 hover:text-red-400 hover:bg-[#2c2c2e] transition-colors text-sm"
+              className="flex flex-col items-center justify-center p-3 rounded-lg border border-zinc-900/60 bg-zinc-950 text-red-500 hover:text-red-400 text-[10px] uppercase font-bold space-y-1"
             >
-              <LogOut size={16} />
+              <LogOut size={14} />
               <span>Logout</span>
             </button>
           </div>

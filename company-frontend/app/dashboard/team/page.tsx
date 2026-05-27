@@ -2,8 +2,15 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { teamApi, TeamMember } from '@/app/lib/api/team';
-import { useAuth } from '@/app/contexts/AuthContext';
 import { MoreHorizontal, UserPlus, Trash2, Shield, Mail, Calendar, X, ChevronDown } from 'lucide-react';
+
+// ─── BITWISE SYSTEM ROLE CONSTANTS ───────────────────────────────────────────
+const ROLES = {
+  COMPANY_ADMIN: 2,
+  COMPANY_HR: 4,
+  COMPANY_INTERVIEWER: 8,
+  COMPANY_VIEWER: 16,
+};
 
 // ─── INLINE PREMIUM MINI BUTTON ──────────────────────────────────────────────
 interface CustomButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -28,17 +35,13 @@ const CustomButton = ({ variant = 'default', size = 'default', className = '', c
   };
 
   return (
-    <button
-      type="button"
-      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
-    >
+    <button type="button" className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`} {...props}>
       {children}
     </button>
   );
 };
 
-// ─── INLINE MONOSPACE SELECT DROPDOWN (BYPASSES SHADCN PRIMITIVE) ────────────
+// ─── INLINE MONOSPACE SELECT DROPDOWN ────────────────────────────────────────
 interface CustomSelectProps {
   value: string;
   onValueChange: (val: string) => void;
@@ -96,11 +99,11 @@ const CustomSelect = ({ value, onValueChange, options }: CustomSelectProps) => {
   );
 };
 
-// ─── INLINE TEAM ROW MODULE (CROP PROOF / EXPANDABLE DESIGN) ─────────────────
+// ─── INLINE TEAM ROW MODULE ──────────────────────────────────────────────────
 interface TeamRowProps {
   member: TeamMember;
-  getRoleBadge: (role: string) => React.ReactNode;
-  handleRoleChange: (id: string, role: string) => void;
+  getRoleBadge: (mask: number) => React.ReactNode;
+  handleRoleChange: (id: string, newMask: number) => void;
   handleRemove: (id: string, name: string) => void;
 }
 
@@ -127,7 +130,7 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
         </td>
         
         <td className="px-4 py-3.5 align-middle">
-          {getRoleBadge(member.role)}
+          {getRoleBadge(member.rolesMask)}
         </td>
         
         <td className="px-4 py-3.5 font-mono text-xs text-zinc-400 align-middle">
@@ -142,14 +145,12 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
             variant={panelOpen ? 'default' : 'outline'} 
             size="icon" 
             onClick={() => setPanelOpen(!panelOpen)}
-            className="transition-transform duration-150"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </CustomButton>
         </td>
       </tr>
 
-      {/* ─── INLINE SUBMENU DRAW PANEL (IMPOSSIBLE TO OVERFLOW CLIP) ─── */}
       {panelOpen && (
         <tr>
           <td colSpan={4} className="bg-zinc-950/80 border-b border-zinc-900 px-4 py-2.5">
@@ -159,26 +160,26 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
               </div>
               
               <div className="flex items-center gap-2">
-                {member.role !== 'admin' && member.role !== 'company_admin' && (
+                {(member.rolesMask & ROLES.COMPANY_ADMIN) !== ROLES.COMPANY_ADMIN && (
                   <>
                     <button
                       type="button"
-                      onClick={() => { handleRoleChange(member.id, 'hr_manager'); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => { handleRoleChange(member.id, ROLES.COMPANY_HR); setPanelOpen(false); }}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors cursor-pointer"
                     >
                       Make HR
                     </button>
                     <button
                       type="button"
-                      onClick={() => { handleRoleChange(member.id, 'interviewer'); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => { handleRoleChange(member.id, ROLES.COMPANY_INTERVIEWER); setPanelOpen(false); }}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors cursor-pointer"
                     >
                       Make Interviewer
                     </button>
                     <button
                       type="button"
-                      onClick={() => { handleRoleChange(member.id, 'viewer'); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => { handleRoleChange(member.id, ROLES.COMPANY_VIEWER); setPanelOpen(false); }}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors cursor-pointer"
                     >
                       Make Viewer
                     </button>
@@ -193,11 +194,7 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
                   <Trash2 className="h-3 w-3" /> Revoke Access
                 </button>
                 
-                <button
-                  type="button"
-                  onClick={() => setPanelOpen(false)}
-                  className="p-1 text-zinc-500 hover:text-white rounded transition-colors ml-1"
-                >
+                <button type="button" onClick={() => setPanelOpen(false)} className="p-1 text-zinc-500 hover:text-white rounded ml-1">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -211,20 +208,19 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
 
 // ─── MAIN TEAM PAGE CONFIGURATION ────────────────────────────────────────────
 export default function TeamPage() {
-  const { user } = useAuth();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('hr_manager');
+  const [inviteRole, setInviteRole] = useState('hr'); // String matches backend: 'hr' | 'interviewer' | 'viewer'
   const [submitting, setSubmitting] = useState(false);
 
   const fetchTeam = async () => {
     try {
       const res = await teamApi.list();
-      setMembers(res.data.team);
+      setMembers(res.data?.team || []);
     } catch (error) {
-      alert('Failed to load team members');
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -241,22 +237,22 @@ export default function TeamPage() {
     }
     setSubmitting(true);
     try {
-      await teamApi.invite({ email: inviteEmail, role: inviteRole });
+      await teamApi.invite({ email: inviteEmail, roleType: inviteRole });
       alert(`Invitation successfully sent to ${inviteEmail}`);
       setInviteOpen(false);
       setInviteEmail('');
-      setInviteRole('hr_manager');
+      setInviteRole('hr');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Invitation failed');
+      alert(error.response?.data?.message || 'Invitation routing transaction execution failed.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleRoleChange = async (memberId: string, newRole: string) => {
+  const handleRoleChange = async (memberId: string, newRolesMask: number) => {
     try {
-      await teamApi.updateRole(memberId, newRole);
-      alert('Workspace permissions updated');
+      await teamApi.updateRole(memberId, newRolesMask);
+      alert('Workspace permissions updated successfully.');
       fetchTeam();
     } catch (error) {
       alert('Failed to update team member role');
@@ -274,23 +270,17 @@ export default function TeamPage() {
     }
   };
 
-  const getRoleBadge = (role: string) => {
-    const styles: Record<string, string> = {
-      admin: 'bg-purple-950/40 border-purple-900 text-purple-400',
-      company_admin: 'bg-purple-950/40 border-purple-900 text-purple-400',
-      hr_manager: 'bg-blue-950/40 border-blue-900 text-blue-400',
-      company_hr: 'bg-blue-950/40 border-blue-900 text-blue-400',
-      interviewer: 'bg-emerald-950/40 border-emerald-900 text-emerald-400',
-      viewer: 'bg-zinc-900 border-zinc-800 text-zinc-400',
-    };
-    
-    const displayLabel = role.replace('company_', '').replace('_', ' ');
-    
-    return (
-      <span className={`px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md ${styles[role] || 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}>
-        {displayLabel}
-      </span>
-    );
+  const getRoleBadge = (mask: number) => {
+    if ((mask & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN) {
+      return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-purple-950/40 border-purple-900 text-purple-400">Admin</span>;
+    }
+    if ((mask & ROLES.COMPANY_HR) === ROLES.COMPANY_HR) {
+      return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-blue-950/40 border-blue-900 text-blue-400">HR Manager</span>;
+    }
+    if ((mask & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER) {
+      return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-emerald-950/40 border-emerald-900 text-emerald-400">Interviewer</span>;
+    }
+    return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-zinc-900 border-zinc-800 text-zinc-400">Viewer</span>;
   };
 
   if (loading) {
@@ -303,23 +293,18 @@ export default function TeamPage() {
 
   return (
     <div className="p-8 min-h-screen bg-[#0a0a0a] text-white space-y-6 max-w-7xl mx-auto w-full relative">
-      {/* Header Panel */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-white">Team Management</h1>
           <p className="text-xs text-zinc-400 mt-1">Provision corporate user access controls, manage department roles, and track invitation links.</p>
         </div>
         
-        <CustomButton 
-          onClick={() => setInviteOpen(true)}
-          className="flex items-center gap-1.5 self-start sm:self-auto"
-        >
+        <CustomButton onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 self-start sm:self-auto">
           <UserPlus className="w-3.5 h-3.5" />
           Invite Member
         </CustomButton>
       </div>
 
-      {/* Corporate Table Architecture */}
       {members.length === 0 ? (
         <div className="border border-dashed border-zinc-900 bg-zinc-950/20 p-12 rounded-2xl text-center">
           <p className="text-xs text-zinc-500 font-mono">No registered team members linked to this corporate workspace identifier.</p>
@@ -352,20 +337,12 @@ export default function TeamPage() {
         </div>
       )}
 
-      {/* ─── NATIVE MINIMALIST MODAL OVERLAY ─────────────────────────────────── */}
       {inviteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" 
-            onClick={() => setInviteOpen(false)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setInviteOpen(false)} />
           
           <div className="relative bg-zinc-950 border border-zinc-900 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <button 
-              type="button"
-              onClick={() => setInviteOpen(false)}
-              className="absolute right-4 top-4 text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-900 focus:outline-none"
-            >
+            <button type="button" onClick={() => setInviteOpen(false)} className="absolute right-4 top-4 text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-900">
               <X className="h-4 w-4" />
             </button>
 
@@ -395,21 +372,18 @@ export default function TeamPage() {
                   value={inviteRole} 
                   onValueChange={setInviteRole} 
                   options={[
-                    { value: 'hr_manager', label: 'HR Manager' },
+                    { value: 'hr', label: 'HR Manager' },
                     { value: 'interviewer', label: 'Interviewer' },
                     { value: 'viewer', label: 'Viewer (Read-only)' }
                   ]}
                 />
-                <p className="text-[11px] text-zinc-500 leading-normal pt-1">
-                  HR Managers can post jobs and manage candidate streams. Interviewers can execute assigned evaluations. Viewers have absolute read-only metrics access.
-                </p>
               </div>
               
               <button 
                 type="button"
                 onClick={handleInvite} 
                 disabled={submitting || !inviteEmail} 
-                className="w-full bg-zinc-100 text-black hover:bg-white text-xs font-bold rounded-xl h-9 transition-all mt-2 disabled:pointer-events-none disabled:opacity-50 focus:outline-none"
+                className="w-full bg-zinc-100 text-black hover:bg-white text-xs font-bold rounded-xl h-9 transition-all mt-2 disabled:pointer-events-none disabled:opacity-50"
               >
                 {submitting ? 'Processing Transaction...' : 'Send Corporate Invitation'}
               </button>

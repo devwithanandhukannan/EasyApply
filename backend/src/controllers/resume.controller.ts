@@ -1,4 +1,3 @@
-// src/controllers/resume.controller.ts
 import type { Request, Response } from 'express';
 import fs from 'fs';
 import { prisma } from '../utils/prisma.ts';
@@ -10,7 +9,6 @@ const getProfileId = async (userId: string) => {
   return profile?.id ?? null;
 };
 
-// ─── Helpers: read/write nested content JSON ──────────────────────────────
 const readContent = (resume: any) => (resume.content as any) ?? {};
 const readAI = (resume: any) => (resume.aiSuggestions as any) ?? {};
 
@@ -23,13 +21,12 @@ const pushVersion = (contentData: any, label?: string) => {
       htmlContent: contentData.htmlContent,
       savedAt: new Date().toISOString(),
     });
-    // Keep max 20 versions
     if (versions.length > 20) versions.shift();
   }
   contentData.versions = versions;
 };
 
-// ─── Upload & Analyse ─────────────────────────────────────────────────────
+// POST /api/jobseeker/resumes/upload
 export const uploadAndAnalyze = async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -56,7 +53,7 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
       parsedData: analysis.parsedData ?? {},
       atsBreakdown: analysis.atsBreakdown ?? {},
       autoCorrectedText: analysis.autoCorrectedText ?? null,
-      htmlContent: null, // generated on first editor open via /convert
+      htmlContent: null, 
       margins: { top: 60, right: 72, bottom: 60, left: 72 },
       template: 'default',
       versions: [],
@@ -94,7 +91,7 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Generate Fresh CV ────────────────────────────────────────────────────
+// POST /api/jobseeker/resumes/generate
 export const generateCV = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -146,7 +143,7 @@ export const generateCV = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Convert uploaded resume to editable HTML ─────────────────────────────
+// POST /api/jobseeker/resumes/:id/convert
 export const convertResumeToHTML = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -171,7 +168,7 @@ export const convertResumeToHTML = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Optimise for Job Description ─────────────────────────────────────────
+// POST /api/jobseeker/resumes/:id/optimize
 export const optimizeResume = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -191,7 +188,6 @@ export const optimizeResume = async (req: Request, res: Response) => {
 
     const result = await optimizeForJD(contentData.htmlContent, jobDescription);
 
-    // Push version before overwriting
     pushVersion(contentData, 'Before JD optimization');
     contentData.htmlContent = result.htmlContent ?? contentData.htmlContent;
 
@@ -214,7 +210,7 @@ export const optimizeResume = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Get keyword suggestions ──────────────────────────────────────────────
+// GET /api/jobseeker/resumes/:id/keywords
 export const getKeywordSuggestions = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -235,7 +231,7 @@ export const getKeywordSuggestions = async (req: Request, res: Response) => {
   }
 };
 
-// ─── CRUD ─────────────────────────────────────────────────────────────────
+// GET /api/jobseeker/resumes
 export const getAllResumes = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -256,6 +252,7 @@ export const getAllResumes = async (req: Request, res: Response) => {
   }
 };
 
+// GET /api/jobseeker/resumes/:id
 export const getResumeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -271,6 +268,7 @@ export const getResumeById = async (req: Request, res: Response) => {
   }
 };
 
+// PUT /api/jobseeker/resumes/:id
 export const updateResume = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -306,7 +304,7 @@ export const updateResume = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Restore a version ───────────────────────────────────────────────────
+// PATCH /api/jobseeker/resumes/:id/restore/:versionId
 export const restoreVersion = async (req: Request, res: Response) => {
   try {
     const { id, versionId } = req.params;
@@ -321,7 +319,6 @@ export const restoreVersion = async (req: Request, res: Response) => {
     const version = (contentData.versions ?? []).find((v: any) => v.id === versionId);
     if (!version) return res.status(404).json({ success: false, message: 'Version not found' });
 
-    // Save current as version before restoring
     pushVersion(contentData, 'Before restore');
     contentData.htmlContent = version.htmlContent;
 
@@ -332,6 +329,7 @@ export const restoreVersion = async (req: Request, res: Response) => {
   }
 };
 
+// DELETE /api/jobseeker/resumes/:id
 export const deleteResume = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

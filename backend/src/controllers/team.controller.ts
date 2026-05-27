@@ -1,23 +1,24 @@
 import type { Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcrypt'; // Ensure bcrypt is imported
 import { prisma } from '../utils/prisma.ts';
 import { sendTeamInviteEmail } from '../utils/email.ts';
-import { UserRole } from '@prisma/client';
+import { ROLES, ALL_COMPANY_BITS } from '../constants/roles.ts';
+import {issueSessionCookies} from '../utils/cookie.ts'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_fallback_secret';
 
-// Helper: Check if current user is admin of the company
+// Helper: Check if current user has Company Admin bit mask active inside this company workspace
 const isCompanyAdmin = async (userId: string, companyId: string): Promise<boolean> => {
   const member = await prisma.teamMember.findFirst({
-    where: { userId, companyId, role: 'admin', status: 'active' }
+    where: { userId, companyId, status: 'active' }
   });
-  return !!member;
+  if (!member) return false;
+  return (member.roles & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN;
 };
 
 // ─────────────────────────────────────────────────────────────
 // 1. Invite a new team member
-// POST /api/company/team/invite
 // ─────────────────────────────────────────────────────────────
 export const inviteTeamMember = async (req: Request, res: Response) => {
   try {
@@ -25,32 +26,30 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
     const currentUserId = req.user?.userId;
 
     if (!companyId || !currentUserId) {
-      return res.status(401).json({ success: false, message: 'Unauthorized access: Missing required token parameters.' });
+      return res.status(401).json({ success: false, message: 'Unauthorized access: Missing parameters.' });
     }
 
-    // Only admin can invite
     const isAdmin = await isCompanyAdmin(currentUserId, companyId);
     if (!isAdmin) {
-      return res.status(403).json({ success: false, message: 'Forbidden: Only company administrators can invite new members.' });
+      return res.status(403).json({ success: false, message: 'Forbidden: Admin access verification failed.' });
     }
 
-    const { email, role } = req.body;
-    if (!email || !role) {
-      return res.status(400).json({ success: false, message: 'Email and role parameters are mandatory.' });
+    const { email, roleType } = req.body;
+    if (!email || !roleType) {
+      return res.status(400).json({ success: false, message: 'Email and roleType parameters are mandatory.' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
-    const allowedRoles = ['hr_manager', 'interviewer', 'viewer'];
-    if (!allowedRoles.includes(role)) {
-      return res.status(400).json({ success: false, message: 'Invalid target role assignment specified.' });
-    }
+    
+    let bitwiseRoleValue = ROLES.COMPANY_VIEWER;
+    if (roleType === 'hr') bitwiseRoleValue = ROLES.COMPANY_HR;
+    else if (roleType === 'interviewer') bitwiseRoleValue = ROLES.COMPANY_INTERVIEWER;
+    else if (roleType === 'admin') bitwiseRoleValue = ROLES.COMPANY_ADMIN;
 
-    // Lookup user using email string as mobileNumber identifier mapping index
     let user = await prisma.user.findFirst({
       where: { mobileNumber: normalizedEmail }
     });
 
-    // Check if already an active member of this company workspace block
     if (user) {
       const existingMembership = await prisma.teamMember.findFirst({
         where: { userId: user.id, companyId, status: 'active' }
@@ -60,22 +59,19 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
       }
     }
 
-    // Generate workspace invite token (expires cleanly in 7 days)
     const inviteToken = jwt.sign(
-      { email: normalizedEmail, companyId, role, invitedBy: currentUserId },
+      { email: normalizedEmail, companyId, targetRoles: bitwiseRoleValue, invitedBy: currentUserId },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    // Compute absolute destination client layout entry target URL
-    const clientAppUrl = process.env.FRONTEND_URL_FOREMAIL;
+    const clientAppUrl = process.env.FRONTEND_URL_FOREMAIL || 'http://localhost:3001';
     const inviteLink = `${clientAppUrl}/accept-invite?token=${inviteToken}`;
     
-    // Dispatch structural transactional email template safely
     await sendTeamInviteEmail(
       normalizedEmail, 
       inviteLink, 
-      role, 
+      roleType, 
       req.company?.companyName || 'Our Organization'
     );
 
@@ -85,14 +81,13 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error('Invite engine processing fault trace:', error);
-    return res.status(500).json({ success: false, message: 'Failed to complete corporate invitation pipeline routing.' });
+    console.error('Invite engine fault trace:', error);
+    return res.status(500).json({ success: false, message: 'Failed to complete invitation pipeline routing.' });
   }
 };
 
 // ─────────────────────────────────────────────────────────────
 // 2. List all team members
-// GET /api/company/team
 // ─────────────────────────────────────────────────────────────
 export const listTeamMembers = async (req: Request, res: Response) => {
   try {
@@ -110,7 +105,7 @@ export const listTeamMembers = async (req: Request, res: Response) => {
           select: {
             id: true,
             mobileNumber: true,
-            role: true,
+            globalRoles: true,
             jobSeekerProfile: {
               select: { fullName: true, email: true, profilePhotoUrl: true }
             }
@@ -125,7 +120,8 @@ export const listTeamMembers = async (req: Request, res: Response) => {
       userId: m.userId,
       name: m.user.jobSeekerProfile?.fullName || m.user.mobileNumber,
       email: m.user.jobSeekerProfile?.email || m.user.mobileNumber,
-      role: m.role,
+      rolesMask: m.roles,
+      globalRolesMask: m.user.globalRoles,
       status: m.status,
       joinedAt: m.createdAt,
       avatar: m.user.jobSeekerProfile?.profilePhotoUrl || null
@@ -134,33 +130,27 @@ export const listTeamMembers = async (req: Request, res: Response) => {
     return res.status(200).json({ success: true, team: formatted });
   } catch (error) {
     console.error('List team compilation fault:', error);
-    return res.status(500).json({ success: false, message: 'Failed to extract organization team members layout.' });
+    return res.status(500).json({ success: false, message: 'Failed to extract team members layout.' });
   }
 };
 
 // ─────────────────────────────────────────────────────────────
-// 3. Update team member role (FIXED: Added global UserRole Sync)
-// PUT /api/company/team/:memberId/role
+// 3. Update team member roles
 // ─────────────────────────────────────────────────────────────
 export const updateMemberRole = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
     const currentUserId = req.user?.userId;
     const { memberId } = req.params;
-    const { role } = req.body;
+    const { newRolesMask } = req.body;
 
     if (!companyId || !currentUserId) {
-      return res.status(401).json({ success: false, message: 'Unauthorized credentials scope configuration context.' });
+      return res.status(401).json({ success: false, message: 'Unauthorized structural setup context.' });
     }
 
     const isAdmin = await isCompanyAdmin(currentUserId, companyId);
     if (!isAdmin) {
-      return res.status(403).json({ success: false, message: 'Forbidden: Only admin accounts can adjust permission parameters.' });
-    }
-
-    const allowedRoles = ['hr_manager', 'interviewer', 'viewer', 'admin'];
-    if (!allowedRoles.includes(role)) {
-      return res.status(400).json({ success: false, message: 'Invalid target role profile passed.' });
+      return res.status(403).json({ success: false, message: 'Forbidden: Restricted admin operation context.' });
     }
 
     const member = await prisma.teamMember.findFirst({
@@ -170,32 +160,33 @@ export const updateMemberRole = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Target workspace reference member could not be tracked.' });
     }
 
-    // Fix: Execute as database transaction to update role constraints across BOTH maps cleanly
     await prisma.$transaction(async (tx) => {
       await tx.teamMember.update({
         where: { id: memberId },
-        data: { role }
+        data: { roles: newRolesMask }
       });
 
-      let newUserRole = UserRole.company_hr;
-      if (role === 'admin') newUserRole = UserRole.company_admin;
+      const targetUser = await tx.user.findUnique({ where: { id: member.userId } });
+      if (targetUser) {
+        let updatedGlobal = targetUser.globalRoles & ~ALL_COMPANY_BITS;
+        updatedGlobal |= newRolesMask;
 
-      await tx.user.update({
-        where: { id: member.userId },
-        data: { role: newUserRole }
-      });
+        await tx.user.update({
+          where: { id: targetUser.id },
+          data: { globalRoles: updatedGlobal }
+        });
+      }
     });
 
-    return res.status(200).json({ success: true, message: 'Team workspace and global system profile roles synced modified successfully.' });
+    return res.status(200).json({ success: true, message: 'Roles synced successfully.' });
   } catch (error) {
-    console.error('Update role error trace handling fault:', error);
+    console.error('Update role fault handling processing trace:', error);
     return res.status(500).json({ success: false, message: 'Failed to assign target role modifications.' });
   }
 };
 
 // ─────────────────────────────────────────────────────────────
-// 4. Remove team member (FIXED: Added global role reset demotion)
-// DELETE /api/company/team/:memberId
+// 4. Remove team member
 // ─────────────────────────────────────────────────────────────
 export const removeTeamMember = async (req: Request, res: Response) => {
   try {
@@ -204,12 +195,12 @@ export const removeTeamMember = async (req: Request, res: Response) => {
     const { memberId } = req.params;
 
     if (!companyId || !currentUserId) {
-      return res.status(401).json({ success: false, message: 'Unauthorized parameter tracking context detected.' });
+      return res.status(401).json({ success: false, message: 'Unauthorized parameter validation tracking context.' });
     }
 
     const isAdmin = await isCompanyAdmin(currentUserId, companyId);
     if (!isAdmin) {
-      return res.status(403).json({ success: false, message: 'Forbidden: Admin authorization verification validation failed.' });
+      return res.status(403).json({ success: false, message: 'Forbidden: Admin access confirmation verification failed.' });
     }
 
     const member = await prisma.teamMember.findFirst({
@@ -220,23 +211,26 @@ export const removeTeamMember = async (req: Request, res: Response) => {
     }
 
     if (member.userId === currentUserId) {
-      return res.status(400).json({ success: false, message: 'Self-removal restricted. Request action from alternate administrator profiles.' });
+      return res.status(400).json({ success: false, message: 'Self-removal restricted.' });
     }
 
-    // Fix: Deactivate workspace entry AND demote user role back down to base job_seeker safely
     await prisma.$transaction(async (tx) => {
       await tx.teamMember.update({
         where: { id: memberId },
         data: { status: 'deactivated' }
       });
 
-      await tx.user.update({
-        where: { id: member.userId },
-        data: { role: UserRole.job_seeker }
-      });
+      const userRecord = await tx.user.findUnique({ where: { id: member.userId } });
+      if (userRecord) {
+        const cleanedGlobalRoles = userRecord.globalRoles & ~ALL_COMPANY_BITS;
+        await tx.user.update({
+          where: { id: userRecord.id },
+          data: { globalRoles: cleanedGlobalRoles || ROLES.JOB_SEEKER }
+        });
+      }
     });
 
-    return res.status(200).json({ success: true, message: 'Team member deactivated and corporate permissions revoked successfully.' });
+    return res.status(200).json({ success: true, message: 'Team member deactivated and corporate bits stripped.' });
   } catch (error) {
     console.error('Remove member processing execution fault:', error);
     return res.status(500).json({ success: false, message: 'Failed to execute workspace removal transformation.' });
@@ -244,46 +238,85 @@ export const removeTeamMember = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// 5. Accept Invite (Public Workflow Endpoint Validation)
-// GET /api/company/team/accept-invite
+// 5. Accept Invite (Validates invitation status token parameters)
 // ─────────────────────────────────────────────────────────────
 export const acceptInvite = async (req: Request, res: Response) => {
   try {
     const { token } = req.query;
-
     if (!token || typeof token !== 'string') {
-      return res.status(400).json({ success: false, message: 'Bad Request: Invalid transaction authorization token link format.' });
+      return res.status(400).json({ success: false, message: 'Bad Request: Invalid token link format.' });
     }
 
     let decoded: any;
     try {
       decoded = jwt.verify(token, JWT_SECRET);
     } catch (err) {
-      return res.status(400).json({ success: false, message: 'Unauthorized: Verification authorization parameter has expired or is invalid.' });
+      return res.status(400).json({ success: false, message: 'Unauthorized: Link verification token expired or invalid.' });
     }
 
-    const { email, companyId, role } = decoded;
+    const { email, companyId } = decoded;
 
     const company = await prisma.company.findUnique({ where: { id: companyId } });
     if (!company) {
-      return res.status(404).json({ success: false, message: 'Not Found: The inviting corporate organization workspace target no longer exists.' });
+      return res.status(404).json({ success: false, message: 'Not Found: Corporate organization workspace no longer exists.' });
     }
 
-    const finalUser = await prisma.$transaction(async (tx) => {
-      let user = await tx.user.findFirst({
-        where: { mobileNumber: email }
-      });
+    // Look up core user node identity
+    const user = await prisma.user.findFirst({ where: { mobileNumber: email } });
+    
+    if (user) {
+      const existingRecord = await prisma.teamMember.findFirst({ where: { userId: user.id, companyId } });
+      // User exists and already has password set up inside this mapping container context
+      if (existingRecord && existingRecord.status === 'active' && existingRecord.password) {
+        return res.status(200).json({ success: true, alreadyMember: true, message: 'User is already an active member.' });
+      }
+    }
 
-      let isNewUser = false;
+    return res.status(200).json({
+      success: true,
+      isNewUser: true, // Force credential collection setup window render phase
+      email: email,
+      message: 'Invitation context parsed successfully. Proceed to password creation phase.'
+    });
+
+  } catch (error) {
+    console.error('Accept invite lifecycle trace exception crash:', error);
+    return res.status(500).json({ success: false, message: 'Internal Server Error: Failed validating active entry conditions.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
+// 6. Set Password (Creates/Updates User Identity and sets password into TeamMember)
+// POST /api/company/team/set-password
+// ─────────────────────────────────────────────────────────────
+export const setTeamMemberPassword = async (req: Request, res: Response) => {
+  console.log('hacker');
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ success: false, message: 'Token and password parameters are both mandatory.' });
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired invitation validation token context.' });
+    }
+
+    const { email, companyId, targetRoles } = decoded;
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    const transactionData = await prisma.$transaction(async (tx) => {
+      let user = await tx.user.findFirst({ where: { mobileNumber: email } });
 
       if (!user) {
-        isNewUser = true;
         user = await tx.user.create({
           data: {
             mobileNumber: email,
-            role: UserRole.job_seeker, 
+            globalRoles: ROLES.JOB_SEEKER,
             isVerified: true,
-            password: '', 
             jobSeekerProfile: {
               create: {
                 fullName: email.split('@')[0],
@@ -293,171 +326,155 @@ export const acceptInvite = async (req: Request, res: Response) => {
             }
           }
         });
-      } else {
-        if (!user.password) {
-          isNewUser = true;
-        }
-
-        const existingGlobalRecord = await tx.teamMember.findFirst({
-          where: { userId: user.id }
-        });
-
-        if (existingGlobalRecord) {
-          // If already active in the target company layout, flag it cleanly
-          if (existingGlobalRecord.companyId === companyId && existingGlobalRecord.status === 'active') {
-            return { user, alreadyMember: true, isNewUser: false, finalRole: user.role };
-          }
-        }
       }
 
-      await tx.teamMember.upsert({
-        where: { userId: user.id },
-        update: {
-          companyId,
-          role: role,
-          status: 'active'
-        },
-        create: {
-          userId: user.id,
-          companyId,
-          role: role,
-          status: 'active'
-        }
+      // Sync workspace profile registration entries mask mappings with password assignment appended safely
+      const updatedMember = await tx.teamMember.upsert({
+        where: { companyId_userId: { companyId, userId: user.id } },
+        update: { roles: targetRoles, status: 'active', password: hashedPassword },
+        create: { userId: user.id, companyId, roles: targetRoles, status: 'active', password: hashedPassword }
       });
 
-      let newUserRole = UserRole.company_hr;
-      if (role === 'admin') newUserRole = UserRole.company_admin;
-
+      // Overlay user's global structural permissions bits mapping safely
+      let updatedGlobalRoles = user.globalRoles | targetRoles;
       await tx.user.update({
         where: { id: user.id },
-        data: { role: newUserRole }
+        data: { globalRoles: updatedGlobalRoles }
       });
 
-      return { user, finalRole: newUserRole, alreadyMember: false, isNewUser };
+      const companyContext = await tx.company.findUnique({
+        where: { id: companyId },
+        select: { id: true, name: true, email: true }
+      });
+
+      return { user, company: companyContext, finalRole: updatedGlobalRoles };
     });
 
-    // ─── FIX: REMOVED RES.REDIRECT — SEND CLEAN JSON METADATA INSTEAD ───
-    if (finalUser.alreadyMember) {
-      return res.status(200).json({ 
-        success: true, 
-        alreadyMember: true, 
-        message: 'User is already an active member of this workspace.' 
-      });
-    }
-
+    // Issue authentication state cookies injection directly layout configuration
     const { issueSessionCookies } = await import('../utils/cookie.ts');
-    issueSessionCookies(res, { userId: finalUser.user.id, role: finalUser.finalRole });
+    issueSessionCookies(res, { userId: transactionData.user.id, role: transactionData.finalRole });
 
     return res.status(200).json({
       success: true,
-      isNewUser: finalUser.isNewUser,
-      alreadyMember: false,
-      email: email,
-      message: 'Workspace credentials verified successfully.'
+      user: { id: transactionData.user.id, email: transactionData.user.mobileNumber },
+      company: transactionData.company,
+      message: 'Corporate access configured and password set cleanly inside target team layer profile.'
     });
 
   } catch (error) {
-    console.error('Accept invite lifecycle pipeline implementation crashed:', error);
-    return res.status(500).json({ success: false, message: 'Internal Server Error: Failed validating active entry conditions.' });
+    console.error('Password provisioning infrastructure execution error tracking:', error);
+    return res.status(500).json({ success: false, message: 'Failed to serialize structural user membership password setup configuration.' });
   }
 };
 
+// Login: Invited Team Member Access Route
+// POST /api/company/team/login
 // ─────────────────────────────────────────────────────────────
-// 6. Set Password for New Invited Team Members
-// POST /api/company/team/set-password
-// ─────────────────────────────────────────────────────────────
-
-export const setPasswordForInvite = async (req: Request, res: Response) => {
+export const teamMemberLogin = async (req: Request, res: Response) => {
   try {
-    const { token, password } = req.body;
-
-    if (!token || !password) {
+    const { email, password } = req.body;
+    if (!email || !password) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Bad Request: Token identifier and password strings are mandatory parameters.' 
+        message: 'Email and password fields are strictly mandatory.' 
       });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Security Violation: Password must meet the baseline threshold of 8 characters.' 
-      });
-    }
+    const normalizedEmail = email.trim().toLowerCase();
 
-    // Decode and validate token integrity metrics
-    let decoded: any;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (err) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Unauthorized: Setup link token has expired or is invalid.' 
-      });
-    }
-
-    const { email, companyId } = decoded;
-
-    // Track the target user by their email string index mapper
+    // 1. Scan for the user profile container
+    // Matches where mobileNumber or an explicit email column stores the target address
     const user = await prisma.user.findFirst({
-      where: { mobileNumber: email },
-      include: { teamMemberships: true } // Correct relation field name
-    });
-
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Not Found: No authentication profile matches the token verification criteria.' 
-      });
-    }
-
-    // FIX: Read from teamMemberships instead of the undefined teamMembers field
-    const targetWorkspaceMember = user.teamMemberships.find(m => m.companyId === companyId);
-    if (!targetWorkspaceMember) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Forbidden: Profile access scope is mismatched from target company workspace mappings.' 
-      });
-    }
-
-    // Hash the password safely using bcryptjs salt generations
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Save password hash and enforce user configuration visibility parameters concurrently
-    const updatedUser = await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        password: hashedPassword,
-        isVerified: true
+      where: {
+        OR: [
+          { mobileNumber: normalizedEmail },
+          // Handles cases where an explicit email column is exposed on the User model
+          ...( 'email' in prisma.user.fields ? [{ email: normalizedEmail }] : [] )
+        ]
       }
     });
 
-    // Fetch company configuration context to populate auth context session payload requirements cleanly
-    const company = await prisma.company.findUnique({
-      where: { id: companyId }
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials provided.' 
+      });
+    }
+
+    // 2. Fetch the corresponding workspace row linkage containing corporate roles
+    const memberProfile = await prisma.teamMember.findFirst({
+      where: { 
+        userId: user.id, 
+        status: 'active' 
+      },
+      include: {
+        company: {
+          select: { id: true, name: true, isVerified: true }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
     });
 
-    // Issue updated operational security context logging cookies for seamless instant dashboard routing
-    const { issueSessionCookies } = await import('../utils/cookie.ts');
-    issueSessionCookies(res, { userId: updatedUser.id, role: updatedUser.role });
+    if (!memberProfile) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'No active corporate workspace linkage identified for this profile.' 
+      });
+    }
+
+    // 3. Fallback Password Resolution Check
+    // Extracts the password string regardless of whether it resides on the TeamMember row or the parent User record
+    const targetPasswordHash = memberProfile.password || (user as any).password;
+    if (!targetPasswordHash) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Account password parameters have not been initialized. Please use your invite link.' 
+      });
+    }
+
+    // 4. Run bcrypt timing-safe match validation
+    const isPasswordValid = await bcrypt.compare(password, targetPasswordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid credentials provided.' 
+      });
+    }
+
+    // 5. Verify the hosting company's active status
+    if (!memberProfile.company.isVerified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access restricted: Your company workspace is currently awaiting verification.'
+      });
+    }
+
+    issueSessionCookies(res, { 
+      userId: user.id, 
+      globalRoles: user.globalRoles 
+    });
 
     return res.status(200).json({
       success: true,
-      message: 'Account authentication payload initialized successfully.',
-      user: {
-        id: updatedUser.id,
-        mobileNumber: updatedUser.mobileNumber,
-        role: updatedUser.role
+      message: 'Team authentication successful.',
+      user: { 
+        id: user.id, 
+        email: user.mobileNumber, 
+        globalRoles: user.globalRoles,
+        companyRoles: memberProfile.roles 
       },
-      company
+      company: { 
+        id: memberProfile.company.id, 
+        name: memberProfile.company.name 
+      }
     });
 
-  } catch (error) {
-    console.error('Password provisioning pipeline crashed:', error);
+  } catch (error: any) {
+    console.error('teamMemberLogin pipeline trace failure:', error);
     return res.status(500).json({ 
       success: false, 
-      message: 'Internal Server Error: Execution failure writing structural security credentials.' 
+      message: 'Internal server failure handling team workspace login routing.',
+      error: error.message 
     });
   }
 };

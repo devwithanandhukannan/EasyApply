@@ -1,4 +1,3 @@
-// app/dashboard/jobs/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -108,17 +107,6 @@ export default function JobsPage() {
     setSelectedJob(null);
   };
 
-  const getJobTypeColor = (type: string) => {
-    const colors: any = {
-      'Full-time': 'bg-green-500/10 text-green-500',
-      'Part-time': 'bg-blue-500/10 text-blue-500',
-      'Contract': 'bg-purple-500/10 text-purple-500',
-      'Freelance': 'bg-orange-500/10 text-orange-500',
-      'Spot': 'bg-pink-500/10 text-pink-500',
-    };
-    return colors[type] || 'bg-gray-500/10 text-gray-500';
-  };
-
   const getLocationTypeIcon = (type: string) => {
     if (type === 'Remote') return '🌐';
     if (type === 'Hybrid') return '🏢';
@@ -128,46 +116,44 @@ export default function JobsPage() {
   const calculateDaysAgo = (date: string) => {
     const diff = Date.now() - new Date(date).getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    return `${days} days ago`;
+    if (days === 0) return 'TODAY';
+    if (days === 1) return 'YESTERDAY';
+    return `${days} DAYS AGO`;
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold text-white mb-2">Browse Jobs</h1>
-          <p className="text-gray-500">
-            {filteredJobs.length} job{filteredJobs.length !== 1 ? 's' : ''} available
-          </p>
-        </div>
+    <div className="space-y-5 font-mono text-zinc-300 max-w-7xl mx-auto p-4 md:p-0">
+      {/* Page Title Context */}
+      <div>
+        <h1 className="text-xl font-bold text-white uppercase tracking-wider">Browse Index Metrics</h1>
+        <p className="text-zinc-600 text-[11px] uppercase tracking-tight mt-0.5">
+          {filteredJobs.length} Node Pipeline Position{filteredJobs.length !== 1 ? 's' : ''} Online
+        </p>
       </div>
 
-      {/* Search and Filters */}
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-        <div className="space-y-4">
-          {/* Search Bar */}
+      {/* Query Search Matrix Filters Panel */}
+      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4">
+        <div className="space-y-3">
+          {/* Input Interface */}
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={20} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
             <input
               type="text"
-              placeholder="Search by job title, company, or department..."
+              placeholder="QUERY JOB TITLE, ENTERPRISE ENTITY, OR ORG DEPT..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-black border border-[#2c2c2e] rounded-xl text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-white placeholder:text-zinc-700 focus:outline-none focus:border-zinc-700 uppercase"
             />
           </div>
 
-          {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Selector Drops Coordinates */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <select
               value={filters.jobType}
               onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
-              className="px-4 py-3 bg-black border border-[#2c2c2e] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+              className="px-3 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 focus:outline-none focus:border-zinc-700 uppercase"
             >
-              <option value="all">All Job Types</option>
+              <option value="all">All Job Tiers</option>
               <option value="Full-time">Full-time</option>
               <option value="Part-time">Part-time</option>
               <option value="Contract">Contract</option>
@@ -178,219 +164,216 @@ export default function JobsPage() {
             <select
               value={filters.locationType}
               onChange={(e) => setFilters({ ...filters, locationType: e.target.value })}
-              className="px-4 py-3 bg-black border border-[#2c2c2e] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+              className="px-3 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 focus:outline-none focus:border-zinc-700 uppercase"
             >
-              <option value="all">All Locations</option>
+              <option value="all">All Ecosystems</option>
               <option value="Remote">Remote</option>
               <option value="On-site">On-site</option>
               <option value="Hybrid">Hybrid</option>
             </select>
 
             <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={12} />
               <input
                 type="text"
-                placeholder="City name"
+                placeholder="REGIONAL BOUND"
                 value={filters.location}
                 onChange={(e) => setFilters({ ...filters, location: e.target.value })}
-                className="w-full pl-11 pr-4 py-3 bg-black border border-[#2c2c2e] rounded-xl text-white placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+                className="w-full pl-9 pr-4 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-white placeholder:text-zinc-700 focus:outline-none focus:border-zinc-700 uppercase"
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Jobs Grid */}
+      {/* Grid Allocation Blocks */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex flex-col items-center space-y-4">
-            <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-500">Loading jobs...</p>
+        <div className="flex items-center justify-center py-24">
+          <div className="flex flex-col items-center space-y-3">
+            <div className="w-6 h-6 border border-zinc-800 border-t-white rounded-full animate-spin"></div>
+            <p className="text-zinc-600 text-[10px] tracking-widest uppercase">Fetching Stream...</p>
           </div>
         </div>
       ) : filteredJobs.length === 0 ? (
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-12 text-center">
-          <Briefcase className="mx-auto mb-4 text-gray-600" size={48} />
-          <h3 className="text-xl font-semibold text-white mb-2">No jobs found</h3>
-          <p className="text-gray-500 mb-6">
-            Try adjusting your search or filters to find more opportunities
-          </p>
+        <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-12 text-center max-w-xl mx-auto">
+          <Briefcase className="mx-auto mb-3 text-zinc-700" size={28} />
+          <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-1">Zero Node Matches</h3>
+          <p className="text-zinc-600 text-[11px] mb-4 uppercase">No current records conform to active search coordinates.</p>
           <button
             onClick={() => {
               setSearchQuery('');
               setFilters({ jobType: 'all', locationType: 'all', location: '' });
             }}
-            className="px-6 py-3 bg-white text-black rounded-xl hover:bg-gray-100 transition-colors"
+            className="px-4 py-2 bg-zinc-900 text-white rounded text-xs font-bold uppercase tracking-wide border border-zinc-800 hover:border-zinc-600 transition-colors"
           >
-            Clear Filters
+            Reset Matrix Parameters
           </button>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredJobs.map((job) => {
               const hasApplied = appliedJobs.has(job.id);
               
               return (
-                <div
+                <Link
                   key={job.id}
-                  className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6 hover:border-white transition-all group flex flex-col"
+                  href={`/dashboard/jobs/${job.id}`}
+                  className="bg-zinc-950 border border-zinc-900 rounded-lg p-4 hover:border-zinc-700 transition-all flex flex-col group relative cursor-pointer"
                 >
-                  {/* Company Info */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3">
+                  {/* Card Header Metadata Row */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3 min-w-0">
                       {job.company.logoUrl ? (
                         <img
                           src={job.company.logoUrl}
                           alt={job.company.name}
-                          className="w-12 h-12 rounded-lg object-cover"
+                          className="w-9 h-9 rounded border border-zinc-900 object-cover flex-shrink-0"
                         />
                       ) : (
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                          <Building2 size={24} className="text-white" />
+                        <div className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded flex items-center justify-center flex-shrink-0">
+                          <Building2 size={16} className="text-zinc-500" />
                         </div>
                       )}
-                      <div>
-                        <h3 className="text-white font-medium">{job.company.name}</h3>
-                        <p className="text-xs text-gray-500">{job.company.industry}</p>
+                      <div className="min-w-0">
+                        <h3 className="text-white text-xs font-bold truncate uppercase tracking-tight">{job.company.name}</h3>
+                        <p className="text-[10px] text-zinc-600 truncate uppercase mt-0.5">{job.company.industry || 'Tech Sector'}</p>
                       </div>
                     </div>
                     {job.company.verificationBadge === 'verified' && (
-                      <div className="bg-blue-500/10 text-blue-500 px-2 py-1 rounded text-xs">
-                        ✓ Verified
+                      <div className="bg-zinc-900 text-zinc-400 border border-zinc-800 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-tighter flex-shrink-0">
+                        Verified
                       </div>
                     )}
                   </div>
 
-                  {/* Job Title */}
-                  <Link href={`/dashboard/jobs/${job.id}`}>
-                    <h4 className="text-lg font-semibold text-white mb-2 group-hover:text-white/80 transition-colors cursor-pointer">
+                  {/* Core Job Header Position */}
+                  <div className="mb-1">
+                    <h4 className="text-sm font-bold text-zinc-100 group-hover:text-white transition-colors truncate uppercase">
                       {job.title}
                     </h4>
-                  </Link>
+                  </div>
 
-                  {/* Department */}
+                  {/* Operational Department Tag */}
                   {job.department && (
-                    <p className="text-sm text-gray-500 mb-4">{job.department}</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-tight mb-3 font-semibold">{job.department}</p>
                   )}
 
-                  {/* Job Details */}
-                  <div className="space-y-2 mb-4 flex-1">
-                    <div className="flex items-center space-x-2 text-sm text-gray-400">
-                      <span className={`px-2 py-1 rounded text-xs ${getJobTypeColor(job.jobType)}`}>
+                  {/* Technical Specifications Blocks */}
+                  <div className="space-y-1.5 text-[11px] mb-4 flex-1 text-zinc-500">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-zinc-300 font-bold uppercase text-[10px] bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded">
                         {job.jobType}
                       </span>
-                      <span className="flex items-center">
+                      <span className="flex items-center text-zinc-400 font-medium uppercase">
                         <span className="mr-1">{getLocationTypeIcon(job.locationType)}</span>
                         {job.locationType}
                       </span>
                     </div>
 
                     {job.location && (
-                      <div className="flex items-center space-x-2 text-sm text-gray-400">
-                        <MapPin size={14} />
-                        <span>{job.location}</span>
+                      <div className="flex items-center space-x-1.5 truncate uppercase">
+                        <MapPin size={11} className="text-zinc-700" />
+                        <span className="truncate">{job.location}</span>
                       </div>
                     )}
 
                     {job.salaryRange && (
-                      <div className="flex items-center space-x-2 text-sm text-gray-400">
-                        <DollarSign size={14} />
+                      <div className="flex items-center space-x-1.5 uppercase">
+                        <DollarSign size={11} className="text-zinc-700" />
                         <span>{job.salaryRange}</span>
                       </div>
                     )}
 
                     {job.experienceRequired && (
-                      <div className="flex items-center space-x-2 text-sm text-gray-400">
-                        <Briefcase size={14} />
-                        <span>{job.experienceRequired} experience</span>
+                      <div className="flex items-center space-x-1.5 uppercase">
+                        <Briefcase size={11} className="text-zinc-700" />
+                        <span>{job.experienceRequired} EXP</span>
                       </div>
                     )}
                   </div>
 
-                  {/* Skills */}
+                  {/* Embedded Technical Skills Arrays */}
                   {job.requiredSkills && job.requiredSkills.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      {job.requiredSkills.slice(0, 3).map((skill: string, idx: number) => (
+                    <div className="flex flex-wrap gap-1 mb-4">
+                      {job.requiredSkills.slice(0, 2).map((skill: string, idx: number) => (
                         <span
                           key={idx}
-                          className="px-2 py-1 bg-black text-gray-400 text-xs rounded border border-[#2c2c2e]"
+                          className="px-1.5 py-0.5 bg-black text-zinc-400 text-[10px] rounded border border-zinc-900 uppercase font-medium"
                         >
                           {skill}
                         </span>
                       ))}
-                      {job.requiredSkills.length > 3 && (
-                        <span className="px-2 py-1 bg-black text-gray-400 text-xs rounded border border-[#2c2c2e]">
-                          +{job.requiredSkills.length - 3}
+                      {job.requiredSkills.length > 2 && (
+                        <span className="px-1.5 py-0.5 bg-black text-zinc-500 text-[10px] rounded border border-zinc-900 font-bold">
+                          +{job.requiredSkills.length - 2}
                         </span>
                       )}
                     </div>
                   )}
 
-                  {/* Footer with Apply Button */}
-                  <div className="pt-4 border-t border-[#2c2c2e] space-y-3">
-                    <div className="flex items-center justify-between text-xs text-gray-500">
-                      <div className="flex items-center space-x-2">
-                        <Clock size={12} />
+                  {/* Core Card Bottom Footer Controls */}
+                  <div className="pt-3 border-t border-zinc-900 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] text-zinc-600">
+                      <div className="flex items-center space-x-1 uppercase">
+                        <Clock size={10} />
                         <span>{calculateDaysAgo(job.createdAt)}</span>
                       </div>
-                      <Link 
-                        href={`/dashboard/jobs/${job.id}`}
-                        className="flex items-center space-x-1 text-white hover:underline"
-                      >
-                        <span>View Details</span>
-                        <ChevronRight size={14} />
-                      </Link>
+                      <div className="flex items-center space-x-0.5 text-zinc-400 group-hover:text-white transition-colors uppercase font-bold text-[9px] tracking-wide">
+                        <span>Inspect Node</span>
+                        <ChevronRight size={12} />
+                      </div>
                     </div>
                     
                     {hasApplied ? (
                       <button
                         disabled
-                        className="w-full py-2.5 bg-green-500/10 text-green-500 border border-green-500/20 rounded-xl font-medium flex items-center justify-center space-x-2"
+                        onClick={(e) => e.preventDefault()}
+                        className="w-full py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded text-[10px] font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-not-allowed"
                       >
-                        <CheckCircle2 size={16} />
-                        <span>Applied</span>
+                        <CheckCircle2 size={12} className="text-zinc-600" />
+                        <span>Deployment Complete</span>
                       </button>
                     ) : (
                       <button
                         onClick={(e) => handleApplyClick(job, e)}
-                        className="w-full py-2.5 bg-white text-black rounded-xl font-medium hover:bg-gray-100 transition-colors"
+                        className="w-full py-1.5 bg-white text-black rounded text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-colors"
                       >
-                        Apply Now
+                        Apply Payload
                       </button>
                     )}
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>
 
-          {/* Pagination */}
+          {/* Interface Pagination Array Node Controls */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center space-x-2">
+            <div className="flex items-center justify-center space-x-1 pt-4">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-4 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:border-white transition-colors"
+                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded text-xs text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed uppercase font-bold hover:border-zinc-800 transition-colors"
               >
-                Previous
+                Prev Block
               </button>
-              <span className="px-4 py-2 text-gray-500">
-                Page {page} of {totalPages}
+              <span className="px-3 py-1.5 text-zinc-600 text-xs">
+                BLOCK {page} / {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-4 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:border-white transition-colors"
+                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded text-xs text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed uppercase font-bold hover:border-zinc-800 transition-colors"
               >
-                Next
+                Next Block
               </button>
             </div>
           )}
         </>
       )}
 
-      {/* Application Modal */}
+      {/* Embedded Transmit Modal Core Entry */}
       {showApplicationModal && selectedJob && (
         <ApplicationModal
           job={selectedJob}
@@ -405,7 +388,7 @@ export default function JobsPage() {
   );
 }
 
-// Application Modal Component
+// ─── LOCAL APPLICATION INJECTED MODAL SUBSYSTEM COMPONENT ───
 function ApplicationModal({
   job,
   onClose,
@@ -499,75 +482,67 @@ function ApplicationModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-[#2c2c2e] flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-mono">
+      <div className="bg-black border border-zinc-900 rounded-xl max-w-xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
+        {/* Modal Header */}
+        <div className="p-4 border-b border-zinc-900 flex items-center justify-between bg-zinc-950">
           <div>
-            <h2 className="text-xl font-semibold text-white">Apply to {job.company.name}</h2>
-            <p className="text-gray-500 text-sm mt-1">{job.title}</p>
+            <h2 className="text-xs uppercase font-bold tracking-widest text-white">Transmit Payload Credentials</h2>
+            <p className="text-[10px] text-zinc-500 uppercase mt-0.5 tracking-tight">target: {job.company.name} // {job.title}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-[#2c2c2e] rounded-lg transition-colors text-gray-400 hover:text-white"
+            className="p-1 hover:bg-zinc-900 rounded transition-colors text-zinc-500 hover:text-white"
           >
-            <X size={20} />
+            <X size={14} />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Resume Selection Tabs */}
-          <div className="flex space-x-2 bg-black rounded-xl p-1">
+        {/* Modal Selection Pipeline Data Blocks */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex p-1 bg-zinc-950 border border-zinc-900 rounded-lg">
             <button
               onClick={() => setUploadNew(false)}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-1 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded transition-all ${
                 !uploadNew
-                  ? 'bg-white text-black'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-zinc-900 text-white border border-zinc-800'
+                  : 'text-zinc-600 hover:text-zinc-400'
               }`}
             >
-              Select Existing Resume
+              Registry Records
             </button>
             <button
               onClick={() => setUploadNew(true)}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex-1 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded transition-all ${
                 uploadNew
-                  ? 'bg-white text-black'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-zinc-900 text-white border border-zinc-800'
+                  : 'text-zinc-600 hover:text-zinc-400'
               }`}
             >
-              Upload New Resume
+              External Ingestion
             </button>
           </div>
 
-          {/* Select Existing Resume */}
+          {/* Local Existing Registries */}
           {!uploadNew && (
-            <div className="space-y-3">
+            <div className="space-y-1.5">
               {isLoading ? (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="text-gray-500 text-sm mt-2">Loading resumes...</p>
+                <div className="text-center py-6">
+                  <div className="w-4 h-4 border border-zinc-800 border-t-white rounded-full animate-spin mx-auto"></div>
                 </div>
               ) : resumes.length === 0 ? (
-                <div className="text-center py-8 bg-black rounded-xl border border-[#2c2c2e] p-6">
-                  <FileText className="mx-auto mb-3 text-gray-600" size={40} />
-                  <p className="text-gray-400 mb-4">No resumes found</p>
-                  <button
-                    onClick={() => setUploadNew(true)}
-                    className="text-white hover:underline"
-                  >
-                    Upload a new resume
-                  </button>
+                <div className="text-center py-6 bg-zinc-950 border border-zinc-900 rounded-lg p-4">
+                  <FileText className="mx-auto mb-2 text-zinc-700" size={20} />
+                  <p className="text-zinc-500 text-[10px] uppercase font-bold">No Local Registry Files Identified</p>
                 </div>
               ) : (
                 resumes.map((resume) => (
                   <label
                     key={resume.id}
-                    className={`flex items-center space-x-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-all ${
                       selectedResumeId === resume.id
-                        ? 'border-white bg-white/5'
-                        : 'border-[#2c2c2e] hover:border-gray-600'
+                        ? 'border-zinc-600 bg-zinc-950'
+                        : 'border-zinc-900 bg-black hover:border-zinc-800'
                     }`}
                   >
                     <input
@@ -576,35 +551,27 @@ function ApplicationModal({
                       value={resume.id}
                       checked={selectedResumeId === resume.id}
                       onChange={() => setSelectedResumeId(resume.id)}
-                      className="w-4 h-4"
+                      className="accent-white w-3.5 h-3.5"
                     />
-                    <div className="flex-1">
-                      <h4 className="text-white font-medium">{resume.name}</h4>
-                      <div className="flex items-center space-x-3 mt-1">
-                        <span className="text-xs text-gray-500">
-                          {resume.source === 'uploaded' ? 'Uploaded' : 'Generated'}
-                        </span>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-zinc-300 font-bold text-xs truncate uppercase tracking-tight">{resume.name}</h4>
+                      <div className="flex items-center space-x-2 mt-0.5 text-[9px] uppercase tracking-tighter text-zinc-500">
+                        <span>{resume.source === 'uploaded' ? 'Static Context' : 'Model Output'}</span>
                         {resume.atsScore && (
-                          <span className="text-xs bg-green-500/10 text-green-500 px-2 py-0.5 rounded">
-                            ATS: {resume.atsScore}%
-                          </span>
+                          <span className="text-zinc-400 bg-zinc-900 px-1 border border-zinc-800 rounded">ATS: {resume.atsScore}%</span>
                         )}
                       </div>
                     </div>
-                    <CheckCircle2
-                      className={selectedResumeId === resume.id ? 'text-white' : 'text-gray-600'}
-                      size={20}
-                    />
                   </label>
                 ))
               )}
             </div>
           )}
 
-          {/* Upload New Resume */}
+          {/* Upload New Data Payload */}
           {uploadNew && (
             <div>
-              <label className="block border-2 border-dashed border-[#2c2c2e] rounded-xl p-8 text-center hover:border-white transition-colors cursor-pointer">
+              <label className="block border border-dashed border-zinc-900 bg-zinc-950/40 rounded-lg p-6 text-center hover:border-zinc-700 transition-colors cursor-pointer">
                 <input
                   type="file"
                   accept=".pdf,.doc,.docx"
@@ -612,59 +579,55 @@ function ApplicationModal({
                   className="hidden"
                 />
                 {newResumeFile ? (
-                  <div className="space-y-2">
-                    <FileText className="mx-auto text-white" size={40} />
-                    <p className="text-white font-medium">{newResumeFile.name}</p>
-                    <p className="text-gray-500 text-sm">
-                      {(newResumeFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
+                  <div className="space-y-1.5">
+                    <FileText className="mx-auto text-white" size={24} />
+                    <p className="text-white font-bold text-xs max-w-xs truncate mx-auto uppercase tracking-tight">{newResumeFile.name}</p>
+                    <p className="text-zinc-600 text-[9px]">{(newResumeFile.size / 1024 / 1024).toFixed(2)} MB ARCHIVE</p>
                     <button
                       onClick={(e) => {
                         e.preventDefault();
                         setNewResumeFile(null);
                       }}
-                      className="text-red-500 hover:text-red-400 text-sm"
+                      className="text-red-400 text-[10px] uppercase font-bold underline underline-offset-2 pt-1 inline-block"
                     >
-                      Remove file
+                      Clear File
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <Upload className="mx-auto text-gray-600" size={40} />
-                    <p className="text-white">Click to upload resume</p>
-                    <p className="text-gray-500 text-sm">PDF or DOCX (Max 10MB)</p>
+                  <div className="space-y-1.5">
+                    <Upload className="mx-auto text-zinc-700" size={22} />
+                    <p className="text-zinc-400 font-bold text-xs uppercase tracking-wider">Stream Upload Socket</p>
+                    <p className="text-zinc-600 text-[9px] uppercase">PDF, DOCX Tiers (MAX 10MB CAP)</p>
                   </div>
                 )}
               </label>
             </div>
           )}
 
-          {/* Info Box */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex space-x-3">
-            <AlertCircle className="text-blue-500 flex-shrink-0" size={20} />
-            <div className="text-sm text-blue-300">
-              <p className="font-medium mb-1">Your resume will be analyzed</p>
-              <p className="text-blue-400">
-                We'll automatically match your resume against the job description to improve your chances.
-              </p>
+          {/* Evaluation Block Notice */}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-lg p-3 flex space-x-2.5">
+            <AlertCircle className="text-zinc-600 flex-shrink-0 mt-0.5" size={14} />
+            <div className="text-[10px] text-zinc-500 uppercase tracking-tight font-medium leading-normal">
+              <p className="text-zinc-400 font-bold tracking-wider mb-0.5">Automated Parser Query</p>
+              <p>Injected structures deploy through compilation checks to track compatibility scores before record storage indexing routines execution.</p>
             </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="p-6 border-t border-[#2c2c2e] flex items-center justify-end space-x-3">
+        {/* Modal Base Triggers */}
+        <div className="p-3.5 border-t border-zinc-900 flex items-center justify-end space-x-1.5 bg-zinc-950">
           <button
             onClick={onClose}
-            className="px-6 py-3 bg-[#2c2c2e] text-white rounded-xl hover:bg-[#3c3c3e] transition-colors"
+            className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded text-[10px] uppercase font-bold tracking-wider transition-colors"
           >
-            Cancel
+            Abort Channel
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitting || (!uploadNew && !selectedResumeId) || (uploadNew && !newResumeFile)}
-            className="px-6 py-3 bg-white text-black rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-1.5 bg-white text-black rounded text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit Application'}
+            {isSubmitting ? 'Syncing...' : 'Deploy Payload'}
           </button>
         </div>
       </div>

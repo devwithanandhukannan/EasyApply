@@ -1,27 +1,26 @@
-// app/dashboard/layout.tsx
 'use client';
 
-import { useAuth } from '@/app/contexts/AuthContext.tsx';
+import { useAuth } from '@/app/contexts/AuthContext';
 import CompanySidebar from '@/app/components/CompanySidebar';
 
 export default function CompanyDashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isLoading, user } = useAuth();
+  const { isLoading, company } = useAuth();
 
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-black">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-800 border-t-white"></div>
-          <p className="text-sm text-zinc-500 font-medium">Loading...</p>
+          <div className="h-5 w-5 animate-spin rounded-full border border-zinc-800 border-t-white"></div>
+          <p className="text-xs text-zinc-500 font-mono">Loading active profile matrix...</p>
         </div>
       </div>
     );
   }
 
   const companyData = {
-    name: user?.company?.name || 'Company Workspace',
-    email: user?.company?.email || '',
-    logoUrl: user?.company?.logoUrl || null,
+    name: company?.name || 'Company Workspace',
+    email: company?.email || '',
+    logoUrl: company?.logoUrl || null,
   };
 
   return (

@@ -5,6 +5,38 @@ interface AuthRequest extends Request {
   user?: { userId: string; mobileNumber: string; role: string };
 }
 
+/**
+ * Calculate the holistic profile completion percentage.
+ * Total points yield a score bounded exactly between 0 and 100.
+ */
+const calculateCompletionScore = (profile: any): number => {
+  let score = 0;
+
+  // 1. Core Profile Details (Max 30%)
+  if (profile.fullName?.trim()) score += 3;
+  if (profile.email?.trim()) score += 6;
+  if (profile.phone?.trim()) score += 10;
+
+  // 2. Personal & Professional Base (Max 35%)
+  if (profile.bio?.trim()) score += 10;
+  if (profile.location?.trim()) score += 10;
+  if (profile.skills && profile.skills.length > 0) {
+    // Give full credit if they have added 3 or more skills, otherwise scale it
+    score += profile.skills.length >= 3 ? 15 : profile.skills.length * 5;
+  }
+
+  // 3. Experience, Education & Credentials (Max 35%)
+  if (profile.education && profile.education.length > 0) score += 15;
+  if ((profile.experience && profile.experience.length > 0) || (profile.projects && profile.projects.length > 0)) {
+    score += 15;
+  }
+  if ((profile.certifications && profile.certifications.length > 0) || profile.linkedin?.trim() || profile.github?.trim()) {
+    score += 5;
+  }
+
+  return Math.min(score, 100);
+};
+
 // Helper: convert buffer to base64
 const bufferToBase64 = (buffer: Buffer, mimeType: string): string => {
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
@@ -18,7 +50,6 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Include sub-sections off the JobSeekerProfile instead of the User
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
       include: {
@@ -37,10 +68,13 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Job Seeker profile not found' });
     }
 
-    // Safely parse JSON database properties
+    // Calculate score using database payload vectors
+    const completionScore = calculateCompletionScore(profile);
+
     const preferences = (profile.jobPreferences as any) || {};
 
     const profileData = {
+      completionScore, // 🎯 Included dynamic metrics tracking score here
       fullName: profile.fullName || '',
       email: profile.email || '',
       phone: profile.phone || '',

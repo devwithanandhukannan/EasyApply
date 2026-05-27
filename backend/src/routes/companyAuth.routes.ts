@@ -1,5 +1,6 @@
-import express from 'express'; // 👈 Default import handles the runtime safely
-import type { Request, Response, NextFunction } from 'express'; // 👈 'import type' completely strips this out during build compilation
+// src/routes/companyAuth.routes.ts
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { 
   sendCompanyOtp, 
@@ -10,15 +11,15 @@ import {
   companyLogin,
   resendCompanyVerificationEmail 
 } from '../controllers/companyAuth.controller.ts';
-import { authenticateToken } from '../middleware/auth.middleware.ts';
+import { authenticateCompany } from '../middleware/auth.middleware.ts';
 
 const router = express.Router();
 
-// Configure multer to store uploaded files entirely in transient RAM memory
+// Configure multer for logo uploads
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { 
-    fileSize: 5 * 1024 * 1024 // Caps image uploads at 5MB maximum
+    fileSize: 5 * 1024 * 1024 // 5MB max
   },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -29,31 +30,32 @@ const upload = multer({
   },
 });
 
-/**
- * Middleware wrapper to safely catch Multer validation errors
- */
 const handleLogoUpload = (req: Request, res: Response, next: NextFunction) => {
   upload.single('logo')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
-      return res.status(400).json({ success: false, message: `File upload restriction violated: ${err.message}` });
+      return res.status(400).json({ 
+        success: false, 
+        message: `File upload restriction violated: ${err.message}` 
+      });
     } else if (err) {
-      return res.status(400).json({ success: false, message: err.message });
+      return res.status(400).json({ 
+        success: false, 
+        message: err.message 
+      });
     }
     next();
   });
 };
 
-// ─── OTP FLOWS ───────────────────────────────────────────────────────────
+// ─── PUBLIC ROUTES ───────────────────────────────────────────────────────
 router.post('/send-otp', sendCompanyOtp);
 router.post('/verify-otp', verifyCompanyOtp);
-
-// ─── AUTHENTICATION FLOWS ────────────────────────────────────────────────
 router.post('/register', handleLogoUpload, registerCompany);
 router.post('/login', companyLogin);
-
-// ─── VERIFICATION & SESSION MANAGEMENT ──────────────────────────────────
 router.get('/verify-email', verifyCompanyEmail);
 router.post('/resend-verification', resendCompanyVerificationEmail);
-router.get('/session', authenticateToken, checkCompanySession);
+
+// ─── PROTECTED ROUTES ────────────────────────────────────────────────────
+router.get('/session', authenticateCompany, checkCompanySession);
 
 export default router;

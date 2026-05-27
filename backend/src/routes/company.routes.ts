@@ -1,7 +1,5 @@
-// src/routes/company.routes.ts  (FULL REPLACEMENT)
+// src/routes/company.routes.ts
 import { Router } from 'express';
-
-// Existing job CRUD controllers
 import {
   createJob,
   getAllCompanyJobs,
@@ -10,8 +8,6 @@ import {
   deleteJob,
   generateAIDescription,
 } from '../controllers/companyJob.controller.ts';
-
-// New dashboard + AI filter controllers
 import {
   getCompanyDashboard,
   getJobApplications,
@@ -19,55 +15,149 @@ import {
   getCandidateDetail,
   updateApplicationStatus,
 } from '../controllers/companyDashboard.controller.ts';
-
-import { authenticateCompany } from '../middleware/auth.middleware.ts';
-import { scheduleBulkInterviews, getCompanyInterviewsList, respondToReschedule, updateInterviewStatus } from '../controllers/interview.controller.ts';
+import {
+  scheduleBulkInterviews,
+  getCompanyInterviewsList,
+  respondToReschedule,
+  updateInterviewStatus,
+} from '../controllers/interview.controller.ts';
 import {
   inviteTeamMember,
   listTeamMembers,
   updateMemberRole,
   removeTeamMember,
   acceptInvite,
-  setPasswordForInvite
+  setTeamMemberPassword,
+  teamMemberLogin
 } from '../controllers/team.controller.ts';
-
+import { 
+  authenticateCompany, 
+  requireCompanyRole 
+} from '../middleware/auth.middleware.ts';
+import { ROLES } from '../constants/roles.ts';
 
 const router = Router();
 
+// ─── PUBLIC COMPANY ROUTES ───────────────────────────────────────────────
+router.post('/team/set-password', setTeamMemberPassword);
 router.get('/team/accept-invite', acceptInvite);
+router.post('/team/login', teamMemberLogin);
 
+// ─── PROTECTED COMPANY ROUTES (All require company authentication) ───────
 router.use(authenticateCompany);
 
+// Dashboard (all company members can view)
 router.get('/dashboard', getCompanyDashboard);
 
-
-router.post('/team/invite', inviteTeamMember);
+// ─── TEAM MANAGEMENT (Admin only) ────────────────────────────────────────
+router.post(
+  '/team/invite',
+  requireCompanyRole(ROLES.COMPANY_ADMIN),
+  inviteTeamMember
+);
 router.get('/team', listTeamMembers);
-router.put('/team/:memberId/role', updateMemberRole);
-router.delete('/team/:memberId', removeTeamMember);
-router.post('/team/set-password', setPasswordForInvite);
+router.put(
+  '/team/:memberId/role',
+  requireCompanyRole(ROLES.COMPANY_ADMIN),
+  updateMemberRole
+);
+router.delete(
+  '/team/:memberId',
+  requireCompanyRole(ROLES.COMPANY_ADMIN),
+  removeTeamMember
+);
 
+// ─── JOB POSTING MANAGEMENT ──────────────────────────────────────────────
+// Create/Delete: Admin only
+router.post(
+  '/',
+  requireCompanyRole(ROLES.COMPANY_ADMIN),
+  createJob
+);
+router.delete(
+  '/:id',
+  requireCompanyRole(ROLES.COMPANY_ADMIN),
+  deleteJob
+);
 
-router.post('/', createJob);
-router.get('/', getAllCompanyJobs);
-router.post('/generate-description', generateAIDescription);
-router.get('/:id', getJobDetails);
-router.put('/:id', updateJob);
-router.delete('/:id', deleteJob);
+// Update/View: Admin and HR
+router.get(
+  '/',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER),
+  getAllCompanyJobs
+);
+router.get(
+  '/:id',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER),
+  getJobDetails
+);
+router.put(
+  '/:id',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR),
+  updateJob
+);
+router.post(
+  '/generate-description',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR),
+  generateAIDescription
+);
 
+// ─── APPLICATION MANAGEMENT ──────────────────────────────────────────────
+router.get(
+  '/:jobId/applications',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER),
+  getJobApplications
+);
+router.post(
+  '/:jobId/ai-filter',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR),
+  aiFilterCandidates
+);
+router.get(
+  '/applications/:applicationId',
+  requireCompanyRole(
+    ROLES.COMPANY_ADMIN,
+    ROLES.COMPANY_HR,
+    ROLES.COMPANY_INTERVIEWER,
+    ROLES.COMPANY_VIEWER
+  ),
+  getCandidateDetail
+);
+router.patch(
+  '/applications/:applicationId/status',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR),
+  updateApplicationStatus
+);
 
-router.get('/:jobId/applications', getJobApplications);
-router.post('/:jobId/ai-filter', aiFilterCandidates);
-router.get('/applications/:applicationId', getCandidateDetail);
-router.patch('/applications/:applicationId/status', updateApplicationStatus);
-router.post('/interviews/bulk-schedule', scheduleBulkInterviews);
-router.get('/interviews/list', getCompanyInterviewsList);
-
-router.post('/interviews/:id/respond-reschedule', respondToReschedule);
-router.post('/interviews/:id/update-status', updateInterviewStatus);
-
-
-
-
+// ─── INTERVIEW MANAGEMENT ────────────────────────────────────────────────
+router.post(
+  '/interviews/bulk-schedule',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR),
+  scheduleBulkInterviews
+);
+router.get(
+  '/interviews/list',
+  requireCompanyRole(
+    ROLES.COMPANY_ADMIN,
+    ROLES.COMPANY_HR,
+    ROLES.COMPANY_INTERVIEWER,
+    ROLES.COMPANY_VIEWER
+  ),
+  getCompanyInterviewsList
+);
+router.post(
+  '/interviews/:id/respond-reschedule',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR),
+  respondToReschedule
+);
+router.post(
+  '/interviews/:id/update-status',
+  requireCompanyRole(
+    ROLES.COMPANY_ADMIN,
+    ROLES.COMPANY_HR,
+    ROLES.COMPANY_INTERVIEWER
+  ),
+  updateInterviewStatus
+);
 
 export default router;
