@@ -36,6 +36,7 @@ import {
   confirmInterviewPresence,
   requestInterviewReschedule,
 } from '../controllers/interview.controller.ts';
+import { getApplicationsTracker, updateApplicationNotes, withdrawApplicationTracker } from '../controllers/applicationTracker.controller.ts';
 
 const router = express.Router();
 
@@ -106,5 +107,11 @@ router.delete('/applications/:id', withdrawApplication);
 router.get('/interviews', getMyScheduledInterviews);
 router.post('/interviews/:id/confirm', confirmInterviewPresence);
 router.post('/interviews/:id/reschedule', requestInterviewReschedule);
+
+
+// ─── APPLICATION TRACKER ─────────────────────────────────────────────────
+router.get('/applications/tracker/timeline', getApplicationsTracker);
+router.patch('/applications/:id/notes', updateApplicationNotes);
+router.post('/applications/:id/withdraw', withdrawApplicationTracker);
 
 export default router;

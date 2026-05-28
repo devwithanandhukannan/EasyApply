@@ -14,6 +14,19 @@ enum RequestStatus {
   declined
 }
 
+enum OfferLetterStatus {
+  draft
+  pending
+  sent
+  viewed
+  accepted
+  declined
+  negotiating
+  expired
+  withdrawn
+}
+
+
 enum ApplicationStatus {
   applied           // Applied
   screened          // Screened
@@ -264,9 +277,10 @@ model Company {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  teamMembers      TeamMember[]
-  jobPostings      JobPosting[]
-  interviewBatches InterviewBatch[]
+  teamMembers       TeamMember[]
+  jobPostings       JobPosting[]
+  interviewBatches  InterviewBatch[]
+  offerTemplates    OfferTemplate[]
 
   @@index([name])
   @@index([email])
@@ -355,13 +369,31 @@ model Application {
   updatedAt          DateTime          @updatedAt
   pipelineIndex      Int               @default(0)
 
-  interviews   Interview[]
-  offerLetters OfferLetter[]
+  candidateNotes     String?           @db.Text // Private seeker notes
+  isWithdrawn        Boolean           @default(false)
+
+  interviews         Interview[]
+  offerLetters       OfferLetter[]
+  statusHistory      ApplicationHistory[] 
 
   @@index([jobSeekerProfileId])
   @@index([jobPostingId])
   @@index([status])
 }
+
+model ApplicationHistory {
+  id            String            @id @default(uuid())
+  applicationId String
+  application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  status        ApplicationStatus
+  notes         String?           @db.Text
+  createdAt     DateTime          @default(now())
+
+  @@index([applicationId])
+  @@index([createdAt])
+}
+
+
 
 model InterviewBatch {
   id                   String          @id @default(uuid())
@@ -443,15 +475,60 @@ model InterviewFeedback {
 }
 
 model OfferLetter {
-  id            String      @id @default(uuid())
-  applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  content       Json
-  filePath      String
-  status        OfferStatus @default(sent)
-  sentAt        DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id               String            @id @default(uuid())
+  applicationId    String
+  application      Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  templateId       String?
+  template         OfferTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  
+  // Offer Details
+  position         String
+  department       String?
+  salary           Decimal
+  currency         String            
+  startDate        DateTime
+  location         String?
+  employmentType   String            
+  
+  content          Json              
+  filePath         String?           
+  
+  status           OfferLetterStatus @default(pending)
+  sentAt           DateTime?
+  viewedAt         DateTime?         
+  respondedAt      DateTime?
+
+  candidateResponse String?         
+  negotiationNote   String?         
+  
+  companySignature  Json?            
+  candidateSignature Json?          
+  
+  emailSentAt      DateTime?
+  whatsappSentAt   DateTime?
+  emailOpenCount   Int              @default(0)
+  
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([applicationId])
   @@index([status])
+  @@index([sentAt])
+}
+
+model OfferTemplate {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  content     Json     // HTML template with placeholders
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  offers      OfferLetter[]
+
+  @@index([companyId])
+  @@index([isDefault])
 }

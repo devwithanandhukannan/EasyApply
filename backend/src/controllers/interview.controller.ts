@@ -1,9 +1,8 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../utils/prisma.ts';
-import { InterviewFormat, InterviewStatus } from '@prisma/client';
+import { ApplicationStatus, InterviewStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 
-// Helper to look up job seeker profile identifier safely
 const getProfileId = async (userId: string): Promise<string | null> => {
   const profile = await prisma.jobSeekerProfile.findUnique({
     where: { userId },
@@ -22,7 +21,7 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
       interviewFormat, 
       interviewerIds, 
       selectedApplicationIds,
-      targetStatus // 🎯 NEW: Dynamic stage parameter ('technical_round' or 'hr_round')
+      targetStatus 
     } = req.body;
 
     if (!jobPostingId) {
@@ -35,7 +34,6 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
       return;
     }
 
-    // 🎯 VALIDATION: Ensure target status is a valid interview phase in your schema
     if (targetStatus !== 'technical_round' && targetStatus !== 'hr_round') {
       res.status(400).json({ 
         success: false, 
@@ -65,7 +63,6 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
 
     const result = await prisma.$transaction(async (tx) => {
       
-      // 1. Initialize the master tracking batch row context
       const batch = await tx.interviewBatch.create({
         data: {
           companyId,
@@ -86,7 +83,6 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
       const baseStartDate = new Date(startTime);
       const slotDurationMs = parseInt(slotDuration, 10) * 60000;
 
-      // 2. Loop and generate structural individual tokens sequentially
       for (let index = 0; index < selectedApplicationIds.length; index++) {
         const appId = selectedApplicationIds[index];
         const scheduledTime = new Date(baseStartDate.getTime() + index * slotDurationMs);
@@ -109,14 +105,22 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
             }
           }
         });
+
+        // 🎯 FIXED: Generate parallel audit logs for individual candidate timelines inside the batch loop
+        await tx.applicationHistory.create({
+  data: {
+    applicationId: appId,
+    status: targetStatus as ApplicationStatus,
+    notes: `Interview session configured. Scheduled Date: ${scheduledTime.toLocaleString()} via live automated batching routing tools.`
+  }
+});
       }
 
-      // 3. 🎯 FIXED: Upgrade applicant flags inside workspace grid using the verified dynamic selection
       await tx.application.updateMany({
         where: { id: { in: selectedApplicationIds } },
         data: { 
           status: targetStatus as ApplicationStatus,
-          pipelineIndex: 0 // Resets positions within the target round column
+          pipelineIndex: 0 
         }
       });
 
@@ -134,7 +138,7 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
     res.status(500).json({ success: false, message: "Internal runtime routing failure.", error: error.message });
   }
 };
-// ─── 2. PIPELINE INTERVIEW QUEUE LISTER (COMPANY DASHBOARD) ──────────────
+
 // ─── 2. PIPELINE INTERVIEW QUEUE LISTER (COMPANY DASHBOARD) ──────────────
 export const getCompanyInterviewsList = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -162,7 +166,6 @@ export const getCompanyInterviewsList = async (req: Request, res: Response): Pro
         status: true,
         livekitRoomName: true,
         joinLink: true,
-        
         rescheduleRequests: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -174,7 +177,6 @@ export const getCompanyInterviewsList = async (req: Request, res: Response): Pro
             createdAt: true
           }
         },
-        
         application: {
           select: {
             id: true,
@@ -217,7 +219,6 @@ export const getCompanyInterviewsList = async (req: Request, res: Response): Pro
           select: {
             id: true,
             status: true,
-            // 🎯 FIXED: Query the exact relational structure instead of the dead field
             interviewers: {
               select: {
                 teamMemberId: true,
@@ -342,7 +343,7 @@ export const requestInterviewReschedule = async (req: Request, res: Response) =>
       prisma.rescheduleRequest.create({
         data: {
           interviewId: id,
-          requestedByUserId: userId,      // ← correct schema field
+          requestedByUserId: userId,      
           proposedTime: new Date(proposedTime),
           candidateNote: candidateNote || '',
         },
@@ -367,15 +368,14 @@ export const requestInterviewReschedule = async (req: Request, res: Response) =>
 // ─── 6. RESPOND TO CANDIDATE RESCHEDULE PROPOSAL (COMPANY METHOD) ───────
 export const respondToReschedule = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = req.params; // Interview ID
-    const { action } = req.body; // 'approve' | 'decline'
+    const { id } = req.params; 
+    const { action } = req.body; 
 
     if (!['approve', 'decline'].includes(action)) {
       res.status(400).json({ success: false, message: "Invalid action payload context." });
       return;
     }
 
-    // Pull current latest pending request track matching this target element
     const latestRequest = await prisma.rescheduleRequest.findFirst({
       where: { interviewId: id, status: 'pending' },
       orderBy: { createdAt: 'desc' }
@@ -387,23 +387,20 @@ export const respondToReschedule = async (req: Request, res: Response): Promise<
     }
 
     await prisma.$transaction(async (tx) => {
-      // Update historical trace document item status log details 
       await tx.rescheduleRequest.update({
         where: { id: latestRequest.id },
         data: { status: action === 'approve' ? 'approved' : 'declined' }
       });
 
-      // If approved, forcefully rewrite master calendar entry records block
       if (action === 'approve') {
         await tx.interview.update({
           where: { id },
           data: {
             scheduledTime: latestRequest.proposedTime,
-            status: 'scheduled' // Reset structural target log loop back to scheduled state
+            status: 'scheduled' 
           }
         });
       } else {
-        // If rejected, keep previous time and safely step status tag back down
         await tx.interview.update({
           where: { id },
           data: { status: 'scheduled' }
@@ -413,7 +410,7 @@ export const respondToReschedule = async (req: Request, res: Response): Promise<
 
     res.status(200).json({ success: true, message: `Successfully responded with action: ${action}` });
   } catch (error: any) {
-    console.error("Reschedule response pipeline loop trace tracking error:", error);
+    console.error("Reschedule response pipeline error:", error);
     res.status(500).json({ success: false, message: "Failed adjusting profile scheduling requirements workflow records." });
   }
 };
@@ -431,20 +428,16 @@ export const updateInterviewStatus = async (req: Request, res: Response): Promis
 
     res.status(200).json({ success: true, message: "Structural system status tracking trace updated successfully.", data: updated });
   } catch (error: any) {
-    console.error("Pipeline manual override handler fault context trace:", error);
+    console.error("Pipeline manual override fault:", error);
     res.status(500).json({ success: false, message: "Failed assigning target inline manual pipeline block modifications." });
   }
 };
 
 // ─── 8. SUBMIT INTERVIEW EVALUATION FEEDBACK (COMPANY METHOD) ─────────────
 export const addInterviewFeedback = async (req: Request, res: Response): Promise<void> => {
-  console.log('reached');
-  
   try {
     const { interviewId } = req.params;
     const { technicalRating, communicationRating, problemSolvingRating, verdict, notes } = req.body;
-    
-    // Fallback extraction matching your existing auth payload pipeline
     const userId = (req as any).user?.id || (req as any).user?.userId;
 
     if (!userId) {
@@ -452,10 +445,9 @@ export const addInterviewFeedback = async (req: Request, res: Response): Promise
       return;
     }
 
-    // 1. Verify target interview metadata exists
     const interview = await prisma.interview.findUnique({
       where: { id: interviewId },
-      select: { status: true }
+      select: { status: true, applicationId: true }
     });
 
     if (!interview) {
@@ -463,13 +455,10 @@ export const addInterviewFeedback = async (req: Request, res: Response): Promise
       return;
     }
 
-    // 2. STAGE VALIDATION CRITERIA: Verify if user belongs to the assigned interview panel
     const verifiedAssignment = await prisma.interviewInterviewer.findFirst({
       where: {
         interviewId: interviewId,
-        teamMember: {
-          userId: userId // Cross-reference TeamMember structure down to User authentication key
-        }
+        teamMember: { userId: userId }
       }
     });
 
@@ -481,7 +470,6 @@ export const addInterviewFeedback = async (req: Request, res: Response): Promise
       return;
     }
 
-    // 3. Prevent duplicate submissions from the same operator node
     const existingFeedback = await prisma.interviewFeedback.findFirst({
       where: {
         interviewId,
@@ -494,7 +482,6 @@ export const addInterviewFeedback = async (req: Request, res: Response): Promise
       return;
     }
 
-    // 4. Atomic Execution: Write evaluation array data and advance stream status safely
     const feedbackResult = await prisma.$transaction(async (tx) => {
       const feedback = await tx.interviewFeedback.create({
         data: {
@@ -503,12 +490,11 @@ export const addInterviewFeedback = async (req: Request, res: Response): Promise
           technicalRating: parseInt(technicalRating, 10),
           communicationRating: parseInt(communicationRating, 10),
           problemSolvingRating: parseInt(problemSolvingRating, 10),
-          verdict, // Maps to Enum 'Verdict': shortlist, reject, on_hold, next_round
+          verdict, 
           notes: notes || ''
         }
       });
 
-      // Update interview status tracking index if currently set to pending execution tiers
       if (interview.status !== 'completed') {
         await tx.interview.update({
           where: { id: interviewId },
@@ -526,7 +512,7 @@ export const addInterviewFeedback = async (req: Request, res: Response): Promise
     });
 
   } catch (error: any) {
-    console.error("Critical feedback engine commitment failure:", error);
+    console.error("Critical feedback commitment failure:", error);
     res.status(500).json({ success: false, message: "Internal feedback evaluation loop failure.", error: error.message });
   }
 };
@@ -561,13 +547,11 @@ export const getInterviewFeedbacksList = async (req: Request, res: Response): Pr
   }
 };
 
-// ─── 9. QUERY UPDATE SUBMITTED FEEDBACK RECORD  ──────
+// ─── 10. QUERY UPDATE SUBMITTED FEEDBACK RECORD ──────────────────────────
 export const upsertInterviewFeedback = async (req: Request, res: Response): Promise<void> => {
   try {
     const { interviewId } = req.params;
     const { technicalRating, communicationRating, problemSolvingRating, verdict, notes } = req.body;
-    
-    // Extract current authenticated user ID (Interviewer)
     const userId = (req as any).user?.id || (req as any).user?.userId;
 
     if (!userId) {
@@ -575,7 +559,16 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
       return;
     }
 
-    // Attempt to locate an existing feedback block for this specific interviewer and interview node
+    const interview = await prisma.interview.findUnique({
+      where: { id: interviewId },
+      select: { applicationId: true }
+    });
+
+    if (!interview) {
+      res.status(404).json({ success: false, message: "Interview target not identified." });
+      return;
+    }
+
     const existingFeedback = await prisma.interviewFeedback.findFirst({
       where: {
         interviewId,
@@ -586,7 +579,6 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
     let feedback;
 
     if (existingFeedback) {
-      // 🎯 UPDATE EXISTING RECORD
       feedback = await prisma.interviewFeedback.update({
         where: { id: existingFeedback.id },
         data: {
@@ -598,7 +590,6 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
         }
       });
     } else {
-      // 🎯 CREATE NEW RECORD
       feedback = await prisma.interviewFeedback.create({
         data: {
           interviewId,
@@ -612,17 +603,41 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
       });
     }
 
-    // Automatically shift the master interview status indicator if required
+    // Automatically synchronize tracking changes back to seeker's historical audit timeline log
+    let timelineLogNote = `Interviewer updated evaluation review metrics. Performance Verdict: ${verdict}.`;
+    
     if (verdict === 'reject') {
-      await prisma.interview.update({
-        where: { id: interviewId },
-        data: { status: 'cancelled' }
-      });
+      await prisma.$transaction([
+        prisma.interview.update({
+          where: { id: interviewId },
+          data: { status: 'cancelled' }
+        }),
+        prisma.application.update({
+          where: { id: interview.applicationId },
+          data: { status: ApplicationStatus.rejected }
+        }),
+        prisma.applicationHistory.create({
+          data: {
+            applicationId: interview.applicationId,
+            status: ApplicationStatus.rejected,
+            notes: 'Application moved to rejected stage following panel interview performance evaluations.'
+          }
+        })
+      ]);
     } else if (verdict === 'shortlist' || verdict === 'next_round') {
-      await prisma.interview.update({
-        where: { id: interviewId },
-        data: { status: 'completed' }
-      });
+      await prisma.$transaction([
+        prisma.interview.update({
+          where: { id: interviewId },
+          data: { status: 'completed' }
+        }),
+        prisma.applicationHistory.create({
+          data: {
+            applicationId: interview.applicationId,
+            status: verdict === 'shortlist' ? ApplicationStatus.screened : ApplicationStatus.technical_round,
+            notes: timelineLogNote
+          }
+        })
+      ]);
     }
 
     res.status(200).json({
@@ -632,7 +647,7 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
     });
 
   } catch (error: any) {
-    console.error("Critical breakdown tracking feedback database payload:", error);
+    console.error("Critical breakdown tracking feedback payload:", error);
     res.status(500).json({ success: false, message: "Internal update failure.", error: error.message });
   }
 };

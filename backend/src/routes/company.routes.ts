@@ -35,6 +35,7 @@ import {
   requireCompanyRole 
 } from '../middleware/auth.middleware.ts';
 import { ROLES } from '../constants/roles.ts';
+import offerRoutes from './offer.routes.ts';
 
 const router = Router();
 
@@ -159,5 +160,10 @@ router.post(
   ),
   updateInterviewStatus
 );
+
+// ─── OFFER LETTERS ──────────────────────────────────────────────────
+
+router.use('/offers', offerRoutes);
+
 
 export default router;

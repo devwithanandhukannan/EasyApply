@@ -1,40 +1,35 @@
 import type { Request, Response } from "express";
-import { Prisma } from "@prisma/client";
-import { ApplicationStatus, InterviewFormat, InterviewStatus } from "@prisma/client";
+import { ApplicationStatus } from "@prisma/client";
 import { prisma } from "../utils/prisma.ts";
 
-/**
- * 1. FETCH BOARD DATA
- * Route: GET /api/kanban/job/:jobPostingId
- */
-
-export const getPipelineBoard =  async(req:Request, res:Response): Promise<void> => {
+export const getPipelineBoard = async (req: Request, res: Response): Promise<void> => {
     try {
-        const {jobId} = req.params;
+        const { jobPostingId } = req.params;
         
         const applications = await prisma.application.findMany({
-            where: {jobId},
-            include :{
-                jobSeekerProfile:{
-                    select:{
-                        fullName:true,
+            where: { jobPostingId },
+            include: {
+                jobSeekerProfile: {
+                    select: {
+                        fullName: true,
                         email: true,
                         profilePhotoUrl: true,
                         phone: true
                     }
                 },
                 interviews: {
-                    orderBy:{scheduledTime:'desc'},
-                    take:1,
-                    select:{
+                    orderBy: { scheduledTime: 'desc' },
+                    take: 1,
+                    select: {
                         id: true,
                         scheduledTime: true,
                         status: true,
                         format: true
                     }
                 }
-            }, orderBy: { pipelineIndex: 'asc' }
-        })
+            }, 
+            orderBy: { pipelineIndex: 'asc' }
+        });
 
         const board: Record<ApplicationStatus, any[]> = {
             applied: [],
@@ -47,18 +42,18 @@ export const getPipelineBoard =  async(req:Request, res:Response): Promise<void>
         };
 
         applications.forEach(app => {
-            if(board[app.status]){
-                board[app.status].push(app)
+            if (board[app.status]) {
+                board[app.status].push(app);
             }
-        })
+        });
 
-        res.status(200).json({'success':true, 'data':board})
+        res.status(200).json({ 'success': true, 'data': board });
 
     } catch (error: any) {
         console.error("Error fetching Kanban board:", error);
         res.status(500).json({ success: false, message: error.message });
     }
-}
+};
 
 export const movePipelineCard = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -69,21 +64,31 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // Process positional transformation update using transactional mutation sets
-    const updatedApplication = await prisma.application.update({
-      where: { 
-        id: applicationId 
-      },
-      data: {
-        status: destinationStatus as ApplicationStatus,
-        pipelineIndex: typeof newIndex === 'number' ? newIndex : 0
-      }
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.application.update({
+        where: { id: applicationId },
+        data: {
+          status: destinationStatus as ApplicationStatus,
+          pipelineIndex: typeof newIndex === 'number' ? newIndex : 0
+        }
+      });
+
+      // ✅ FIXED: Changed 'ApplicationHistory' to 'applicationHistory'
+      await tx.applicationHistory.create({
+        data: {
+          applicationId,
+          status: destinationStatus as ApplicationStatus,
+          notes: `Application shifted from ${sourceStatus || 'previous stage'} to ${destinationStatus} via Recruiter Workspace Kanban.`
+        }
+      });
+
+      return updated;
     });
 
     res.status(200).json({ 
       success: true, 
-      message: "Candidate tracked location position vector successfully modified.",
-      data: updatedApplication 
+      message: "Candidate tracked location position vector successfully modified with timeline logging entries sync.",
+      data: result 
     });
 
   } catch (error: any) {

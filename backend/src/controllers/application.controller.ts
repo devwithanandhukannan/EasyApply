@@ -3,8 +3,9 @@ import fs from 'fs';
 import { prisma } from '../utils/prisma.ts';
 import { extractText } from '../utils/textExtractor.ts';
 import { analyzeResume } from '../services/groq.service.ts';
-import { ROLES } from '../constants/roles.ts';           // ← fixed import
+import { ROLES } from '../constants/roles.ts';           
 import { PermissionHelper } from '../utils/permissions.ts';
+import { ApplicationStatus } from '@prisma/client';
 
 const getProfileId = async (userId: string) => {
   const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
@@ -19,12 +20,10 @@ const ensureJobSeeker = async (userId: string): Promise<boolean> => {
   return user ? PermissionHelper.hasRole(user.globalRoles, ROLES.JOB_SEEKER) : false;
 };
 
-
 export const applyToJob = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
 
-    // Role check
     if (!(await ensureJobSeeker(userId))) {
       if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(403).json({ success: false, message: 'Access denied: Job seeker role required' });
@@ -43,7 +42,6 @@ export const applyToJob = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Job posting ID required' });
     }
 
-    // Verify job posting exists and is active
     const jobPosting = await prisma.jobPosting.findUnique({
       where: { id: jobPostingId },
       include: { company: { select: { name: true } } }
@@ -59,7 +57,6 @@ export const applyToJob = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'This job posting is no longer accepting applications' });
     }
 
-    // Check if already applied
     const existingApplication = await prisma.application.findFirst({
       where: {
         jobSeekerProfileId: profileId,
@@ -78,7 +75,6 @@ export const applyToJob = async (req: Request, res: Response) => {
 
     let finalResumeId = resumeId;
 
-    // Handle new resume upload
     if (applyWithNew === 'true' && req.file) {
       try {
         const rawText = await extractText(req.file.path, req.file.mimetype);
@@ -167,21 +163,36 @@ export const applyToJob = async (req: Request, res: Response) => {
       });
     }
 
-    const application = await prisma.application.create({
-      data: {
-        jobSeekerProfileId: profileId,
-        jobPostingId,
-        resumeId: finalResumeId,
-        status: 'applied',
-      },
-      include: {
-        jobPosting: {
-          include: {
-            company: { select: { name: true, logoUrl: true } }
-          }
+    const application = await prisma.$transaction(async (tx) => {
+      const app = await tx.application.create({
+        data: {
+          jobSeekerProfileId: profileId,
+          jobPostingId,
+          resumeId: finalResumeId,
+          status: 'applied',
+          pipelineIndex: 0,
+          candidateNotes: '',  // ✅ Initialize with empty string
+          isWithdrawn: false   // ✅ Initialize as false
         },
-        resume: { select: { name: true, atsScore: true } }
-      }
+        include: {
+          jobPosting: {
+            include: {
+              company: { select: { name: true, logoUrl: true } }
+            }
+          },
+          resume: { select: { name: true, atsScore: true } }
+        }
+      });
+
+      await tx.applicationHistory.create({
+        data: {
+          applicationId: app.id,
+          status: 'applied',
+          notes: 'Application initialized and synchronized to hiring pipeline matrix successfully.'
+        }
+      });
+
+      return app;
     });
 
     return res.status(201).json({
@@ -199,7 +210,6 @@ export const applyToJob = async (req: Request, res: Response) => {
 export const getMyApplications = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    console.log(userId);
     
     if (!(await ensureJobSeeker(userId))) {
       return res.status(403).json({ success: false, message: 'Access denied: Job seeker role required' });
@@ -269,8 +279,20 @@ export const getApplicationDetails = async (req: Request, res: Response) => {
           include: { company: { select: { name: true, logoUrl: true, industry: true, size: true } } }
         },
         resume: true,
-        interviews: { include: { feedbacks: true }, orderBy: { scheduledTime: 'desc' } },
-        offerLetters: { orderBy: { sentAt: 'desc' } }
+        interviews: { 
+          include: { 
+            feedbacks: {
+              include: {
+                interviewer: {
+                  select: { jobSeekerProfile: { select: { fullName: true } } }
+                }
+              }
+            } 
+          }, 
+          orderBy: { scheduledTime: 'desc' } 
+        },
+        offerLetters: { orderBy: { sentAt: 'desc' } },
+        statusHistory: { orderBy: { createdAt: 'desc' } }  // ✅ FIXED: Changed from 'history' to 'statusHistory'
       }
     });
 
@@ -282,6 +304,131 @@ export const getApplicationDetails = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Get application details error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch application details' });
+  }
+};
+
+export const getTimelineDashboardView = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+    
+    if (!profileId) {
+      return res.status(404).json({ success: false, message: 'Job seeker profile context not found.' });
+    }
+
+    const applications = await prisma.application.findMany({
+      where: { jobSeekerProfileId: profileId },
+      include: {
+        jobPosting: {
+          include: { company: true }
+        },
+        resume: true,
+        statusHistory: { orderBy: { createdAt: 'desc' } },  // ✅ FIXED: Changed from 'history'
+        interviews: {
+          include: { feedbacks: true },
+          orderBy: { scheduledTime: 'asc' }
+        },
+        offerLetters: {
+          orderBy: { sentAt: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    const structuredTrack = applications.map(app => {
+      const currentStatus = app.status;
+      const livekitInterviews = app.interviews.map(i => ({
+        interviewId: i.id,
+        scheduledTime: i.scheduledTime,
+        durationMinutes: i.durationMinutes,
+        format: i.format,
+        status: i.status,
+        livekitRoomName: i.livekitRoomName,
+        joinLink: i.status === 'confirmed' || i.status === 'scheduled' ? i.joinLink : null,
+        companyFeedback: i.feedbacks.map(f => ({
+          verdict: f.verdict,
+          notes: f.notes,
+          createdAt: f.createdAt
+        }))
+      }));
+
+      const activeOfferDoc = app.offerLetters[0] ? {
+        id: app.offerLetters[0].id,
+        status: app.offerLetters[0].status,
+        filePath: app.offerLetters[0].filePath,
+        sentAt: app.offerLetters[0].sentAt
+      } : null;
+
+      const mappedTimeline = app.statusHistory.map(h => ({
+        stage: h.status,
+        date: h.createdAt,
+        notes: h.notes
+      }));
+
+      return {
+        applicationId: app.id,
+        liveStatusBadge: currentStatus,
+        isWithdrawn: app.isWithdrawn,  // ✅ Now exists in schema
+        currentStage: currentStatus,
+        pipelineIndex: app.pipelineIndex ?? 0,
+        candidateNotes: app.candidateNotes || '',  // ✅ Now exists in schema
+        appliedAt: app.appliedAt,
+        updatedAt: app.updatedAt,
+        jobDetails: {
+          id: app.jobPosting.id,
+          title: app.jobPosting.title,
+          department: app.jobPosting.department || 'General',
+          jobType: app.jobPosting.jobType,
+          location: app.jobPosting.location || 'Remote'
+        },
+        companyDetails: {
+          name: app.jobPosting.company.name,
+          logoUrl: app.jobPosting.company.logoUrl,
+          industry: app.jobPosting.company.industry || 'Technology'
+        },
+        resumeUsed: {
+          id: app.resume.id,
+          name: app.resume.name,
+          downloadPath: app.resume.filePath
+        },
+        timelineView: mappedTimeline.length > 0 ? mappedTimeline : [{ stage: 'applied', date: app.appliedAt, notes: 'Initial submission synchronized.' }],
+        interviewHistory: livekitInterviews,
+        activeOffer: activeOfferDoc,
+        canWithdraw: !['hired', 'rejected'].includes(currentStatus.toLowerCase()) && !app.isWithdrawn
+      };
+    });
+
+    return res.status(200).json({ success: true, data: structuredTrack });
+  } catch (error: any) {
+    console.error("Timeline monitoring engine fault:", error);
+    return res.status(500).json({ success: false, message: "Internal metrics query failure.", error: error.message });
+  }
+};
+
+export const updateCandidatePrivateNotes = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+
+    const application = await prisma.application.findFirst({
+      where: { id, jobSeekerProfileId: profileId }
+    });
+
+    if (!application) {
+      return res.status(404).json({ success: false, message: "Target candidate submission record not discovered." });
+    }
+
+    const updated = await prisma.application.update({
+      where: { id },
+      data: { candidateNotes: notes }  // ✅ Now exists in schema
+    });
+
+    return res.status(200).json({ success: true, message: "Scratchpad matrix updated successfully.", data: updated });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: "Failed syncing workspace properties.", error: error.message });
   }
 };
 
@@ -306,15 +453,34 @@ export const withdrawApplication = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Application not found' });
     }
 
-    if (['offer', 'hired'].includes(application.status)) {
+    if (['hired'].includes(application.status.toLowerCase())) {
       return res.status(400).json({
         success: false,
         message: 'Cannot withdraw application at this stage. Please contact the company directly.'
       });
     }
 
-    await prisma.application.delete({ where: { id } });
-    return res.json({ success: true, message: 'Application withdrawn successfully' });
+    const updatedRecord = await prisma.$transaction(async (tx) => {
+      const updated = await tx.application.update({
+        where: { id },
+        data: { 
+          status: 'rejected',
+          isWithdrawn: true  // ✅ Now exists in schema
+        }
+      });
+
+      await tx.applicationHistory.create({
+        data: {
+          applicationId: id,
+          status: 'rejected',
+          notes: 'Candidate initiated voluntary withdrawal protocol to cancel application routing.'
+        }
+      });
+
+      return updated;
+    });
+
+    return res.json({ success: true, message: 'Application withdrawn successfully', data: updatedRecord });
   } catch (error) {
     console.error('Withdraw application error:', error);
     return res.status(500).json({ success: false, message: 'Failed to withdraw application' });
