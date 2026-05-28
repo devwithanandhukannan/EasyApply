@@ -1,43 +1,50 @@
 import express from 'express';
-import { authenticateToken } from '../middleware/auth.middleware.ts';
 import {
-  createOfferTemplate,
-  getCompanyTemplates,
-  updateOfferTemplate,
-  deleteOfferTemplate,
-  createOfferLetter,
-  signOfferLetter,
-  sendOfferLetter,
-  trackOfferEmail,
-  respondToOffer,
-  getCompanyOffers,
-  getOfferDetails,
-  downloadOfferPDF
+    // Templates
+    createOfferTemplate,
+    getCompanyTemplates,
+    updateOfferTemplate,
+    deleteOfferTemplate,
+    generateTemplateWithAI,
+
+    // Offers
+    createOfferLetter,
+    updateOfferLetter,
+    signOfferLetter,
+    sendOfferLetter,
+    getCompanyOffers,
+    getOfferDetails,
+    downloadOfferPDF,
+    trackOfferEmail,
+
+    // Candidate
+    respondToOffer,
 } from '../controllers/offer.controller.ts';
 
 const router = express.Router();
 
-// ─── PUBLIC TRACKING ENDPOINT (NO AUTH) ────────────────────────────
-router.get('/:id/track', trackOfferEmail);
+// ─── AI GENERATION ─────────────────────────────────────────────────
+router.post('/templates/generate-ai', generateTemplateWithAI);
 
-// ─── AUTHENTICATED ROUTES ───────────────────────────────────────────
-router.use(authenticateToken);
-
-// ─── TEMPLATE MANAGEMENT (COMPANY ONLY) ────────────────────────────
+// ─── TEMPLATE MANAGEMENT ───────────────────────────────────────────
 router.post('/templates', createOfferTemplate);
 router.get('/templates', getCompanyTemplates);
 router.put('/templates/:id', updateOfferTemplate);
 router.delete('/templates/:id', deleteOfferTemplate);
 
-// ─── OFFER LETTER MANAGEMENT ────────────────────────────────────────
-router.post('/', createOfferLetter);
+// ─── OFFER LETTER CRUD ─────────────────────────────────────────────
+router.post('/create', createOfferLetter);
+router.put('/:id', updateOfferLetter);
 router.post('/:id/sign', signOfferLetter);
 router.post('/:id/send', sendOfferLetter);
+
+// ─── OFFER VIEWS ───────────────────────────────────────────────────
 router.get('/company/list', getCompanyOffers);
 router.get('/:id', getOfferDetails);
 router.get('/:id/download', downloadOfferPDF);
 
-// ─── CANDIDATE RESPONSE (JOB SEEKER) ────────────────────────────────
+// ─── TRACKING & RESPONSE ───────────────────────────────────────────
+router.get('/:id/track', trackOfferEmail);
 router.post('/:id/respond', respondToOffer);
 
 export default router;

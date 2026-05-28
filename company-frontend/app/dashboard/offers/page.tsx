@@ -24,6 +24,7 @@ import Link from 'next/link';
 import CreateOfferModal from '@/app/components/CreateOfferModal';
 import SignOfferModal from '@/app/components/SignOfferModal';
 import SendOfferModal from '@/app/components/SendOfferModal';
+import EditOfferModal from '@/app/components/EditOfferModal';
 
 interface OfferLetter {
   id: string;
@@ -61,6 +62,8 @@ export default function OffersPage() {
   const [selectedOfferId, setSelectedOfferId] = useState<string | null>(null);
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
 
   const fetchOffers = async () => {
     try {
@@ -295,46 +298,63 @@ export default function OffersPage() {
               )}
 
               {/* Actions */}
-              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-900/50">
-                
-                {offer.status === 'draft' && (
-                  <button
-                    onClick={() => handleSign(offer.id)}
-                    className="px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-                  >
-                    <Signature className="w-3.5 h-3.5" />
-                    Sign Document
-                  </button>
-                )}
+<div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-900/50">
+  
+  {/* DRAFT STATUS - Edit + Sign */}
+  {offer.status === 'draft' && (
+    <>
+      <button
+        onClick={() => {
+          setSelectedOfferId(offer.id);
+          setIsEditModalOpen(true);
+        }}
+        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
+      >
+        <Edit className="w-3.5 h-3.5" />
+        Edit Offer
+      </button>
+      
+      <button
+        onClick={() => handleSign(offer.id)}
+        className="px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
+      >
+        <Signature className="w-3.5 h-3.5" />
+        Sign Document
+      </button>
+    </>
+  )}
 
-                {offer.status === 'pending' && (
-                  <button
-                    onClick={() => handleSend(offer.id)}
-                    className="px-3 py-1.5 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    Send to Candidate
-                  </button>
-                )}
+  {/* PENDING STATUS - Send to Candidate */}
+  {offer.status === 'pending' && (
+    <button
+      onClick={() => handleSend(offer.id)}
+      className="px-3 py-1.5 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
+    >
+      <Send className="w-3.5 h-3.5" />
+      Send to Candidate
+    </button>
+  )}
 
-                {offer.status !== 'draft' && (
-                  <button
-                    onClick={() => handleDownload(offer.id)}
-                    className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors flex items-center gap-1.5"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Download PDF
-                  </button>
-                )}
+  {/* SENT/VIEWED/ACCEPTED - Download PDF */}
+  {(offer.status === 'sent' || offer.status === 'viewed' || offer.status === 'accepted' || offer.status === 'declined' || offer.status === 'negotiating') && (
+    <button
+      onClick={() => handleDownload(offer.id)}
+      className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors flex items-center gap-1.5"
+    >
+      <Download className="w-3.5 h-3.5" />
+      Download PDF
+    </button>
+  )}
 
-                <Link
-                  href={`/dashboard/offers/${offer.id}`}
-                  className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors flex items-center gap-1.5"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  View Details
-                </Link>
-              </div>
+  {/* ALWAYS VISIBLE - View Details */}
+  <Link
+    href={`/dashboard/offers/${offer.id}`}
+    className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors flex items-center gap-1.5"
+  >
+    <Eye className="w-3.5 h-3.5" />
+    View Details
+  </Link>
+</div>
 
             </div>
           ))}
@@ -347,7 +367,17 @@ export default function OffersPage() {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={fetchOffers}
       />
-
+    {selectedOfferId && (
+  <EditOfferModal
+    isOpen={isEditModalOpen}
+    onClose={() => {
+      setIsEditModalOpen(false);
+      setSelectedOfferId(null);
+    }}
+    offerId={selectedOfferId}
+    onSuccess={fetchOffers}
+  />
+)}
       {selectedOfferId && (
         <>
           <SignOfferModal

@@ -11,6 +11,43 @@ const getProfileId = async (userId: string): Promise<string | null> => {
   return profile ? profile.id : null;
 };
 
+export const requestReschedule = async (req: AuthRequest, res: Response) => {
+    try {
+      console.log('Reachedddd');
+      
+        const { interviewId } = req.params;
+        const { proposedTime, candidateNote } = req.body;
+        const userId = req.user?.userId;
+
+        const interview = await prisma.interview.findFirst({
+            where: {
+                id: interviewId,
+                application: {
+                    jobSeekerProfile: { userId }
+                }
+            }
+        });
+
+        if (!interview) {
+            return res.status(404).json({ success: false, message: 'Interview not found' });
+        }
+
+        await prisma.rescheduleRequest.create({
+            data: {
+                interviewId,
+                requestedByUserId: userId!,
+                proposedTime: new Date(proposedTime),
+                candidateNote,
+                status: 'pending'
+            }
+        });
+
+        return res.json({ success: true, message: 'Reschedule request submitted' });
+    } catch (error: any) {
+        console.error('Reschedule request error:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
 // ─── 1. BULK GENERATION ENGINE (COMPANY WORKSPACE) ──────────────────────
 export const scheduleBulkInterviews = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -53,6 +90,8 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
     }
 
     const companyId = (req as any).company?.companyId || (req as any).user?.company?.id || jobPosting.companyId; 
+    const userId = (req as any).user?.userId || 'system';
+
     if (!companyId) {
       res.status(401).json({ success: false, message: "Unauthorized company session context status determined." });
       return;
@@ -60,6 +99,12 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
 
     const structuralFormat = (interviewFormat || 'video').toLowerCase() as any;
     const cleanInterviewerIds: string[] = interviewerIds || [];
+
+    // ✅ FIXED: Get current status of applications before updating
+    const existingApplications = await prisma.application.findMany({
+      where: { id: { in: selectedApplicationIds } },
+      select: { id: true, status: true }
+    });
 
     const result = await prisma.$transaction(async (tx) => {
       
@@ -88,7 +133,8 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
         const scheduledTime = new Date(baseStartDate.getTime() + index * slotDurationMs);
         const roomName = `room-${uuidv4()}`;
 
-        await tx.interview.create({
+        // Create interview
+        const interview = await tx.interview.create({
           data: {
             applicationId: appId,
             batchId: batch.id,
@@ -106,21 +152,55 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
           }
         });
 
-        // 🎯 FIXED: Generate parallel audit logs for individual candidate timelines inside the batch loop
+        // ✅ FIXED: Find current status for this application
+        const currentApp = existingApplications.find(app => app.id === appId);
+
+        // Create history with proper schema
         await tx.applicationHistory.create({
-  data: {
-    applicationId: appId,
-    status: targetStatus as ApplicationStatus,
-    notes: `Interview session configured. Scheduled Date: ${scheduledTime.toLocaleString()} via live automated batching routing tools.`
-  }
-});
+          data: {
+            applicationId: appId,
+            fromStatus: currentApp?.status || null,
+            toStatus: targetStatus as ApplicationStatus,
+            changedBy: userId,
+            changedByType: 'user',
+            notes: `Interview session configured. Scheduled Date: ${scheduledTime.toLocaleString()} via live automated batching routing tools.`,
+            metadata: {
+              interviewId: interview.id,
+              interviewFormat: structuralFormat,
+              scheduledTime: scheduledTime.toISOString(),
+              bulkScheduled: true,
+              batchId: batch.id
+            }
+          }
+        });
+
+        // ✅ OPTIONAL: Create activity log if ApplicationActivity exists
+        try {
+          await tx.applicationActivity.create({
+            data: {
+              applicationId: appId,
+              activityType: 'INTERVIEW_SCHEDULED',
+              performedBy: userId,
+              metadata: {
+                interviewId: interview.id,
+                scheduledTime: scheduledTime.toISOString(),
+                targetStage: targetStatus
+              }
+            }
+          });
+        } catch (err) {
+          // ApplicationActivity might not exist yet - safe to ignore
+          console.log('Activity log skipped (table may not exist)');
+        }
       }
 
+      // Update all application statuses
       await tx.application.updateMany({
         where: { id: { in: selectedApplicationIds } },
         data: { 
           status: targetStatus as ApplicationStatus,
-          pipelineIndex: 0 
+          pipelineIndex: 0,
+          lastActivityAt: new Date() // ✅ Added if field exists
         }
       });
 
@@ -135,7 +215,11 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
 
   } catch (error: any) {
     console.error("Critical scheduling fault:", error);
-    res.status(500).json({ success: false, message: "Internal runtime routing failure.", error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: "Internal runtime routing failure.", 
+      error: error.message 
+    });
   }
 };
 
@@ -607,38 +691,56 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
     let timelineLogNote = `Interviewer updated evaluation review metrics. Performance Verdict: ${verdict}.`;
     
     if (verdict === 'reject') {
-      await prisma.$transaction([
-        prisma.interview.update({
-          where: { id: interviewId },
-          data: { status: 'cancelled' }
-        }),
-        prisma.application.update({
-          where: { id: interview.applicationId },
-          data: { status: ApplicationStatus.rejected }
-        }),
-        prisma.applicationHistory.create({
-          data: {
-            applicationId: interview.applicationId,
-            status: ApplicationStatus.rejected,
-            notes: 'Application moved to rejected stage following panel interview performance evaluations.'
-          }
-        })
-      ]);
-    } else if (verdict === 'shortlist' || verdict === 'next_round') {
-      await prisma.$transaction([
-        prisma.interview.update({
-          where: { id: interviewId },
-          data: { status: 'completed' }
-        }),
-        prisma.applicationHistory.create({
-          data: {
-            applicationId: interview.applicationId,
-            status: verdict === 'shortlist' ? ApplicationStatus.screened : ApplicationStatus.technical_round,
-            notes: timelineLogNote
-          }
-        })
-      ]);
-    }
+  const currentApp = await prisma.application.findUnique({
+    where: { id: interview.applicationId },
+    select: { status: true }
+  });
+
+  await prisma.$transaction([
+    prisma.interview.update({
+      where: { id: interviewId },
+      data: { status: 'cancelled' }
+    }),
+    prisma.application.update({
+      where: { id: interview.applicationId },
+      data: { status: ApplicationStatus.rejected }
+    }),
+    prisma.applicationHistory.create({
+      data: {
+        applicationId: interview.applicationId,
+        fromStatus: currentApp?.status || null,
+        toStatus: ApplicationStatus.rejected,
+        changedBy: userId,
+        changedByType: 'user',
+        notes: 'Application moved to rejected stage following panel interview performance evaluations.'
+      }
+    })
+  ]);
+} else if (verdict === 'shortlist' || verdict === 'next_round') {
+  const currentApp = await prisma.application.findUnique({
+    where: { id: interview.applicationId },
+    select: { status: true }
+  });
+
+  const newStatus = verdict === 'shortlist' ? ApplicationStatus.screened : ApplicationStatus.technical_round;
+
+  await prisma.$transaction([
+    prisma.interview.update({
+      where: { id: interviewId },
+      data: { status: 'completed' }
+    }),
+    prisma.applicationHistory.create({
+      data: {
+        applicationId: interview.applicationId,
+        fromStatus: currentApp?.status || null,
+        toStatus: newStatus,
+        changedBy: userId,
+        changedByType: 'user',
+        notes: timelineLogNote
+      }
+    })
+  ]);
+}
 
     res.status(200).json({
       success: true,

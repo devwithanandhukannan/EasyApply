@@ -60,81 +60,81 @@ export const getApplicationsTracker = async (req: AuthRequest, res: Response) =>
       orderBy: { updatedAt: 'desc' }
     });
 
-    const mappedTrackerData = applications.map(app => {
-      let liveStatusBadge = app.status.toLowerCase();
-      if (app.isWithdrawn) {  // ✅ Now exists in schema
-        liveStatusBadge = 'withdrawn';
-      }
+  const mappedTrackerData = applications.map(app => {
+  let liveStatusBadge = app.status.toLowerCase();
+  if (app.isWithdrawn) {
+    liveStatusBadge = 'withdrawn';
+  }
 
-      const interviewHistory = app.interviews.map(interview => ({
-        interviewId: interview.id,
-        scheduledTime: interview.scheduledTime,
-        durationMinutes: interview.durationMinutes,
-        format: interview.format,
-        status: interview.status,
-        livekitRoomName: interview.livekitRoomName,
-        joinLink: ['scheduled', 'in_progress'].includes(interview.status) ? interview.joinLink : null,
-        companyFeedback: interview.feedbacks.map(f => ({
-          verdict: f.verdict,
-          notes: f.notes || 'No notes shared by interviewer.',
-          createdAt: f.createdAt
-        }))
-      }));
+  const interviewHistory = app.interviews.map(interview => ({
+    interviewId: interview.id,
+    scheduledTime: interview.scheduledTime,
+    durationMinutes: interview.durationMinutes,
+    format: interview.format,
+    status: interview.status,
+    livekitRoomName: interview.livekitRoomName,
+    joinLink: ['scheduled', 'in_progress'].includes(interview.status) ? interview.joinLink : null,
+    companyFeedback: interview.feedbacks.map(f => ({
+      verdict: f.verdict,
+      notes: f.notes || 'No notes shared by interviewer.',
+      createdAt: f.createdAt
+    }))
+  }));
 
-      const visualTimeline = app.statusHistory.map(log => ({
-        stage: log.status,
-        date: log.createdAt,
-        notes: log.notes || `Moved to stage: ${log.status.replace('_', ' ')}`
-      }));
+  // ✅ FIXED: Map toStatus to stage
+  const visualTimeline = app.statusHistory.map(log => ({
+    stage: log.toStatus, // ✅ Changed from log.status
+    date: log.createdAt,
+    notes: log.notes || `Moved to stage: ${log.toStatus.replace(/_/g, ' ')}`
+  }));
 
-      // ✅ FIXED: Changed `interview` to `app.interviews`
-      const hasInterviewsStarted = app.interviews.some(i => 
-        ['confirmed', 'in_progress', 'completed'].includes(i.status)
-      );
-      
-      const canWithdraw = !app.isWithdrawn && 
-                          !['hired', 'rejected', 'offer_sent'].includes(app.status) && 
-                          !hasInterviewsStarted;
+  const hasInterviewsStarted = app.interviews.some(i => 
+    ['confirmed', 'in_progress', 'completed'].includes(i.status)
+  );
+  
+  const canWithdraw = !app.isWithdrawn && 
+                      !['hired', 'rejected', 'offer_sent'].includes(app.status) && 
+                      !hasInterviewsStarted;
 
-      return {
-        applicationId: app.id,
-        liveStatusBadge,
-        isWithdrawn: app.isWithdrawn,
-        currentStage: app.status,
-        pipelineIndex: app.pipelineIndex,
-        candidateNotes: app.candidateNotes || '',  // ✅ Now exists in schema
-        appliedAt: app.appliedAt,
-        updatedAt: app.updatedAt,
-        jobDetails: {
-          id: app.jobPostingId,
-          title: app.jobPosting.title,
-          department: app.jobPosting.department || '',
-          jobType: app.jobPosting.jobType,
-          location: app.jobPosting.location || 'Remote'
-        },
-        companyDetails: {
-          name: app.jobPosting.company.name,
-          logoUrl: app.jobPosting.company.logoUrl,
-          industry: app.jobPosting.company.industry
-        },
-        resumeUsed: {
-          id: app.resume.id,
-          name: app.resume.name,
-          downloadPath: app.resume.filePath
-        },
-        timelineView: visualTimeline,
-        interviewHistory,
-        activeOffer: app.offerLetters[0] 
-          ? {
-              id: app.offerLetters[0].id,
-              status: app.offerLetters[0].status,
-              filePath: app.offerLetters[0].filePath,
-              sentAt: app.offerLetters[0].sentAt
-            } 
-          : null,
-        canWithdraw
-      };
-    });
+  return {
+    applicationId: app.id,
+    liveStatusBadge,
+    isWithdrawn: app.isWithdrawn,
+    currentStage: app.status,
+    pipelineIndex: app.pipelineIndex,
+    candidateNotes: app.candidateNotes || '',
+    appliedAt: app.appliedAt,
+    updatedAt: app.updatedAt,
+    jobDetails: {
+      id: app.jobPostingId,
+      title: app.jobPosting.title,
+      department: app.jobPosting.department || '',
+      jobType: app.jobPosting.jobType,
+      location: app.jobPosting.location || 'Remote'
+    },
+    companyDetails: {
+      name: app.jobPosting.company.name,
+      logoUrl: app.jobPosting.company.logoUrl,
+      industry: app.jobPosting.company.industry
+    },
+    resumeUsed: {
+      id: app.resume.id,
+      name: app.resume.name,
+      downloadPath: app.resume.filePath
+    },
+    timelineView: visualTimeline,
+    interviewHistory,
+    activeOffer: app.offerLetters[0] 
+      ? {
+          id: app.offerLetters[0].id,
+          status: app.offerLetters[0].status,
+          filePath: app.offerLetters[0].filePath,
+          sentAt: app.offerLetters[0].sentAt
+        } 
+      : null,
+    canWithdraw
+  };
+});
 
     return res.status(200).json({ success: true, data: mappedTrackerData });
   } catch (error) {

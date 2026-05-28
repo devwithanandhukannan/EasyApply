@@ -37,6 +37,7 @@ import {
   requestInterviewReschedule,
 } from '../controllers/interview.controller.ts';
 import { getApplicationsTracker, updateApplicationNotes, withdrawApplicationTracker } from '../controllers/applicationTracker.controller.ts';
+import offerRoutes from './offer.routes.ts';
 
 const router = express.Router();
 
@@ -100,7 +101,7 @@ router.delete('/resumes/:id', deleteResume);
 // ─── APPLICATION MANAGEMENT ──────────────────────────────────────────────
 router.post('/applications/apply', resumeUpload.single('newResume'), applyToJob);
 router.get('/applications', getMyApplications);
-router.get('/applications/:id', getApplicationDetails);
+router.get('/applications/:applicationId', getApplicationDetails);
 router.delete('/applications/:id', withdrawApplication);
 
 // ─── INTERVIEW WORKFLOW ──────────────────────────────────────────────────
@@ -113,5 +114,7 @@ router.post('/interviews/:id/reschedule', requestInterviewReschedule);
 router.get('/applications/tracker/timeline', getApplicationsTracker);
 router.patch('/applications/:id/notes', updateApplicationNotes);
 router.post('/applications/:id/withdraw', withdrawApplicationTracker);
+
+router.use('/offers', offerRoutes);
 
 export default router;

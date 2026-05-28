@@ -8,6 +8,25 @@ datasource db {
 
 // ─── PIPELINE ENUMS ──────────────────────────────────────────────────
 
+enum ActivityType {
+  STATUS_CHANGED
+  STARRED
+  UNSTARRED
+  PRIORITY_SET
+  PRIORITY_CLEARED
+  NOTE_ADDED
+  TAG_ADDED
+  TAG_REMOVED
+  VIEWED
+  EMAILED
+  INTERVIEW_SCHEDULED
+  FEEDBACK_SUBMITTED
+  OFFER_SENT
+  OFFER_RESPONDED
+}
+
+
+
 enum RequestStatus {
   pending
   approved
@@ -364,36 +383,85 @@ model Application {
   jobPosting         JobPosting        @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
   resumeId           String
   resume             Resume            @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+  
+  // Pipeline Stage (NOT selection state)
   status             ApplicationStatus @default(applied)
+  pipelineIndex      Int               @default(0)
+  
+  // Recruiter Metadata Flags
+  isStarred          Boolean           @default(false)  // ⭐ Top talent bookmark
+  starredAt          DateTime?                          // When starred
+  starredBy          String?                            // Who starred (userId)
+  
+  priority           Int?                               // 1=High, 2=Medium, 3=Low, null=None
+  prioritySetAt      DateTime?
+  prioritySetBy      String?
+  
+  // Internal Notes (visible only to company)
+  internalNotes      String?           @db.Text
+  tags               String[]          @default([])     // ["culture-fit", "senior-level", "urgent"]
+  
+  // Candidate Private Notes
+  candidateNotes     String?           @db.Text
+  isWithdrawn        Boolean           @default(false)
+  
+  // Timestamps
   appliedAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
-  pipelineIndex      Int               @default(0)
+  lastActivityAt     DateTime          @default(now())  // Any action taken
 
-  candidateNotes     String?           @db.Text // Private seeker notes
-  isWithdrawn        Boolean           @default(false)
-
+  // Relations
   interviews         Interview[]
   offerLetters       OfferLetter[]
-  statusHistory      ApplicationHistory[] 
+  statusHistory      ApplicationHistory[]
+  activities         ApplicationActivity[]  // New: Detailed activity log
 
   @@index([jobSeekerProfileId])
   @@index([jobPostingId])
   @@index([status])
+  @@index([isStarred])
+  @@index([priority])
+  @@index([lastActivityAt])
 }
 
 model ApplicationHistory {
   id            String            @id @default(uuid())
   applicationId String
   application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  status        ApplicationStatus
+  
+  fromStatus    ApplicationStatus? // null if initial creation
+  toStatus      ApplicationStatus
+  
+  changedBy     String            // userId or "system"
+  changedByType String            @default("user") // "user" | "system" | "automation"
+  
   notes         String?           @db.Text
+  metadata      Json?             // Store additional context
+  
   createdAt     DateTime          @default(now())
 
   @@index([applicationId])
   @@index([createdAt])
+  @@index([toStatus])
 }
 
+model ApplicationActivity {
+  id            String      @id @default(uuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  
+  activityType  ActivityType
+  performedBy   String      // userId
+  
+  // Flexible metadata for different activity types
+  metadata      Json?       // { previousValue, newValue, reason, etc. }
+  
+  createdAt     DateTime    @default(now())
 
+  @@index([applicationId])
+  @@index([activityType])
+  @@index([createdAt])
+}
 
 model InterviewBatch {
   id                   String          @id @default(uuid())

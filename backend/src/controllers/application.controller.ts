@@ -171,8 +171,8 @@ export const applyToJob = async (req: Request, res: Response) => {
           resumeId: finalResumeId,
           status: 'applied',
           pipelineIndex: 0,
-          candidateNotes: '',  // ✅ Initialize with empty string
-          isWithdrawn: false   // ✅ Initialize as false
+          candidateNotes: '',  
+          isWithdrawn: false   
         },
         include: {
           jobPosting: {
@@ -184,10 +184,12 @@ export const applyToJob = async (req: Request, res: Response) => {
         }
       });
 
+      // 🎯 FIXED: Supplied the missing required 'changedBy' parameter
       await tx.applicationHistory.create({
         data: {
           applicationId: app.id,
-          status: 'applied',
+          toStatus: 'applied',
+          changedBy: userId,
           notes: 'Application initialized and synchronized to hiring pipeline matrix successfully.'
         }
       });
@@ -292,7 +294,7 @@ export const getApplicationDetails = async (req: Request, res: Response) => {
           orderBy: { scheduledTime: 'desc' } 
         },
         offerLetters: { orderBy: { sentAt: 'desc' } },
-        statusHistory: { orderBy: { createdAt: 'desc' } }  // ✅ FIXED: Changed from 'history' to 'statusHistory'
+        statusHistory: { orderBy: { createdAt: 'desc' } }
       }
     });
 
@@ -323,7 +325,7 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
           include: { company: true }
         },
         resume: true,
-        statusHistory: { orderBy: { createdAt: 'desc' } },  // ✅ FIXED: Changed from 'history'
+        statusHistory: { orderBy: { createdAt: 'desc' } },  
         interviews: {
           include: { feedbacks: true },
           orderBy: { scheduledTime: 'asc' }
@@ -361,7 +363,7 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
       } : null;
 
       const mappedTimeline = app.statusHistory.map(h => ({
-        stage: h.status,
+        stage: h.toStatus, 
         date: h.createdAt,
         notes: h.notes
       }));
@@ -369,10 +371,10 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
       return {
         applicationId: app.id,
         liveStatusBadge: currentStatus,
-        isWithdrawn: app.isWithdrawn,  // ✅ Now exists in schema
+        isWithdrawn: app.isWithdrawn,  
         currentStage: currentStatus,
         pipelineIndex: app.pipelineIndex ?? 0,
-        candidateNotes: app.candidateNotes || '',  // ✅ Now exists in schema
+        candidateNotes: app.candidateNotes || '',  
         appliedAt: app.appliedAt,
         updatedAt: app.updatedAt,
         jobDetails: {
@@ -423,7 +425,7 @@ export const updateCandidatePrivateNotes = async (req: Request, res: Response) =
 
     const updated = await prisma.application.update({
       where: { id },
-      data: { candidateNotes: notes }  // ✅ Now exists in schema
+      data: { candidateNotes: notes }  
     });
 
     return res.status(200).json({ success: true, message: "Scratchpad matrix updated successfully.", data: updated });
@@ -465,14 +467,16 @@ export const withdrawApplication = async (req: Request, res: Response) => {
         where: { id },
         data: { 
           status: 'rejected',
-          isWithdrawn: true  // ✅ Now exists in schema
+          isWithdrawn: true  
         }
       });
 
+      // 🎯 FIXED: Supplied the missing required 'changedBy' parameter here too
       await tx.applicationHistory.create({
         data: {
           applicationId: id,
-          status: 'rejected',
+          toStatus: 'rejected',
+          changedBy: userId,
           notes: 'Candidate initiated voluntary withdrawal protocol to cancel application routing.'
         }
       });

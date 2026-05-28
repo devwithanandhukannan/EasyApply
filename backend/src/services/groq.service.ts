@@ -373,3 +373,84 @@ Return ONLY valid JSON:
   });
   return JSON.parse(completion.choices[0]?.message?.content ?? '{"rankings":[],"summary":""}');
 };
+
+export const generateOfferLetterTemplate = async (
+  templateName: string,
+  description?: string,
+  companyName?: string
+) => {
+  const descriptionSection = description
+    ? `\nAdditional Context/Requirements:\n${description}\n`
+    : '';
+
+  const companySection = companyName
+    ? `Company Name: ${companyName}\n`
+    : '';
+
+  const prompt = `You are an expert legal document writer and HR professional specializing in employment offer letters.
+
+Generate a professional, legally sound offer letter template based on the following:
+
+Template Name: ${templateName}
+${companySection}${descriptionSection}
+
+Requirements:
+- Create a complete, formal offer letter template
+- Use placeholder variables in {{variableName}} format for dynamic content
+- Include these REQUIRED placeholders:
+  * {{candidateName}} - Recipient's full name
+  * {{position}} - Job title
+  * {{department}} - Department name
+  * {{salary}} - Annual salary with currency
+  * {{startDate}} - Employment start date
+  * {{location}} - Work location
+  * {{companyName}} - Company name
+  * {{date}} - Letter date
+
+- Structure:
+  1. Professional greeting
+  2. Congratulatory opening paragraph
+  3. Position details (title, department, reporting structure)
+  4. Compensation and benefits overview
+  5. Employment terms (full-time/contract, probation period if applicable)
+  6. Start date and location
+  7. Next steps (acceptance deadline, required documents)
+  8. Closing statement with excitement
+  9. Professional sign-off
+
+- Tone: Professional, warm, welcoming
+- Length: 300-500 words
+- Legal considerations: Include standard employment-at-will statement (if applicable)
+- Make it ATS-friendly and easy to read
+
+Return ONLY valid JSON:
+{
+  "content": {
+    "greeting": "Dear {{candidateName}},",
+    "opening": "We are delighted to...",
+    "positionDetails": "You will be joining us as...",
+    "compensation": "Your annual salary will be...",
+    "benefits": "In addition to your salary...",
+    "terms": "This is a {{employmentType}} position...",
+    "startDetails": "Your anticipated start date is...",
+    "nextSteps": "To accept this offer...",
+    "closing": "We are excited to welcome you...",
+    "signOff": "Sincerely,"
+  },
+  "requiredPlaceholders": ["{{candidateName}}", "{{position}}", ...],
+  "optionalPlaceholders": ["{{benefits}}", "{{probationPeriod}}", ...],
+  "previewText": "Full assembled letter preview with sample values",
+  "legalNotes": "Brief notes on customization or legal review needs",
+  "industryBestPractices": ["tip1", "tip2", "tip3"]
+}`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.3,
+    max_tokens: 3000,
+    response_format: { type: 'json_object' },
+  });
+
+  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+};

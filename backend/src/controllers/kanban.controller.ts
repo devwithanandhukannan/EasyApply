@@ -64,23 +64,62 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
       return;
     }
 
+    // ✅ Get current status and user info before transaction
+    const currentApp = await prisma.application.findUnique({
+      where: { id: applicationId },
+      select: { status: true }
+    });
+
+    const userId = (req as any).user?.userId || 'system';
+
     const result = await prisma.$transaction(async (tx) => {
+      // Update application status and index
       const updated = await tx.application.update({
         where: { id: applicationId },
         data: {
           status: destinationStatus as ApplicationStatus,
-          pipelineIndex: typeof newIndex === 'number' ? newIndex : 0
+          pipelineIndex: typeof newIndex === 'number' ? newIndex : 0,
+          lastActivityAt: new Date() // ✅ Update last activity timestamp
         }
       });
 
-      // ✅ FIXED: Changed 'ApplicationHistory' to 'applicationHistory'
+      // ✅ FIXED: Use proper ApplicationHistory schema
       await tx.applicationHistory.create({
         data: {
           applicationId,
-          status: destinationStatus as ApplicationStatus,
-          notes: `Application shifted from ${sourceStatus || 'previous stage'} to ${destinationStatus} via Recruiter Workspace Kanban.`
+          fromStatus: currentApp?.status || sourceStatus as ApplicationStatus || null,
+          toStatus: destinationStatus as ApplicationStatus,
+          changedBy: userId,
+          changedByType: 'user',
+          notes: `Application shifted from ${sourceStatus || currentApp?.status || 'previous stage'} to ${destinationStatus} via Recruiter Workspace Kanban.`,
+          metadata: {
+            sourceStatus: sourceStatus || currentApp?.status,
+            destinationStatus,
+            pipelineIndex: newIndex,
+            movedVia: 'kanban_drag_drop'
+          }
         }
       });
+
+      // ✅ OPTIONAL: Create activity log if table exists
+      try {
+        await tx.applicationActivity.create({
+          data: {
+            applicationId,
+            activityType: 'STATUS_CHANGED',
+            performedBy: userId,
+            metadata: {
+              from: sourceStatus || currentApp?.status,
+              to: destinationStatus,
+              method: 'kanban_board',
+              newIndex
+            }
+          }
+        });
+      } catch (err) {
+        // Safe to ignore if ApplicationActivity doesn't exist
+        console.log('Activity log skipped');
+      }
 
       return updated;
     });

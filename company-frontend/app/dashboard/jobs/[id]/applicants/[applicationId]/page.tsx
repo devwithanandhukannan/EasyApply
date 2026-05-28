@@ -2,366 +2,359 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  ArrowLeft, Mail, Phone, MapPin, Link2, Code2, Globe,
-  Briefcase, GraduationCap, Wrench, Award, BookOpen, Star,
-  FileText, ExternalLink, ChevronDown, ChevronUp, Clock
+import { 
+  ArrowLeft, Star, Mail, Phone, MapPin, Download, User,
+  ExternalLink, Code2, Briefcase, GraduationCap, Award, FileText
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 
-const STATUS_OPTIONS = ['applied','reviewed','shortlisted','interview','offer','hired','rejected'];
-const STATUS_STYLES: Record<string, string> = {
-  applied:     'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  reviewed:    'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  shortlisted: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  interview:   'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-  offer:       'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  hired:       'bg-green-500/10 text-green-400 border-green-500/20',
-  rejected:    'bg-red-500/10 text-red-400 border-red-500/20',
-};
-
-function Section({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden">
-      <button onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-5 hover:bg-zinc-900/40 transition-colors">
-        <div className="flex items-center gap-2.5">
-          <Icon className="h-4 w-4 text-zinc-400" />
-          <span className="font-semibold text-white text-sm">{title}</span>
-        </div>
-        {open ? <ChevronUp className="h-4 w-4 text-zinc-500" /> : <ChevronDown className="h-4 w-4 text-zinc-500" />}
-      </button>
-      {open && <div className="px-5 pb-5">{children}</div>}
-    </div>
-  );
-}
-
-export default function CandidateDetailPage() {
+export default function ApplicationDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const [data,          setData]          = useState<any>(null);
-  const [isLoading,     setIsLoading]     = useState(true);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [resumeTab,     setResumeTab]     = useState<'summary' | 'raw'>('summary');
+  const applicationId = params.applicationId as string;
 
-  useEffect(() => { if (params.applicationId) fetchDetail(); }, [params.applicationId]);
+  const [appData, setAppData] = useState<any>(null);
+  const [timeline, setTimeline] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isStarLoading, setIsStarLoading] = useState(false);
 
-  const fetchDetail = async () => {
+  useEffect(() => {
+    if (applicationId) {
+      fetchApplicationDetails();
+      fetchTimeline();
+    }
+  }, [applicationId]);
+
+  const fetchApplicationDetails = async () => {
     try {
       setIsLoading(true);
-      const r = await api.get(`/company/jobs/applications/${params.applicationId}`);
-      setData(r.data);
-    } catch (e) {
-      console.error(e);
+      const response = await api.get(`/company/selection/applications/${applicationId}`);
+      
+      if (response.data.success) {
+        // ✅ Store the actual data object
+        setAppData(response.data.data);
+      }
+    } catch (error) {
+      console.error('Fetch application error:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const updateStatus = async (status: string) => {
+  const fetchTimeline = async () => {
     try {
-      setUpdatingStatus(true);
-      await api.patch(`/company/jobs/applications/${params.applicationId}/status`, { status });
-      setData((prev: any) => ({ ...prev, application: { ...prev.application, status } }));
-    } catch { alert('Failed to update status.'); }
-    finally { setUpdatingStatus(false); }
+      const response = await api.get(`/company/selection/applications/${applicationId}/timeline`);
+      if (response.data.success) {
+        setTimeline(response.data.data);
+      }
+    } catch (error) {
+      console.error('Fetch timeline error:', error);
+    }
   };
 
-  if (isLoading) return (
-    <div className="flex justify-center items-center min-h-screen">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-800 border-t-white" />
-    </div>
-  );
-  if (!data) return null;
+  const handleToggleStar = async () => {
+    if (!appData) return;
+    setIsStarLoading(true);
+    try {
+      await api.post('/company/selection/bulk/star', {
+        applicationIds: [applicationId],
+        starred: !appData.isStarred
+      });
+      fetchApplicationDetails();
+    } catch (error) {
+      console.error('Toggle star error:', error);
+    } finally {
+      setIsStarLoading(false);
+    }
+  };
 
-  const { application, job, candidate, appliedResume } = data;
-  const resumeContent = appliedResume?.content as any;
-  const aiSuggestions = appliedResume?.aiSuggestions as any;
+  const handleDownloadResume = () => {
+    if (appData?.resume?.filePath) {
+      window.open(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/${appData.resume.filePath}`, '_blank');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center bg-black">
+        <p className="text-xs text-zinc-500 animate-pulse font-mono">Loading telemetry details...</p>
+      </div>
+    );
+  }
+
+  if (!appData) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center bg-black">
+        <p className="text-xs text-zinc-500 font-mono">Application profile data not found</p>
+      </div>
+    );
+  }
+
+  // ✅ CORRECT: Extract from actual API structure
+  const application = appData; // The entire object
+  const candidate = appData.jobSeekerProfile || {};
+  const job = appData.jobPosting || {};
+  const appliedResume = appData.resume || {};
+  const resumeContent = appliedResume.content || {};
+  const resumeDetails = (typeof resumeContent === 'object' && resumeContent.parsedData) || {};
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5">
-
-      {/* Back */}
-      <button onClick={() => router.push(`/dashboard/jobs/${params.id}`)}
-        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Back to {job?.title}
-      </button>
-
-      {/* Top bar */}
-      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-4">
-          <div className="h-14 w-14 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold">
-            {candidate?.fullName?.charAt(0)?.toUpperCase() ?? '?'}
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">{candidate?.fullName}</h1>
-            <p className="text-zinc-500 text-sm mt-0.5">Applied for <span className="text-zinc-300">{job?.title}</span> · {new Date(application.appliedAt).toLocaleDateString()}</p>
-          </div>
+    <div className="space-y-6 text-white font-mono max-w-6xl mx-auto w-full p-4 selection:bg-zinc-800">
+      
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => router.back()}
+          className="p-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-950 text-zinc-400 hover:text-white rounded-lg transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+        </button>
+        <div className="flex-1">
+          <h1 className="text-lg font-bold tracking-tight text-white uppercase">
+            {candidate.fullName || 'Candidate'}
+          </h1>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Applied Pipeline: <span className="text-zinc-300">{job.title || 'Job'}</span> • {new Date(application.appliedAt).toLocaleDateString()}
+          </p>
         </div>
-
-        {/* Status changer */}
-        <div className="flex items-center gap-3">
-          <span className={`px-3 py-1.5 rounded-full text-xs font-medium border ${STATUS_STYLES[application.status] ?? ''}`}>
-            {application.status}
-          </span>
-          <select
-            value={application.status}
-            onChange={e => updateStatus(e.target.value)}
-            disabled={updatingStatus}
-            className="px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-white disabled:opacity-50">
-            {STATUS_OPTIONS.map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-          </select>
-        </div>
+        <button
+          onClick={handleToggleStar}
+          disabled={isStarLoading}
+          className="p-2 border border-zinc-800 hover:border-amber-600 bg-zinc-950 text-zinc-400 hover:text-amber-400 rounded-lg transition-colors disabled:opacity-50"
+        >
+          <Star className={`w-4 h-4 ${application.isStarred ? 'fill-amber-400 text-amber-400' : ''}`} />
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-        {/* ── LEFT COLUMN ── */}
-        <div className="space-y-4">
-
-          {/* Contact */}
-          <Section title="Contact Info" icon={Mail}>
-            <div className="space-y-3 mt-1">
-              {[
-                { icon: Mail,    val: candidate?.email,     label: 'Email'    },
-                { icon: Phone,   val: candidate?.phone,     label: 'Phone'    },
-                { icon: MapPin,  val: candidate?.location,  label: 'Location' },
-              ].filter(x => x.val).map(({ icon: Icon, val, label }) => (
-                <div key={label} className="flex items-center gap-2.5 text-sm">
-                  <Icon className="h-3.5 w-3.5 text-zinc-500 flex-shrink-0" />
-                  <span className="text-zinc-300">{val}</span>
+      {/* Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Panel */}
+        <div className="lg:col-span-1 space-y-4">
+          
+          {/* Candidate Card */}
+          <div className="border border-zinc-900 bg-zinc-950 rounded-xl p-5 space-y-4">
+            <div className="flex items-start gap-4">
+              {candidate.profilePhotoUrl ? (
+                <img 
+                  src={candidate.profilePhotoUrl}
+                  alt={candidate.fullName}
+                  className="w-14 h-14 rounded-md border border-zinc-800 object-cover"
+                />
+              ) : (
+                <div className="w-14 h-14 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+                  <User className="w-6 h-6 text-zinc-600" />
                 </div>
-              ))}
-              {[
-                { icon: Link2,    val: candidate?.linkedin, label: 'LinkedIn' },
-                { icon: Code2,    val: candidate?.github,   label: 'GitHub'   },
-                { icon: Globe,    val: candidate?.portfolio, label: 'Portfolio'},
-              ].filter(x => x.val).map(({ icon: Icon, val, label }) => (
-                <a key={label} href={val} target="_blank" rel="noreferrer"
-                  className="flex items-center gap-2.5 text-sm text-violet-400 hover:text-violet-300 transition-colors">
-                  <Icon className="h-3.5 w-3.5 flex-shrink-0" />
-                  <span>{label}</span>
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              ))}
-            </div>
-          </Section>
-
-          {/* Skills */}
-          {candidate?.skills?.length > 0 && (
-            <Section title="Skills" icon={Wrench}>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {candidate.skills.map((sk: any, i: number) => (
-                  <span key={i} className="px-2.5 py-1 bg-zinc-900 text-zinc-300 rounded text-xs">{sk.name ?? sk}</span>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Languages */}
-          {candidate?.languages?.length > 0 && (
-            <Section title="Languages" icon={BookOpen}>
-              <div className="space-y-2 mt-1">
-                {candidate.languages.map((l: any, i: number) => (
-                  <div key={i} className="flex justify-between text-sm">
-                    <span className="text-zinc-300">{l.language}</span>
-                    <span className="text-zinc-500">{l.proficiency}</span>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* ATS Score summary */}
-          {appliedResume?.atsScore != null && (
-            <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5">
-              <p className="text-xs text-zinc-500 mb-2">ATS Score</p>
-              <div className="flex items-end gap-2 mb-3">
-                <span className={`text-4xl font-bold ${appliedResume.atsScore >= 70 ? 'text-emerald-400' : appliedResume.atsScore >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
-                  {appliedResume.atsScore}
+              )}
+              
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-white tracking-wide">{candidate.fullName}</h3>
+                <span className={`inline-block px-2 py-0.5 rounded text-[10px] border font-bold uppercase tracking-wider ${
+                  application.status === 'hired' ? 'bg-emerald-950/40 border-emerald-900 text-emerald-400' :
+                  application.status === 'rejected' ? 'bg-red-950/40 border-red-900 text-red-400' :
+                  'bg-blue-950/40 border-blue-900 text-blue-400'
+                }`}>
+                  {application.status}
                 </span>
-                <span className="text-zinc-500 text-sm mb-1">/ 100</span>
-              </div>
-              <div className="w-full bg-zinc-900 rounded-full h-1.5">
-                <div className={`h-1.5 rounded-full transition-all ${appliedResume.atsScore >= 70 ? 'bg-emerald-500' : appliedResume.atsScore >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${appliedResume.atsScore}%` }} />
               </div>
             </div>
-          )}
+
+            <div className="space-y-2.5 pt-4 border-t border-zinc-900 text-xs">
+              <div className="flex items-center gap-2.5">
+                <Mail className="w-3.5 h-3.5 text-zinc-600" />
+                <span className="text-zinc-400 truncate break-all">{candidate.email}</span>
+              </div>
+              {candidate.phone && (
+                <div className="flex items-center gap-2.5">
+                  <Phone className="w-3.5 h-3.5 text-zinc-600" />
+                  <span className="text-zinc-400">{candidate.phone}</span>
+                </div>
+              )}
+              {candidate.location && (
+                <div className="flex items-center gap-2.5">
+                  <MapPin className="w-3.5 h-3.5 text-zinc-600" />
+                  <span className="text-zinc-400">{candidate.location}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Resume Card */}
+          <div className="border border-zinc-900 bg-zinc-950 rounded-xl p-5 space-y-3">
+            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Resume Telemetry</h4>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-2.5 rounded bg-zinc-900/40 border border-zinc-900">
+                <span className="text-xs text-zinc-400">ATS Score</span>
+                <span className={`text-sm font-bold ${
+                  (appliedResume.atsScore || 0) >= 80 ? 'text-emerald-400' :
+                  (appliedResume.atsScore || 0) >= 60 ? 'text-amber-400' : 'text-red-400'
+                }`}>
+                  {appliedResume.atsScore || 0}%
+                </span>
+              </div>
+              
+              <button
+                onClick={handleDownloadResume}
+                disabled={!appliedResume.filePath}
+                className="w-full px-3 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-2 font-medium disabled:opacity-50"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download PDF
+              </button>
+            </div>
+          </div>
+
+          {/* Metadata */}
+          <div className="border border-zinc-900 bg-zinc-950 rounded-xl p-5 space-y-3">
+            <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Metadata</h4>
+            
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Priority</span>
+                {application.priority ? (
+                  <span className={`px-2 py-0.5 border rounded font-bold ${
+                    application.priority === 1 ? 'bg-red-950/40 border-red-900 text-red-400' :
+                    application.priority === 2 ? 'bg-amber-950/40 border-amber-900 text-amber-400' :
+                    'bg-blue-950/40 border-blue-900 text-blue-400'
+                  }`}>
+                    P{application.priority}
+                  </span>
+                ) : (
+                  <span className="text-zinc-600">None</span>
+                )}
+              </div>
+
+              {application.tags?.length > 0 && (
+                <div className="pt-2.5 border-t border-zinc-900">
+                  <div className="flex flex-wrap gap-1">
+                    {application.tags.map((tag: string) => (
+                      <span key={tag} className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-[10px] text-zinc-400">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
 
-        {/* ── RIGHT COLUMN (2/3) ── */}
+        {/* Right Panel */}
         <div className="lg:col-span-2 space-y-4">
-
-          {/* Experience */}
-          {candidate?.experience?.length > 0 && (
-            <Section title="Work Experience" icon={Briefcase}>
-              <div className="space-y-4 mt-2">
-                {candidate.experience.map((exp: any, i: number) => (
-                  <div key={i} className={i > 0 ? 'pt-4 border-t border-zinc-900' : ''}>
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div>
-                        <p className="font-semibold text-white text-sm">{exp.role}</p>
-                        <p className="text-zinc-400 text-xs">{exp.company}{exp.location && ` · ${exp.location}`}</p>
+          
+          {/* Timeline */}
+          {timeline?.statusHistory?.length > 0 && (
+            <div className="border border-zinc-900 bg-zinc-950 rounded-xl p-5 space-y-4">
+              <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Application Timeline</h4>
+              
+              <div className="space-y-3">
+                {timeline.statusHistory.map((entry: any, index: number) => (
+                  <div key={entry.id} className="flex gap-4 relative">
+                    {index !== timeline.statusHistory.length - 1 && (
+                      <div className="absolute left-2 top-6 bottom-0 w-px bg-zinc-900" />
+                    )}
+                    <div className="shrink-0 w-4 h-4 rounded-full bg-zinc-900 border-2 border-white relative z-10 mt-1" />
+                    <div className="flex-1 pb-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-white capitalize">
+                            {entry.toStatus?.replace(/_/g, ' ') || 'Unknown'}
+                          </p>
+                          {entry.notes && <p className="text-xs text-zinc-500">{entry.notes}</p>}
+                        </div>
+                        <span className="text-xs text-zinc-600 shrink-0">
+                          {new Date(entry.createdAt).toLocaleString()}
+                        </span>
                       </div>
-                      <p className="text-xs text-zinc-500 flex-shrink-0">
-                        {exp.startMonth && `${exp.startMonth} `}{exp.startYear} – {exp.current ? 'Present' : `${exp.endMonth ?? ''} ${exp.endYear ?? ''}`}
-                      </p>
                     </div>
-                    {exp.description && <p className="text-zinc-400 text-xs leading-relaxed mt-1">{exp.description}</p>}
                   </div>
                 ))}
               </div>
-            </Section>
+            </div>
+          )}
+
+          {/* Skills */}
+          {resumeDetails.skills?.length > 0 && (
+            <div className="border border-zinc-900 bg-zinc-950 rounded-xl p-5 space-y-3">
+              <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-zinc-500" /> Skills
+              </h4>
+              <div className="flex flex-wrap gap-1.5">
+                {resumeDetails.skills.map((skill: string, idx: number) => (
+                  <span key={idx} className="px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-xs hover:border-zinc-700 transition-colors">
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Experience */}
+          {resumeDetails.experience?.length > 0 && (
+            <div className="border border-zinc-900 bg-zinc-950 rounded-xl p-5 space-y-4">
+              <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-zinc-500" /> Experience
+              </h4>
+              <div className="space-y-4">
+                {resumeDetails.experience.map((exp: any, index: number) => (
+                  <div key={index} className="border-l border-zinc-900 pl-4 space-y-1 relative">
+                    <div className="absolute w-2 h-2 rounded-full bg-zinc-700 left-[-4.5px] top-1.5" />
+                    <div className="flex flex-wrap justify-between items-baseline gap-2">
+                      <h5 className="text-sm font-bold text-white">{exp.role || exp.title}</h5>
+                      <span className="text-xs text-zinc-500 font-medium">
+                        {exp.startDate} — {exp.endDate || 'Present'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 font-medium">
+                      {exp.company} {exp.location && <span className="text-zinc-600">({exp.location})</span>}
+                    </p>
+                    {exp.description && <p className="text-xs text-zinc-500 pt-1 leading-relaxed">{exp.description}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Education */}
-          {candidate?.education?.length > 0 && (
-            <Section title="Education" icon={GraduationCap}>
-              <div className="space-y-4 mt-2">
-                {candidate.education.map((edu: any, i: number) => (
-                  <div key={i} className={i > 0 ? 'pt-4 border-t border-zinc-900' : ''}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="font-semibold text-white text-sm">{edu.degree} in {edu.field}</p>
-                        <p className="text-zinc-400 text-xs">{edu.institution}{edu.location && ` · ${edu.location}`}</p>
-                      </div>
-                      <p className="text-xs text-zinc-500">{edu.startYear} – {edu.endYear ?? 'Present'}</p>
-                    </div>
-                    {edu.cgpa && <p className="text-xs text-zinc-500 mt-1">CGPA: {edu.cgpa}</p>}
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Projects */}
-          {candidate?.projects?.length > 0 && (
-            <Section title="Projects" icon={Globe}>
-              <div className="space-y-4 mt-2">
-                {candidate.projects.map((p: any, i: number) => (
-                  <div key={i} className={i > 0 ? 'pt-4 border-t border-zinc-900' : ''}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-semibold text-white text-sm">{p.name}</p>
-                      {p.githubLink && <a href={p.githubLink} target="_blank" rel="noreferrer" className="text-violet-400 hover:text-violet-300"><Code2 className="h-3.5 w-3.5" /></a>}
-                      {p.liveLink && <a href={p.liveLink} target="_blank" rel="noreferrer" className="text-violet-400 hover:text-violet-300"><ExternalLink className="h-3.5 w-3.5" /></a>}
-                    </div>
-                    <p className="text-zinc-400 text-xs leading-relaxed">{p.description}</p>
-                    {p.technologies?.length > 0 && (
-                      <div className="flex gap-1.5 mt-2 flex-wrap">
-                        {p.technologies.map((t: string, ti: number) => (
-                          <span key={ti} className="px-2 py-0.5 bg-zinc-900 text-zinc-400 text-[10px] rounded">{t}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Certifications */}
-          {candidate?.certifications?.length > 0 && (
-            <Section title="Certifications" icon={Award}>
-              <div className="space-y-2 mt-2">
-                {candidate.certifications.map((c: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between">
+          {resumeDetails.education?.length > 0 && (
+            <div className="border border-zinc-900 bg-zinc-950 rounded-xl p-5 space-y-4">
+              <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-zinc-500" /> Education
+              </h4>
+              <div className="space-y-3">
+                {resumeDetails.education.map((edu: any, idx: number) => (
+                  <div key={idx} className="flex justify-between items-start text-xs border-b border-zinc-900/40 pb-2 last:border-0 last:pb-0">
                     <div>
-                      <p className="text-sm text-white">{c.name}</p>
-                      <p className="text-xs text-zinc-500">{c.organization}{c.issueDate && ` · ${c.issueDate}`}</p>
+                      <h5 className="font-bold text-zinc-300">{edu.degree || edu.field}</h5>
+                      <p className="text-zinc-500 text-[11px] mt-0.5">
+                        {edu.institution} {edu.location && `• ${edu.location}`}
+                      </p>
                     </div>
-                    {c.credentialUrl && (
-                      <a href={c.credentialUrl} target="_blank" rel="noreferrer" className="text-violet-400 text-xs hover:underline">View</a>
-                    )}
+                    <span className="text-zinc-600 shrink-0 font-medium">
+                      {edu.startYear} — {edu.endYear}
+                    </span>
                   </div>
                 ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Applied Resume */}
-          {appliedResume && (
-            <div className="bg-zinc-950 border border-zinc-900 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between p-5 border-b border-zinc-900">
-                <div className="flex items-center gap-2.5">
-                  <FileText className="h-4 w-4 text-zinc-400" />
-                  <span className="font-semibold text-white text-sm">Applied Resume — {appliedResume.name}</span>
-                </div>
-                <div className="flex gap-2">
-                  {(['summary', 'raw'] as const).map(t => (
-                    <button key={t} onClick={() => setResumeTab(t)}
-                      className={`px-3 py-1 rounded text-xs font-medium transition-colors capitalize ${resumeTab === t ? 'bg-white text-black' : 'bg-zinc-900 text-zinc-400 hover:text-white'}`}>
-                      {t === 'raw' ? 'Raw Content' : 'AI Analysis'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-5">
-                {resumeTab === 'summary' && aiSuggestions && (
-                  <div className="space-y-4">
-                    {aiSuggestions.strengths?.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-emerald-400 mb-2">✓ Strengths</p>
-                        <ul className="space-y-1">
-                          {aiSuggestions.strengths.map((s: string, i: number) => (
-                            <li key={i} className="text-xs text-zinc-300 flex gap-2"><span className="text-emerald-500 flex-shrink-0">·</span>{s}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {aiSuggestions.missingSections?.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-yellow-400 mb-2">⚠ Missing Sections</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {aiSuggestions.missingSections.map((s: string, i: number) => (
-                            <span key={i} className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded text-[10px]">{s}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {aiSuggestions.keywordGaps?.length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-red-400 mb-2">✗ Keyword Gaps</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {aiSuggestions.keywordGaps.map((k: string, i: number) => (
-                            <span key={i} className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded text-[10px]">{k}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {!aiSuggestions.strengths && !aiSuggestions.missingSections && (
-                      <p className="text-zinc-500 text-sm">No AI analysis data available for this resume.</p>
-                    )}
-                  </div>
-                )}
-
-                {resumeTab === 'raw' && (
-                  <pre className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
-                    {resumeContent ? JSON.stringify(resumeContent, null, 2) : 'No raw content stored.'}
-                  </pre>
-                )}
               </div>
             </div>
           )}
 
-          {/* Achievements */}
-          {candidate?.achievements?.length > 0 && (
-            <Section title="Achievements" icon={Star}>
-              <div className="space-y-3 mt-2">
-                {candidate.achievements.map((a: any, i: number) => (
-                  <div key={i}>
-                    <p className="text-sm text-white">{a.title}{a.year && <span className="text-zinc-500 ml-2 text-xs">{a.year}</span>}</p>
-                    {a.description && <p className="text-xs text-zinc-400 mt-0.5">{a.description}</p>}
-                  </div>
-                ))}
-              </div>
-            </Section>
+          {/* No Data Fallback */}
+          {!resumeDetails.skills && !resumeDetails.experience && !resumeDetails.education && (
+            <div className="border border-dashed border-zinc-900 bg-zinc-950 rounded-xl p-12 text-center">
+              <FileText className="w-12 h-12 text-zinc-800 mx-auto mb-3" />
+              <p className="text-xs text-zinc-600">
+                No parsed resume data available.
+              </p>
+            </div>
           )}
 
         </div>
+
       </div>
+
     </div>
   );
 }

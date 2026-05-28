@@ -24,6 +24,12 @@ export default function CompanySidebar({ company }: { company: any }) {
       visible: true
     },
     { 
+      name: 'edit ', 
+      href: '/dashboard/offer-templates', 
+      icon: LayoutDashboard, 
+      visible: true
+    },
+    { 
       name: 'Job Postings', 
       href: '/dashboard/jobs', 
       icon: Briefcase, 

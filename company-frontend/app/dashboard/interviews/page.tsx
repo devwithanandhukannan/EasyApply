@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Calendar, Clock, Play, User, AlertCircle, Check, X, ChevronDown, CheckSquare, Search, SlidersHorizontal, Star } from 'lucide-react';
+import { Calendar, Clock, Play, User, AlertCircle, Check, X, ChevronDown, CheckSquare, Search, SlidersHorizontal, Star, Flag } from 'lucide-react';
 import api from '@/app/lib/axios';
-import FeedbackModal from '@/app/components/FeedbackModal'; // Verify path orientation matching
+import FeedbackModal from '@/app/components/FeedbackModal';
 
 interface FeedbackRecord {
   id: string;
@@ -30,11 +30,15 @@ interface InterviewRecord {
   format: string;
   status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'reschedule_requested' | 'confirmed';
   rescheduleRequests: RescheduleRequest[];
-  feedbacks?: FeedbackRecord[]; // 🎯 Captures feedback arrays from pipeline queries
+  feedbacks?: FeedbackRecord[];
   application: {
+    id: string;
+    isStarred: boolean;
+    priority: number | null;
     jobSeekerProfile: {
       fullName: string;
       email: string;
+      profilePhotoUrl: string | null;
     };
     jobPosting: {
       title: string;
@@ -48,11 +52,10 @@ export default function CompanyInterviewsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
 
-  // 🎯 Filter and Search Vector States
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [starredOnly, setStarredOnly] = useState(false);
   
-  // Modal tracking configurations
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -98,6 +101,18 @@ export default function CompanyInterviewsPage() {
     }
   };
 
+  const handleToggleStar = async (applicationId: string, currentStarred: boolean) => {
+    try {
+      await api.post('/company/selection/bulk/star', {
+        applicationIds: [applicationId],
+        starred: !currentStarred
+      });
+      fetchInterviews();
+    } catch (error) {
+      console.error('Toggle star error:', error);
+    }
+  };
+
   const openFeedbackMatrix = (interviewId: string) => {
     setSelectedInterviewId(interviewId);
     setIsModalOpen(true);
@@ -127,9 +142,23 @@ export default function CompanyInterviewsPage() {
     return colorMatrix[status] || 'bg-zinc-900 border-zinc-800 text-zinc-400';
   };
 
+  const getPriorityBadge = (priority: number | null) => {
+    if (!priority) return null;
+    const badges: Record<number, { label: string; color: string }> = {
+      1: { label: 'P1', color: 'bg-red-950/40 border-red-900 text-red-400' },
+      2: { label: 'P2', color: 'bg-amber-950/40 border-amber-900 text-amber-400' },
+      3: { label: 'P3', color: 'bg-blue-950/40 border-blue-900 text-blue-400' }
+    };
+    const badge = badges[priority];
+    return (
+      <span className={`px-1.5 py-0.5 border rounded text-[10px] font-bold ${badge.color}`}>
+        {badge.label}
+      </span>
+    );
+  };
+
   const statusOptions = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'];
 
-  // ─── FILTER AND SORT SELECTION LIFECYCLE MATRIX ─────────────────────
   const processedInterviews = interviews
     .filter((item) => {
       const matchSearch = 
@@ -138,17 +167,17 @@ export default function CompanyInterviewsPage() {
         item.id.includes(searchQuery);
       
       const matchStatus = statusFilter === 'all' || item.status === statusFilter;
-      return matchSearch && matchStatus;
+      const matchStarred = !starredOnly || item.application?.isStarred;
+      
+      return matchSearch && matchStatus && matchStarred;
     })
     .sort((a, b) => {
-      // 🎯 CRITICAL REORDER: Push entries with submitted feedback down to the bottom
       const aHasFeedback = a.feedbacks && a.feedbacks.length > 0 ? 1 : 0;
       const bHasFeedback = b.feedbacks && b.feedbacks.length > 0 ? 1 : 0;
       
       if (aHasFeedback !== bHasFeedback) {
-        return aHasFeedback - bHasFeedback; // 0 sits on top, 1 descends below
+        return aHasFeedback - bHasFeedback;
       }
-      // Secondary fallback sorting parameter matching cron timestamp layouts
       return new Date(a.scheduledTime).getTime() - new Date(b.scheduledTime).getTime();
     });
 
@@ -169,8 +198,8 @@ export default function CompanyInterviewsPage() {
         </div>
       </div>
 
-      {/* ─── SEARCH & FILTER INPUT BAR CONTROLS ─────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-950 p-3 border border-zinc-900 rounded-xl">
+      {/* Search & Filter with Starred Toggle */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-zinc-950 p-3 border border-zinc-900 rounded-xl">
         <div className="sm:col-span-2 relative flex items-center">
           <Search className="absolute left-3 w-3.5 h-3.5 text-zinc-600" />
           <input 
@@ -197,6 +226,19 @@ export default function CompanyInterviewsPage() {
           </select>
           <ChevronDown className="absolute right-3 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
         </div>
+        
+        {/* Starred Filter */}
+        <button
+          onClick={() => setStarredOnly(!starredOnly)}
+          className={`px-3 py-2 border rounded-lg text-xs font-semibold uppercase flex items-center justify-center gap-2 transition-colors ${
+            starredOnly 
+              ? 'bg-amber-950/20 border-amber-900 text-amber-400' 
+              : 'bg-black border-zinc-900 text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <Star className={`w-3.5 h-3.5 ${starredOnly ? 'fill-amber-400' : ''}`} />
+          Starred
+        </button>
       </div>
 
       {processedInterviews.length === 0 ? (
@@ -225,12 +267,31 @@ export default function CompanyInterviewsPage() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-3 flex-wrap">
+                      {/* Star Button */}
+                      <button
+                        onClick={() => handleToggleStar(interview.application.id, interview.application.isStarred)}
+                        className="text-zinc-600 hover:text-amber-400 transition-colors"
+                      >
+                        <Star className={`w-3.5 h-3.5 ${interview.application.isStarred ? 'fill-amber-400 text-amber-400' : ''}`} />
+                      </button>
+
+                      {/* Priority Badge */}
+                      {getPriorityBadge(interview.application.priority)}
+
                       <h3 className="text-xs font-semibold text-zinc-200 uppercase">
                         {interview.application?.jobPosting?.title || 'Technical Context'}
                       </h3>
                       <span className="text-zinc-700 text-[10px]">•</span>
                       <div className="flex items-center gap-1.5 text-zinc-400 text-xs">
-                        <User className="w-3 h-3 text-zinc-600" />
+                        {interview.application.jobSeekerProfile.profilePhotoUrl ? (
+                          <img 
+                            src={interview.application.jobSeekerProfile.profilePhotoUrl}
+                            alt={interview.application.jobSeekerProfile.fullName}
+                            className="w-5 h-5 rounded-full border border-zinc-800 object-cover"
+                          />
+                        ) : (
+                          <User className="w-3 h-3 text-zinc-600" />
+                        )}
                         <span>{interview.application?.jobSeekerProfile?.fullName}</span>
                       </div>
                     </div>
@@ -252,7 +313,7 @@ export default function CompanyInterviewsPage() {
                   </div>
                 </div>
 
-                {/* Sub-Context Panels: Reschedule Proposal Area */}
+                {/* Reschedule Proposal Area */}
                 {latestPendingReschedule && (
                   <div className="bg-amber-950/20 border border-amber-900/50 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-500">
                     <div className="space-y-1">
@@ -282,7 +343,7 @@ export default function CompanyInterviewsPage() {
                   </div>
                 )}
 
-                {/* ─── DETAILED SUB-INLINE PREVIEW MATRIX (IF SUBMITTED) ───── */}
+                {/* Feedback Preview */}
                 {existingFeedbackInstance && (
                   <div className="bg-zinc-900/30 border border-zinc-900/80 p-3 rounded-lg text-[11px] text-zinc-400 space-y-2">
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900/60 pb-1.5">
@@ -302,10 +363,10 @@ export default function CompanyInterviewsPage() {
                   </div>
                 )}
 
-                {/* Lower Grid Control Actions Bar */}
+                {/* Lower Control Actions Bar */}
                 <div className="border-t border-zinc-900/60 pt-3 flex flex-wrap items-center justify-between gap-3">
                   
-                  {/* Pipeline Status Modifier Input Dropdown */}
+                  {/* Pipeline Status Dropdown */}
                   <div className="relative font-mono">
                     <button
                       onClick={() => setActiveDropdownId(activeDropdownId === interview.id ? null : interview.id)}
@@ -339,7 +400,7 @@ export default function CompanyInterviewsPage() {
                     )}
                   </div>
 
-                  {/* Room WebRTC Access Anchor & Review Triggers */}
+                  {/* Room Access & Feedback */}
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => openFeedbackMatrix(interview.id)}
@@ -349,7 +410,6 @@ export default function CompanyInterviewsPage() {
                       {hasFeedback ? 'Edit Assessment' : 'Log Feedback'}
                     </button>
 
-                    {/* 🎯 CHANGED: Launch Room color configuration logic triggers conditional opacity styles based on feedback visibility state */}
                     <a
                       href={`/meet/${interview.id}?role=company`}
                       target="_blank"
@@ -372,7 +432,7 @@ export default function CompanyInterviewsPage() {
         </div>
       )}
 
-      {/* Reusable Feedback Entry/Modification Controller Instance Modal */}
+      {/* Feedback Modal */}
       {selectedInterviewId && (
         <FeedbackModal
           isOpen={isModalOpen}

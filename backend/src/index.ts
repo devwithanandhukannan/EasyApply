@@ -17,7 +17,7 @@ app.use(cookieParser());
 
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',')
-  : ['http://localhost:3000'];
+  : ['http://localhost:3000', 'http://localhost:5173']; // Included default Vite client development ports
 
 app.use(
   cors({
@@ -38,16 +38,17 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 
 // ─── API ROUTER REGISTER ──────────────────────────────────────────────────
-
 app.use('/api/auth', authRoutes);
 app.use('/api/jobseeker', jobseekerRoutes);
 app.use('/api/company/auth', companyAuthRoutes);
-app.use('/api/company/jobs', companyJobRoutes);
-app.use('/api/company/', companyJobRoutes);
+
+
+app.use('/api/company', companyJobRoutes);
+
 app.use('/api/jobs', publicJobRoutes); 
 app.use('/api/interviews', interviewRouter);
-app.use('/api/kanban',kanbanRouter);
-app.use('/offers', offerRoutes);
+app.use('/api/kanban', kanbanRouter);
+
 
 app.get('/', (_req, res) => res.send('Backend Running'));
 
