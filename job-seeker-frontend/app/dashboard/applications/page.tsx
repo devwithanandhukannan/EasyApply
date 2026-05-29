@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
-  Briefcase, 
-  Building2, 
-  Clock, 
+import {
+  Briefcase,
+  Building2,
+  Clock,
   Calendar,
   MapPin,
   Search,
@@ -20,7 +20,12 @@ import {
   Download,
   MoreVertical,
   RefreshCw,
-  FileDown
+  FileDown,
+  Filter,
+  TrendingUp,
+  CheckCircle,
+  UserCheck,
+  XOctagon,
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
@@ -92,13 +97,12 @@ export default function ApplicationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const [selectedApp, setSelectedApp] = useState<ApplicationTrackItem | null>(null);
   const [editingNotes, setEditingNotes] = useState<string>('');
   const [savingNotes, setSavingNotes] = useState<boolean>(false);
   const [processingWithdrawal, setProcessingWithdrawal] = useState<string | null>(null);
 
-  // New modal states
   const [offerModalOpen, setOfferModalOpen] = useState(false);
   const [rescheduleModalOpen, setRescheduleModalOpen] = useState(false);
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
@@ -121,9 +125,9 @@ export default function ApplicationsPage() {
         const backendData = response.data.data;
         setApplications(backendData);
         setFilteredApplications(backendData);
-        
+
         if (backendData.length > 0) {
-          const currentSelection = selectedApp 
+          const currentSelection = selectedApp
             ? backendData.find((a: ApplicationTrackItem) => a.applicationId === selectedApp.applicationId) || backendData[0]
             : backendData[0];
           setSelectedApp(currentSelection);
@@ -169,9 +173,9 @@ export default function ApplicationsPage() {
         notes: editingNotes
       });
       if (response.data.success) {
-        setApplications(prev => prev.map(item => 
-          item.applicationId === selectedApp.applicationId 
-            ? { ...item, candidateNotes: editingNotes } 
+        setApplications(prev => prev.map(item =>
+          item.applicationId === selectedApp.applicationId
+            ? { ...item, candidateNotes: editingNotes }
             : item
         ));
         setSelectedApp(prev => prev ? { ...prev, candidateNotes: editingNotes } : null);
@@ -205,7 +209,6 @@ export default function ApplicationsPage() {
       const response = await api.get(`/jobseeker/resumes/${resumeId}/download`, {
         responseType: 'blob'
       });
-      
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -221,12 +224,10 @@ export default function ApplicationsPage() {
 
   const handleExportApplicationData = () => {
     if (!selectedApp) return;
-    
     const exportData = {
       application: selectedApp,
       exportedAt: new Date().toISOString()
     };
-    
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -237,15 +238,15 @@ export default function ApplicationsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'applied': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'screened': return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
-      case 'technical_round': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
-      case 'hr_round': return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
-      case 'offer_sent': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20';
-      case 'hired': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-      case 'rejected': return 'bg-red-500/10 text-red-500 border-red-500/20';
-      case 'withdrawn': return 'bg-zinc-500/10 text-zinc-500 border-zinc-800';
-      default: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+      case 'applied': return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
+      case 'screened': return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
+      case 'technical_round': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30';
+      case 'hr_round': return 'bg-orange-500/10 text-orange-400 border-orange-500/30';
+      case 'offer_sent': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
+      case 'hired': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
+      case 'rejected': return 'bg-red-500/10 text-red-400 border-red-500/30';
+      case 'withdrawn': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30';
+      default: return 'bg-gray-500/10 text-gray-400 border-gray-500/30';
     }
   };
 
@@ -282,174 +283,203 @@ export default function ApplicationsPage() {
   };
 
   return (
-    <div className="space-y-6 font-mono max-w-7xl mx-auto p-4 text-zinc-300">
-      
+    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 py-6 bg-black min-h-screen text-zinc-300">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white mb-2 uppercase">Application Tracker Matrix</h1>
-        <p className="text-zinc-500 text-xs tracking-wider">COMPREHENSIVE WORKFLOW MONITORING SYSTEM</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Applications</h1>
+          <p className="text-sm text-zinc-500 mt-1">Track and manage all your job applications in one place</p>
+        </div>
+        <button
+          onClick={fetchApplications}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-lg shadow-sm hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-600"
+        >
+          <RefreshCw size={16} />
+          Refresh
+        </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl p-4">
-          <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Total</p>
-          <p className="text-2xl font-semibold text-white">{stats.total}</p>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Total</p>
+            <Briefcase size={18} className="text-zinc-500" />
+          </div>
+          <p className="text-2xl font-bold text-white mt-2">{stats.total}</p>
         </div>
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl p-4">
-          <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Applied</p>
-          <p className="text-2xl font-semibold text-blue-500">{stats.applied}</p>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Applied</p>
+            <CheckCircle size={18} className="text-blue-500" />
+          </div>
+          <p className="text-2xl font-bold text-blue-400 mt-2">{stats.applied}</p>
         </div>
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl p-4">
-          <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">In Process</p>
-          <p className="text-2xl font-semibold text-yellow-500">{stats.activeRounds}</p>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">In Progress</p>
+            <TrendingUp size={18} className="text-yellow-500" />
+          </div>
+          <p className="text-2xl font-bold text-yellow-400 mt-2">{stats.activeRounds}</p>
         </div>
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl p-4">
-          <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Offers/Hired</p>
-          <p className="text-2xl font-semibold text-emerald-500">{stats.offers}</p>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Offers / Hired</p>
+            <UserCheck size={18} className="text-emerald-500" />
+          </div>
+          <p className="text-2xl font-bold text-emerald-400 mt-2">{stats.offers}</p>
         </div>
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl p-4">
-          <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest mb-1">Withdrawn/End</p>
-          <p className="text-2xl font-semibold text-red-500">{stats.rejected}</p>
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Withdrawn / Rejected</p>
+            <XOctagon size={18} className="text-red-500" />
+          </div>
+          <p className="text-2xl font-bold text-red-400 mt-2">{stats.rejected}</p>
         </div>
       </div>
 
-      {/* Search/Filter */}
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl p-4">
+      {/* Search & Filter */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" size={16} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
             <input
               type="text"
-              placeholder="Search applications..."
+              placeholder="Search by job title or company..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-black border border-[#2c2c2e] rounded-lg text-white text-xs focus:outline-none focus:border-zinc-500 font-mono"
+              className="w-full pl-9 pr-4 py-2 bg-black border border-zinc-800 rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:border-transparent"
             />
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 bg-black border border-[#2c2c2e] rounded-lg text-white text-xs font-mono focus:outline-none focus:border-zinc-500"
-          >
-            <option value="all">ALL STATUSES</option>
-            <option value="applied">APPLIED</option>
-            <option value="screened">SCREENED</option>
-            <option value="technical_round">TECHNICAL ROUND</option>
-            <option value="hr_round">HR ROUND</option>
-            <option value="offer_sent">OFFER SENT</option>
-            <option value="hired">HIRED</option>
-            <option value="rejected">REJECTED</option>
-            <option value="withdrawn">WITHDRAWN</option>
-          </select>
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="pl-9 pr-8 py-2 bg-black border border-zinc-800 rounded-lg text-sm text-zinc-200 appearance-none focus:outline-none focus:ring-2 focus:ring-zinc-600"
+            >
+              <option value="all">All Statuses</option>
+              <option value="applied">Applied</option>
+              <option value="screened">Screened</option>
+              <option value="technical_round">Technical Round</option>
+              <option value="hr_round">HR Round</option>
+              <option value="offer_sent">Offer Sent</option>
+              <option value="hired">Hired</option>
+              <option value="rejected">Rejected</option>
+              <option value="withdrawn">Withdrawn</option>
+            </select>
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+          </div>
         </div>
       </div>
 
       {/* Main Content */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-24 border border-dashed border-zinc-900 rounded-xl">
-          <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mb-3"></div>
-          <p className="text-zinc-600 text-xs tracking-widest uppercase font-bold">Loading...</p>
+        <div className="flex flex-col items-center justify-center py-16 bg-zinc-900 rounded-xl border border-zinc-800">
+          <div className="w-8 h-8 border-3 border-zinc-700 border-t-white rounded-full animate-spin mb-3"></div>
+          <p className="text-sm text-zinc-500">Loading your applications...</p>
         </div>
       ) : filteredApplications.length === 0 ? (
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-12 text-center">
-          <Briefcase className="mx-auto mb-3 text-zinc-700" size={40} />
-          <h3 className="text-sm font-bold uppercase tracking-wider text-white mb-1">No Applications Found</h3>
-          <p className="text-zinc-500 text-xs mb-5">
-            {searchQuery || statusFilter !== 'all' ? 'No matching applications' : 'Start applying to jobs'}
+        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-12 text-center">
+          <Briefcase className="mx-auto mb-3 text-zinc-700" size={48} />
+          <h3 className="text-lg font-medium text-white mb-1">No applications found</h3>
+          <p className="text-sm text-zinc-500 mb-5">
+            {searchQuery || statusFilter !== 'all'
+              ? 'Try adjusting your search or filter to see more results'
+              : "You haven't applied to any jobs yet"}
           </p>
           {!searchQuery && statusFilter === 'all' && (
             <Link
               href="/dashboard/jobs"
-              className="inline-block px-5 py-2 bg-white text-black font-bold uppercase text-[11px] rounded hover:bg-zinc-200 transition-colors tracking-wider"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg shadow-sm hover:bg-zinc-200 transition-colors"
             >
               Browse Jobs
             </Link>
           )}
         </div>
       ) : (
-        <div className="flex flex-col lg:flex-row gap-5 items-start">
-          
+        <div className="flex flex-col lg:flex-row gap-6">
           {/* Application List */}
-          <div className="w-full lg:w-5/12 space-y-3 max-h-[75vh] overflow-y-auto pr-1">
+          <div className="w-full lg:w-5/12 space-y-3 max-h-[calc(100vh-12rem)] overflow-y-auto pr-1">
             {filteredApplications.map((app) => (
               <div
                 key={app.applicationId}
                 onClick={() => handleSelectApplication(app)}
-                className={`bg-[#1c1c1e] border rounded-xl p-4 cursor-pointer transition-all relative ${
+                className={`bg-zinc-900 rounded-xl border p-4 cursor-pointer transition-all hover:shadow-md ${
                   selectedApp?.applicationId === app.applicationId
-                    ? 'border-zinc-500 shadow-md bg-zinc-950/60'
-                    : 'border-[#2c2c2e] hover:border-zinc-700 hover:bg-zinc-950/20'
+                    ? 'border-zinc-500 ring-2 ring-zinc-700 shadow-md'
+                    : 'border-zinc-800 hover:border-zinc-700'
                 }`}
               >
-                {/* Quick Actions Menu */}
-                <div className="absolute top-3 right-3">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActionMenuOpen(actionMenuOpen === app.applicationId ? null : app.applicationId);
-                    }}
-                    className="p-1 hover:bg-zinc-900 rounded"
-                  >
-                    <MoreVertical size={14} className="text-zinc-600" />
-                  </button>
-                  
-                  {actionMenuOpen === app.applicationId && (
-                    <div className="absolute right-0 mt-1 bg-black border border-zinc-800 rounded-lg shadow-xl z-10 min-w-[160px]">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDownloadResume(app.resumeUsed.id, app.resumeUsed.name);
-                        }}
-                        className="w-full text-left px-3 py-2 text-xs text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center gap-2"
-                      >
-                        <Download size={12} />
-                        Download Resume
-                      </button>
-                      {app.canWithdraw && (
+                <div className="flex justify-between items-start">
+                  <div className="flex gap-3">
+                    {app.companyDetails.logoUrl ? (
+                      <img
+                        src={app.companyDetails.logoUrl}
+                        alt={app.companyDetails.name}
+                        className="w-10 h-10 rounded-lg object-cover bg-black border border-zinc-800 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-black border border-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <Building2 size={18} className="text-zinc-500" />
+                      </div>
+                    )}
+                    <div>
+                      <h4 className="text-base font-semibold text-white">{app.jobDetails.title}</h4>
+                      <p className="text-sm text-zinc-400 mt-0.5">{app.companyDetails.name}</p>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
+                        <MapPin size={12} />
+                        <span>{app.jobDetails.location}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActionMenuOpen(actionMenuOpen === app.applicationId ? null : app.applicationId);
+                      }}
+                      className="p-1.5 hover:bg-zinc-800 rounded-md transition-colors"
+                    >
+                      <MoreVertical size={16} className="text-zinc-500" />
+                    </button>
+
+                    {actionMenuOpen === app.applicationId && (
+                      <div className="absolute right-0 mt-1 w-48 bg-black border border-zinc-800 rounded-lg shadow-lg z-10 py-1">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleWithdraw(app.applicationId);
+                            handleDownloadResume(app.resumeUsed.id, app.resumeUsed.name);
                           }}
-                          className="w-full text-left px-3 py-2 text-xs text-red-400 hover:text-red-300 hover:bg-red-950/20 flex items-center gap-2"
+                          className="w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900 flex items-center gap-2"
                         >
-                          <Trash2 size={12} />
-                          Withdraw
+                          <Download size={14} />
+                          Download Resume
                         </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-start space-x-3">
-                  {app.companyDetails.logoUrl ? (
-                    <img
-                      src={app.companyDetails.logoUrl}
-                      alt={app.companyDetails.name}
-                      className="w-10 h-10 rounded-lg object-cover bg-zinc-900 border border-zinc-800"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 bg-zinc-900 border border-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Building2 size={16} className="text-zinc-600" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0 pr-6">
-                    <h4 className="text-sm font-bold text-white truncate uppercase tracking-tight">
-                      {app.jobDetails.title}
-                    </h4>
-                    <p className="text-zinc-500 text-xs mt-0.5 truncate uppercase tracking-tight">{app.companyDetails.name}</p>
+                        {app.canWithdraw && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleWithdraw(app.applicationId);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-950/30 flex items-center gap-2"
+                          >
+                            <Trash2 size={14} />
+                            Withdraw Application
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#2c2c2e]/60">
-                  <span className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded text-[10px] uppercase font-bold border ${getStatusColor(app.liveStatusBadge)}`}>
+                <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800">
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(app.liveStatusBadge)}`}>
                     {getStatusIcon(app.liveStatusBadge)}
-                    <span>{app.liveStatusBadge.replace('_', ' ')}</span>
+                    <span>{app.liveStatusBadge.replace(/_/g, ' ')}</span>
                   </span>
-                  <div className="flex items-center space-x-1 text-[10px] text-zinc-600 font-medium">
-                    <Clock size={10} />
+                  <div className="flex items-center gap-1 text-xs text-zinc-500">
+                    <Clock size={12} />
                     <span>{calculateDaysAgo(app.appliedAt)}</span>
                   </div>
                 </div>
@@ -458,41 +488,40 @@ export default function ApplicationsPage() {
           </div>
 
           {/* Details Panel */}
-          <div className="w-full lg:w-7/12 bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl p-5 space-y-6 lg:sticky lg:top-4">
+          <div className="w-full lg:w-7/12 bg-zinc-900 rounded-xl border border-zinc-800 p-5 space-y-6 lg:sticky lg:top-6 shadow-sm">
             {selectedApp ? (
               <>
                 {/* Header */}
-                <div className="border-b border-[#2c2c2e] pb-4 flex flex-wrap justify-between items-start gap-4">
+                <div className="border-b border-zinc-800 pb-4 flex flex-wrap justify-between items-start gap-4">
                   <div>
-                    <span className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold bg-black px-2 py-0.5 border border-zinc-900 rounded">
+                    <span className="text-xs font-mono text-zinc-500 bg-black px-2 py-0.5 rounded border border-zinc-800">
                       ID: {selectedApp.applicationId.slice(0, 8)}
                     </span>
-                    <h2 className="text-lg font-bold text-white uppercase tracking-tight mt-2">
+                    <h2 className="text-xl font-bold text-white mt-2">
                       {selectedApp.jobDetails.title}
                     </h2>
-                    <p className="text-zinc-400 text-xs font-semibold uppercase tracking-wider mt-0.5">
-                      {selectedApp.companyDetails.name} | {selectedApp.jobDetails.location}
+                    <p className="text-sm text-zinc-400 mt-0.5">
+                      {selectedApp.companyDetails.name} • {selectedApp.jobDetails.location}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleExportApplicationData}
-                      className="flex items-center gap-1 px-2.5 py-1.5 border border-zinc-800 bg-black hover:bg-zinc-900 text-zinc-400 hover:text-white rounded text-[10px] font-bold uppercase tracking-widest transition-all"
-                      title="Export Application Data"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 bg-black border border-zinc-800 rounded-lg hover:bg-zinc-900"
                     >
-                      <FileDown size={12} />
-                      EXPORT
+                      <FileDown size={14} />
+                      Export
                     </button>
 
                     {selectedApp.canWithdraw && (
                       <button
                         onClick={() => handleWithdraw(selectedApp.applicationId)}
                         disabled={processingWithdrawal !== null}
-                        className="flex items-center gap-1 px-2.5 py-1.5 border border-zinc-800 bg-black hover:bg-red-950/20 text-zinc-500 hover:text-red-400 hover:border-red-900/40 rounded text-[10px] font-bold uppercase tracking-widest transition-all"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 bg-black border border-red-900/50 rounded-lg hover:bg-red-950/30 hover:border-red-800/50"
                       >
-                        <Trash2 size={12} />
-                        {processingWithdrawal === selectedApp.applicationId ? 'PROCESSING...' : 'WITHDRAW'}
+                        <Trash2 size={14} />
+                        {processingWithdrawal === selectedApp.applicationId ? 'Processing...' : 'Withdraw'}
                       </button>
                     )}
                   </div>
@@ -500,33 +529,28 @@ export default function ApplicationsPage() {
 
                 {/* Offer Response Section */}
                 {selectedApp.activeOffer && (
-                  <div className="p-3.5 border border-indigo-900 bg-indigo-950/10 rounded-lg space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h5 className="text-indigo-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                          <CheckCircle2 size={14} /> Offer Letter Received
-                        </h5>
-                        <p className="text-[10px] text-indigo-300/60 mt-0.5">
-                          Sent: {new Date(selectedApp.activeOffer.sentAt).toLocaleDateString()} — Status: {selectedApp.activeOffer.status.toUpperCase()}
-                        </p>
-                      </div>
-                    </div>
-
+                  <div className="p-4 border border-indigo-900/50 bg-indigo-950/20 rounded-xl space-y-3">
                     <div className="flex items-center gap-2">
+                      <CheckCircle2 size={18} className="text-indigo-400" />
+                      <h5 className="font-semibold text-indigo-300">Offer Letter Received</h5>
+                    </div>
+                    <p className="text-xs text-indigo-300/70">
+                      Sent: {new Date(selectedApp.activeOffer.sentAt).toLocaleDateString()} — Status: {selectedApp.activeOffer.status.toUpperCase()}
+                    </p>
+                    <div className="flex gap-3">
                       <a
                         href={selectedApp.activeOffer.filePath}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-indigo-900/40 hover:bg-indigo-900 border border-indigo-800 text-indigo-200 rounded text-[10px] uppercase font-bold tracking-widest transition-colors"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-black border border-indigo-800 text-indigo-300 text-sm font-medium rounded-lg hover:bg-indigo-950/40"
                       >
-                        <FileText size={12} />
+                        <FileText size={14} />
                         View Offer
                       </a>
-
                       {selectedApp.activeOffer.status === 'sent' && (
                         <button
                           onClick={() => setOfferModalOpen(true)}
-                          className="flex-1 px-3 py-1.5 bg-white hover:bg-zinc-200 text-black rounded text-[10px] uppercase font-bold tracking-widest transition-colors"
+                          className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
                         >
                           Respond to Offer
                         </button>
@@ -535,54 +559,52 @@ export default function ApplicationsPage() {
                   </div>
                 )}
 
-                {/* Resume Download */}
+                {/* Resume & Info */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     onClick={() => handleDownloadResume(selectedApp.resumeUsed.id, selectedApp.resumeUsed.name)}
-                    className="p-3 bg-black border border-[#2c2c2e] rounded-lg flex items-center space-x-3 hover:bg-zinc-950 transition-colors"
+                    className="flex items-center gap-3 p-3 bg-black border border-zinc-800 rounded-lg hover:bg-zinc-900 transition-colors"
                   >
-                    <Download size={16} className="text-zinc-600 flex-shrink-0" />
-                    <div className="min-w-0 text-left">
-                      <p className="text-[9px] text-zinc-600 uppercase tracking-widest font-black">Resume Used</p>
-                      <p className="text-zinc-300 text-xs truncate mt-0.5">{selectedApp.resumeUsed.name}</p>
+                    <Download size={18} className="text-zinc-500" />
+                    <div className="text-left">
+                      <p className="text-xs text-zinc-500 uppercase font-medium">Resume Used</p>
+                      <p className="text-sm font-medium text-zinc-300 truncate">{selectedApp.resumeUsed.name}</p>
                     </div>
                   </button>
-                  
-                  <div className="p-3 bg-black border border-[#2c2c2e] rounded-lg flex items-center space-x-3">
-                    <Clock size={16} className="text-zinc-600 flex-shrink-0" />
+                  <div className="flex items-center gap-3 p-3 bg-black border border-zinc-800 rounded-lg">
+                    <Clock size={18} className="text-zinc-500" />
                     <div>
-                      <p className="text-[9px] text-zinc-600 uppercase tracking-widest font-black">Last Updated</p>
-                      <p className="text-zinc-300 text-xs mt-0.5">{new Date(selectedApp.updatedAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-zinc-500 uppercase font-medium">Last Updated</p>
+                      <p className="text-sm font-medium text-zinc-300">{new Date(selectedApp.updatedAt).toLocaleDateString()}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Timeline */}
                 <div className="space-y-3">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-white flex items-center gap-2">
-                    <Layers size={12} className="text-zinc-600" /> Application Timeline
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Layers size={16} className="text-zinc-500" />
+                    Application Timeline
                   </h3>
-                  
-                  <div className="border border-[#2c2c2e] rounded-lg bg-black/40 p-4 relative space-y-4">
-                    <div className="absolute top-4 bottom-4 left-6 border-l border-[#2c2c2e] z-0"></div>
-
+                  <div className="border border-zinc-800 rounded-xl p-4 bg-black/40 space-y-4">
                     {selectedApp.timelineView.map((log, idx) => (
-                      <div key={idx} className="flex gap-4 relative z-10 items-start">
-                        <div className="w-4 h-4 rounded-full border border-[#2c2c2e] bg-black flex items-center justify-center flex-shrink-0 mt-0.5 text-[8px] text-zinc-600 font-bold">
-                          {idx + 1}
+                      <div key={idx} className="flex gap-3">
+                        <div className="relative flex flex-col items-center">
+                          <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2"></div>
+                          {idx !== selectedApp.timelineView.length - 1 && (
+                            <div className="w-px h-full bg-zinc-800 absolute top-4 bottom-0"></div>
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-white text-xs font-bold uppercase tracking-wide">
-                              {log.stage ? log.stage.replace(/_/g, ' ') : 'PENDING'}
+                        <div className="flex-1 pb-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-sm font-medium text-white">
+                              {log.stage ? log.stage.replace(/_/g, ' ') : 'Pending'}
                             </span>
-                            <span className="text-[9px] text-zinc-600 font-medium">
+                            <span className="text-xs text-zinc-500">
                               {new Date(log.date).toLocaleDateString()}
                             </span>
                           </div>
-                          <p className="text-[10px] text-zinc-500 mt-0.5 leading-relaxed">
-                            {log.notes || 'No notes'}
-                          </p>
+                          <p className="text-sm text-zinc-400 mt-1">{log.notes || 'No notes provided'}</p>
                         </div>
                       </div>
                     ))}
@@ -592,23 +614,20 @@ export default function ApplicationsPage() {
                 {/* Interviews */}
                 {selectedApp.interviewHistory.length > 0 && (
                   <div className="space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-widest text-white flex items-center gap-2">
-                      <Video size={12} className="text-zinc-600" /> Interview Schedule
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      <Video size={16} className="text-zinc-500" />
+                      Interview Schedule
                     </h3>
-
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       {selectedApp.interviewHistory.map((interview) => (
-                        <div key={interview.interviewId} className="border border-[#2c2c2e] bg-black/30 rounded-lg p-3.5 space-y-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div key={interview.interviewId} className="border border-zinc-800 rounded-xl p-4 bg-black">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <p className="text-zinc-200 text-xs font-bold uppercase tracking-tight">
-                                {interview.format.toUpperCase()}
-                              </p>
-                              <p className="text-zinc-600 text-[10px] mt-0.5">
-                                {new Date(interview.scheduledTime).toLocaleString()} ({interview.durationMinutes} Min)
+                              <p className="font-medium text-white">{interview.format.toUpperCase()}</p>
+                              <p className="text-sm text-zinc-400 mt-0.5">
+                                {new Date(interview.scheduledTime).toLocaleString()} ({interview.durationMinutes} min)
                               </p>
                             </div>
-                            
                             <div className="flex items-center gap-2">
                               {interview.status === 'scheduled' && (
                                 <button
@@ -617,38 +636,36 @@ export default function ApplicationsPage() {
                                     setSelectedInterviewTime(interview.scheduledTime);
                                     setRescheduleModalOpen(true);
                                   }}
-                                  className="px-2 py-1 border border-zinc-800 bg-black hover:bg-zinc-900 text-zinc-400 hover:text-white rounded text-[9px] uppercase font-bold tracking-wide transition-colors flex items-center gap-1"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-300 bg-zinc-800 rounded-md hover:bg-zinc-700"
                                 >
-                                  <RefreshCw size={10} />
+                                  <RefreshCw size={12} />
                                   Reschedule
                                 </button>
                               )}
-
                               {interview.joinLink ? (
                                 <Link
                                   href={`/meet/${interview.interviewId}`}
-                                  className="px-3 py-1 bg-white hover:bg-zinc-200 text-black rounded text-[10px] uppercase font-black tracking-widest transition-all"
+                                  className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-md hover:bg-indigo-700"
                                 >
                                   Join
                                 </Link>
                               ) : (
-                                <span className="px-2 py-0.5 border border-zinc-800 bg-black text-zinc-500 text-[9px] uppercase font-bold tracking-wide rounded">
-                                  {interview.status.replace('_', ' ')}
+                                <span className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-zinc-400 bg-zinc-800 rounded-md">
+                                  {interview.status.replace(/_/g, ' ')}
                                 </span>
                               )}
                             </div>
                           </div>
-
                           {interview.companyFeedback.length > 0 && (
-                            <div className="pt-2 border-t border-[#2c2c2e] space-y-2">
-                              <p className="text-[8px] text-zinc-600 uppercase tracking-widest font-black">Company Feedback</p>
-                              {interview.companyFeedback.map((fb, fidx) => (
-                                <div key={fidx} className="bg-black border border-zinc-900 p-2.5 rounded text-[10px] space-y-1">
-                                  <div className="flex items-center justify-between text-zinc-400">
-                                    <span className="font-bold text-zinc-300 uppercase">Verdict: {fb.verdict}</span>
-                                    <span>{new Date(fb.createdAt).toLocaleDateString()}</span>
+                            <div className="mt-3 pt-3 border-t border-zinc-800">
+                              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Company Feedback</p>
+                              {interview.companyFeedback.map((fb, idx) => (
+                                <div key={idx} className="mt-2 bg-zinc-900/50 p-3 rounded-lg text-sm">
+                                  <div className="flex items-center justify-between text-zinc-300">
+                                    <span className="font-semibold">Verdict: {fb.verdict}</span>
+                                    <span className="text-xs text-zinc-500">{new Date(fb.createdAt).toLocaleDateString()}</span>
                                   </div>
-                                  <p className="text-zinc-500 italic">"{fb.notes}"</p>
+                                  <p className="text-zinc-400 mt-1 italic">"{fb.notes}"</p>
                                 </div>
                               ))}
                             </div>
@@ -661,22 +678,22 @@ export default function ApplicationsPage() {
 
                 {/* Private Notes */}
                 <div className="space-y-3 pt-2">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-white flex items-center gap-2">
-                    <Edit3 size={12} className="text-zinc-600" /> Private Notes
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <Edit3 size={16} className="text-zinc-500" />
+                    Private Notes
                   </h3>
-
                   <div className="space-y-2">
                     <textarea
                       value={editingNotes}
                       onChange={(e) => setEditingNotes(e.target.value)}
                       placeholder="Add private notes about this application..."
-                      className="w-full min-h-[75px] text-xs bg-black border border-[#2c2c2e] rounded-lg p-3 text-zinc-300 placeholder-zinc-700 font-mono focus:outline-none focus:border-zinc-500 transition-colors resize-none"
+                      className="w-full min-h-[100px] text-sm bg-black border border-zinc-800 rounded-lg p-3 text-zinc-200 placeholder-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:border-transparent"
                     />
                     <div className="flex justify-end">
                       <button
                         onClick={handleUpdateNotes}
                         disabled={savingNotes}
-                        className="px-3 py-1.5 bg-[#2c2c2e] hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded text-[10px] uppercase font-bold tracking-widest transition-all disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-medium text-white bg-zinc-800 rounded-lg hover:bg-zinc-700 disabled:opacity-50"
                       >
                         {savingNotes ? 'Saving...' : 'Save Notes'}
                       </button>
@@ -685,13 +702,12 @@ export default function ApplicationsPage() {
                 </div>
               </>
             ) : (
-              <div className="py-24 text-center text-zinc-600 flex flex-col items-center justify-center">
-                <Info size={18} className="text-zinc-800 mb-1" />
-                <p className="text-[10px] uppercase font-bold tracking-widest">Select an application to view details</p>
+              <div className="py-16 text-center text-zinc-600 flex flex-col items-center">
+                <Info size={32} className="mb-2" />
+                <p className="text-sm">Select an application to view details</p>
               </div>
             )}
           </div>
-
         </div>
       )}
 

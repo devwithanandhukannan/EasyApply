@@ -10,7 +10,10 @@ import {
   Building2, 
   ArrowLeft, 
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Globe,
+  ArrowUpRight,
+  ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
@@ -38,7 +41,7 @@ export default function JobDetailsPage() {
         setJob(response.data.data);
       }
     } catch (error) {
-      console.error('Error fetching job details:', error);
+      console.error('Error loading job specifications:', error);
     } finally {
       setIsLoading(false);
     }
@@ -52,17 +55,16 @@ export default function JobDetailsPage() {
         setHasApplied(applied);
       }
     } catch (error) {
-      console.error('Error checking application status:', error);
+      console.error('Error tracking configuration states:', error);
     }
   };
 
   const handleDirectApply = async () => {
     try {
       setIsSubmitting(true);
-      // Fetches user's first available default resume to use for direct apply click
       const resumeRes = await api.get('/jobseeker/resumes');
       if (!resumeRes.data.success || resumeRes.data.data.length === 0) {
-        alert('Please upload or generate a resume in your profile layout before deployment.');
+        alert('Please upload or generate a primary resume on your profile menu before submitting.');
         return;
       }
 
@@ -77,12 +79,12 @@ export default function JobDetailsPage() {
       });
 
       if (response.data.success) {
-        alert('Application payload synchronized successfully!');
+        alert('Application profile submitted successfully.');
         setHasApplied(true);
       }
     } catch (error: any) {
-      console.error('Application error:', error);
-      alert(error.response?.data?.message || 'Failed to sync execution payload');
+      console.error('Application transmission error:', error);
+      alert(error.response?.data?.message || 'Failed to file your profile records.');
     } finally {
       setIsSubmitting(false);
     }
@@ -92,17 +94,17 @@ export default function JobDetailsPage() {
     if (!date) return '';
     const diff = Date.now() - new Date(date).getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'TODAY';
-    if (days === 1) return 'YESTERDAY';
-    return `${days} DAYS AGO`;
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return `${days} days ago`;
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-32 font-mono">
-        <div className="flex flex-col items-center space-y-3">
-          <div className="w-6 h-6 border border-zinc-800 border-t-white rounded-full animate-spin"></div>
-          <p className="text-zinc-600 text-[10px] tracking-widest uppercase">Parsing Meta Stream...</p>
+      <div className="flex h-[60vh] items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-5 h-5 border border-zinc-900 border-t-zinc-400 rounded-full animate-spin"></div>
+          <p className="text-zinc-500 text-[11px] font-medium tracking-wide">Loading specifications...</p>
         </div>
       </div>
     );
@@ -110,11 +112,11 @@ export default function JobDetailsPage() {
 
   if (!job) {
     return (
-      <div className="text-center py-20 font-mono max-w-md mx-auto">
-        <AlertCircle className="mx-auto text-zinc-700 mb-2" size={24} />
-        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Node Context Inaccessible</h3>
-        <p className="text-zinc-600 text-[11px] mt-1 uppercase mb-4">The targeted record identifier could not be queried.</p>
-        <Link href="/dashboard/jobs" className="text-white text-xs underline uppercase tracking-wide">
+      <div className="text-center py-20 font-sans max-w-sm mx-auto">
+        <AlertCircle className="mx-auto text-zinc-700 mb-3" size={24} />
+        <h3 className="text-sm font-semibold text-white">Position not found</h3>
+        <p className="text-zinc-500 text-xs mt-1 mb-5">The requested job listing could not be queried or has expired.</p>
+        <Link href="/dashboard/jobs" className="px-4 py-2 bg-zinc-950 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-medium text-zinc-300 hover:text-white transition-all">
           Return to index
         </Link>
       </div>
@@ -122,174 +124,157 @@ export default function JobDetailsPage() {
   }
 
   return (
-    <div className="space-y-6 font-mono text-zinc-300 max-w-4xl mx-auto p-4 md:p-0">
-      {/* Return Controls */}
+    <div className="space-y-6 text-zinc-300 max-w-4xl mx-auto p-2 md:p-0 font-sans antialiased animate-fade-in">
+      
+      {/* Back Actions navigation */}
       <div>
         <button
           onClick={() => router.back()}
-          className="inline-flex items-center space-x-2 text-zinc-500 hover:text-white transition-colors text-xs uppercase font-bold tracking-wider"
+          className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors text-xs font-semibold"
         >
           <ArrowLeft size={14} />
-          <span>Back to Registry Stream</span>
+          <span>Back to Directory</span>
         </button>
       </div>
 
-      {/* Corporate Meta Grid Header Block */}
-      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        <div className="flex items-center space-x-4 min-w-0">
+      {/* Main Feature Header Card info */}
+      <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl shadow-black/40">
+        <div className="flex items-center gap-4 min-w-0">
           {job.company?.logoUrl ? (
             <img
               src={job.company.logoUrl}
               alt={job.company.name}
-              className="w-14 h-14 rounded border border-zinc-800 object-cover flex-shrink-0"
+              className="w-14 h-14 rounded-2xl border border-zinc-900 object-cover shrink-0 shadow-inner"
             />
           ) : (
-            <div className="w-14 h-14 bg-zinc-900 border border-zinc-800 rounded flex items-center justify-center flex-shrink-0">
+            <div className="w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center shrink-0">
               <Building2 size={24} className="text-zinc-600" />
             </div>
           )}
-          <div className="min-w-0">
-            <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest block mb-0.5">
-              {job.department || 'GENERAL ENGINEERING'}
-            </span>
-            <h1 className="text-base font-bold text-white uppercase tracking-tight truncate">
-              {job.title}
-            </h1>
-            <p className="text-xs text-zinc-400 font-medium uppercase mt-0.5">
-              {job.company?.name} <span className="text-zinc-600">//</span> {job.company?.industry || 'Core Systems'}
-            </p>
+          <div className="min-w-0 space-y-0.5">
+            <h1 className="text-lg font-bold text-white tracking-tight sm:text-xl truncate">{job.title}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400 font-medium">
+              <span className="text-zinc-200 hover:underline cursor-pointer">{job.company?.name}</span>
+              <span className="text-zinc-700">•</span>
+              <span className="text-zinc-500 uppercase tracking-wider text-[10px]">{job.company?.industry || 'Technology'}</span>
+            </div>
           </div>
         </div>
 
-        {/* Action Dispatcher State Engine */}
-        <div className="w-full md:w-auto flex-shrink-0">
+        {/* Embedded Actions */}
+        <div className="w-full md:w-auto shrink-0 pt-2 md:pt-0 border-t border-zinc-900 md:border-transparent">
           {hasApplied ? (
-            <div className="w-full md:w-auto px-6 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2">
-              <CheckCircle2 size={14} className="text-zinc-600" />
-              <span>Deployment Complete</span>
+            <div className="w-full md:w-auto px-5 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 shadow-inner">
+              <CheckCircle2 size={14} className="text-emerald-500" />
+              <span>Application Submitted</span>
             </div>
           ) : (
             <button
               onClick={handleDirectApply}
               disabled={isSubmitting}
-              className="w-full md:w-auto px-6 py-2.5 bg-white text-black rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-30"
+              className="w-full md:w-auto px-6 py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-zinc-200 transition-colors disabled:opacity-30 shadow-lg shadow-white/5"
             >
-              {isSubmitting ? 'Syncing...' : 'Deploy Direct Payload'}
+              {isSubmitting ? 'Processing...' : 'Apply with default resume'}
             </button>
           )}
         </div>
       </div>
 
-      {/* Target Parameters Framework Details Card */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-        <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5">
-          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mb-1">Execution Tier</p>
-          <p className="text-white text-xs font-bold uppercase">{job.jobType || 'N/A'}</p>
-        </div>
-        <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5">
-          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mb-1">Ecosystem Environment</p>
-          <p className="text-white text-xs font-bold uppercase">{job.locationType || 'N/A'}</p>
-        </div>
-        <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5">
-          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mb-1">Compensation Range</p>
-          <p className="text-white text-xs font-bold uppercase tracking-tight">{job.salaryRange || ' undisclosed'}</p>
-        </div>
-        <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-3.5">
-          <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-wider mb-1">Pipeline Timeline</p>
-          <p className="text-zinc-400 text-xs font-bold uppercase">{calculateDaysAgo(job.createdAt)}</p>
-        </div>
-      </div>
-
-      {/* Structural Allocation Specifications Meta Blocks */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-        {/* Core Description Main Parsing Output Terminal */}
+      {/* Split Details Section parameters */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Main descriptions layout body panel */}
         <div className="md:col-span-2 space-y-6">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-6">
-            <h3 className="text-white text-xs uppercase font-bold tracking-wider mb-4 border-b border-zinc-900 pb-2">
-              Operational Protocol Description
-            </h3>
-            <div className="text-zinc-400 text-xs leading-relaxed space-y-4 tracking-normal">
-              {(job?.description || '').split('\n\n').map((paragraph: string, pIdx: number) => {
-                const line = paragraph.trim();
-                if (!line) return null;
-
-                // Parse Headers (e.g., ### Role Overview)
-                if (line.startsWith('###')) {
-                  return (
-                    <h4 key={pIdx} className="text-white text-xs font-bold uppercase tracking-wide pt-3 pb-1">
-                      {line.replace(/^###\s*/, '')}
-                    </h4>
-                  );
-                }
-
-                // Parse Unordered Token Arrays Lists (e.g., * Line content text strings)
-                if (line.startsWith('*')) {
-                  const listItems = paragraph.split('\n').map((item) => item.trim().replace(/^\*\s*/, ''));
-                  return (
-                    <ul key={pIdx} className="space-y-2 my-2 list-none pl-1">
-                      {listItems.map((item, lIdx) => {
-                        const parts = item.split(/\*\*([\s\S]*?)\*\*/g);
-                        return (
-                          <li key={lIdx} className="flex items-start text-zinc-400">
-                            <span className="text-zinc-600 mr-2 flex-shrink-0">▪</span>
-                            <span>
-                              {parts.map((part, partIdx) => 
-                                partIdx % 2 === 1 ? <strong key={partIdx} className="text-white font-bold">{part}</strong> : part
-                              )}
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  );
-                }
-
-                // Default Paragraph Text Nodes handling inline bold structures
-                const inlineParts = line.split(/\*\*([\s\S]*?)\*\*/g);
-                return (
-                  <p key={pIdx} className="text-zinc-400 leading-relaxed">
-                    {inlineParts.map((part, partIdx) => 
-                      partIdx % 2 === 1 ? <strong key={partIdx} className="text-white font-bold">{part}</strong> : part
-                    )}
-                  </p>
-                );
-              })}
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-5 shadow-sm">
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider">Role Overview</h3>
+              <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line font-normal">
+                {job.description || 'No detailed layout specified for this career route parameter set.'}
+              </p>
             </div>
+
+            {job.requirements && (
+              <div className="space-y-2 pt-2 border-t border-zinc-900">
+                <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider">Target Profile Criteria</h3>
+                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line font-normal">
+                  {job.requirements}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Sidebar Complementary Context Arrays Metadata Parameters Column */}
+        {/* Sidebar Parameters details grid */}
         <div className="space-y-4">
-          {/* Positional Coordinate Matrix Card */}
-          <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 space-y-3.5">
-            <h4 className="text-white text-[11px] uppercase font-bold tracking-widest border-b border-zinc-900 pb-1.5">
-              System Parameters
-            </h4>
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-4 shadow-sm">
+            <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider border-b border-zinc-900 pb-2">Position Summary</h3>
             
-            <div className="space-y-2.5 text-xs">
-              <div>
-                <span className="text-[10px] text-zinc-600 block uppercase font-bold">Terminal Region</span>
-                <span className="text-zinc-300 font-medium uppercase">{job.location || 'Distributed Matrix'}</span>
+            <div className="space-y-3.5 text-xs text-zinc-400">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                  <Briefcase size={14} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold text-zinc-500">Employment Model</p>
+                  <p className="text-zinc-200 font-medium mt-0.5">{job.jobType}</p>
+                </div>
               </div>
-              
-              <div>
-                <span className="text-[10px] text-zinc-600 block uppercase font-bold">Experience Matrix Threshold</span>
-                <span className="text-zinc-300 font-medium uppercase">{job.experienceRequired || 'All Tiers Verified'}</span>
+
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                  <Globe size={14} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold text-zinc-500">Workplace Setting</p>
+                  <p className="text-zinc-200 font-medium mt-0.5">{job.locationType}</p>
+                </div>
+              </div>
+
+              {job.location && (
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                    <MapPin size={14} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-semibold text-zinc-500">Location</p>
+                    <p className="text-zinc-200 font-medium mt-0.5 truncate">{job.location}</p>
+                  </div>
+                </div>
+              )}
+
+              {job.salaryRange && (
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                    <DollarSign size={14} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold text-zinc-500">Compensation Offer</p>
+                    <p className="text-zinc-200 font-medium mt-0.5">{job.salaryRange}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                  <Clock size={14} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold text-zinc-500">Date Posted</p>
+                  <p className="text-zinc-200 font-medium mt-0.5">{calculateDaysAgo(job.createdAt)}</p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Required Skills Registry Tag Allocation Block */}
+          {/* Profile Core Skills Parameters tag index list */}
           {job.requiredSkills && job.requiredSkills.length > 0 && (
-            <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4">
-              <h4 className="text-white text-[11px] uppercase font-bold tracking-widest border-b border-zinc-900 pb-1.5 mb-3">
-                Required Prerequisite Stacks
-              </h4>
-              <div className="flex flex-wrap gap-1">
+            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-3 shadow-sm">
+              <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider">Required Core Capabilities</h3>
+              <div className="flex flex-wrap gap-1.5 pt-1">
                 {job.requiredSkills.map((skill: string, idx: number) => (
                   <span
                     key={idx}
-                    className="px-2 py-0.5 bg-black border border-zinc-900 text-zinc-400 rounded text-[10px] uppercase font-semibold"
+                    className="px-2.5 py-1 bg-zinc-900 border border-zinc-850 text-zinc-300 text-[11px] font-medium rounded-lg shadow-sm"
                   >
                     {skill}
                   </span>
@@ -297,6 +282,16 @@ export default function JobDetailsPage() {
               </div>
             </div>
           )}
+
+          {/* Verification Box Notice footer layout */}
+          <div className="bg-zinc-950/40 border border-zinc-900/60 rounded-2xl p-4 flex gap-3">
+            <ShieldCheck className="text-zinc-600 shrink-0 mt-0.5" size={15} />
+            <div className="text-[11px] text-zinc-500 font-medium leading-relaxed">
+              <p className="text-zinc-400 font-semibold mb-0.5">Verified Placement</p>
+              <p>This assignment framework is verified to handle applications directly into internal dashboard matching metrics pools.</p>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

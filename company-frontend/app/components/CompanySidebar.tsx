@@ -1,88 +1,172 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { LayoutDashboard, Briefcase, Users, Video } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  FileText, 
+  Layers, 
+  Briefcase, 
+  Video, 
+  Users, 
+  ChevronLeft, 
+  X,
+  Building2 
+} from 'lucide-react';
 
-export default function CompanySidebar({ company }: { company: any }) {
+interface SidebarProps {
+  company: any;
+  isCollapsed: boolean;
+  setIsCollapsed: (v: boolean) => void;
+  isMobileOpen: boolean;
+  setIsMobileOpen: (v: boolean) => void;
+}
+
+export default function CompanySidebar({ 
+  company, 
+  isCollapsed, 
+  setIsCollapsed, 
+  isMobileOpen, 
+  setIsMobileOpen 
+}: SidebarProps) {
   const pathname = usePathname();
-  const { isAdmin, isHR, isInterviewer } = useAuth();
+  const { isAdmin, isHR, isInterviewer, loading } = useAuth(); // Destructure loading if your context provides it
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Dynamic navigational array built with user visibility conditions
+  // Sync mount phase to prevent layout flashes on refresh
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const navigation = [
-    { 
-      name: 'Dashboard', 
-      href: '/dashboard', 
-      icon: LayoutDashboard, 
-      visible: true
-    },
-    { 
-      name: 'Offers', 
-      href: '/dashboard/offers', 
-      icon: LayoutDashboard, 
-      visible: true
-    },
-    { 
-      name: 'edit ', 
-      href: '/dashboard/offer-templates', 
-      icon: LayoutDashboard, 
-      visible: true
-    },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, visible: true },
+    { name: 'Offers', href: '/dashboard/offers', icon: FileText, visible: true },
+    { name: 'Templates', href: '/dashboard/offer-templates', icon: Layers, visible: true },
     { 
       name: 'Job Postings', 
       href: '/dashboard/jobs', 
       icon: Briefcase, 
-      visible: isAdmin || isHR 
+      visible: isMounted && !loading && (isAdmin || isHR) 
     },
     { 
       name: 'Live Interviews', 
       href: '/dashboard/interviews', 
       icon: Video, 
-      visible: isAdmin || isHR || isInterviewer 
+      visible: isMounted && !loading && (isAdmin || isHR || isInterviewer) 
     },
     { 
-      name: 'Team', 
+      name: 'Team Workspace', 
       href: '/dashboard/team', 
       icon: Users, 
-      visible: isAdmin || isHR // Restricted workspace controls
+      visible: isMounted && !loading && (isAdmin || isHR) 
     }
   ];
 
-  return (
-    <div className="w-64 h-screen bg-zinc-950 border-r border-zinc-900 flex flex-col text-white">
-      <div className="p-6 border-b border-zinc-900">
-        <h2 className="font-semibold text-sm tracking-wide text-white truncate uppercase font-mono">
-          {company.name}
-        </h2>
-        <p className="text-[10px] text-zinc-500 truncate mt-0.5 font-mono">{company.email}</p>
-      </div>
-      
-      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navigation
-          .filter((item) => item.visible)
-          .map((item) => {
-            // Check matching configurations cleanly across deep paths
-            const isActive = item.href === '/dashboard' 
-              ? pathname === '/dashboard' 
-              : pathname.startsWith(item.href);
+  const filteredNav = navigation.filter(item => item.visible);
 
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-medium font-mono transition-all ${
-                  isActive 
-                    ? 'bg-zinc-900 text-white border border-zinc-800' 
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900/40'
-                }`}
-              >
-                <item.icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-zinc-500'}`} />
-                {item.name}
-              </Link>
-            );
-          })}
-      </nav>
-    </div>
+  const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
+    <>
+      {filteredNav.map((item) => {
+        const isActive = item.href === '/dashboard' 
+          ? pathname === '/dashboard' 
+          : pathname.startsWith(item.href);
+
+        return (
+          <Link
+            key={item.name}
+            href={item.href}
+            onClick={onClickItem}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all group duration-200 ${
+              isActive 
+                ? 'bg-zinc-900 border border-zinc-800 text-white shadow-md shadow-black/40' 
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/30 border border-transparent'
+            }`}
+          >
+            <item.icon className={`h-4 w-4 shrink-0 transition-colors ${
+              isActive ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'
+            }`} />
+            <span className={`transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
+              {item.name}
+            </span>
+          </Link>
+        );
+      })}
+    </>
+  );
+
+  return (
+    <>
+      {/* ─── DESKTOP SIDEBAR ────────────────────────────────── */}
+      <aside 
+        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-zinc-900/80 transition-all duration-300 relative z-30 select-none ${
+          isCollapsed ? 'w-[70px]' : 'w-64'
+        }`}
+      >
+        {/* Brand Space */}
+        <div className="p-4 border-b border-zinc-900/80 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
+              <Building2 className="w-4 h-4 text-zinc-300" />
+            </div>
+            {!isCollapsed && company && (
+              <div className="min-w-0 transition-opacity duration-200">
+                <h2 className="font-semibold text-xs tracking-wide text-zinc-100 truncate uppercase">
+                  {company.name}
+                </h2>
+                <p className="text-[10px] text-zinc-500 truncate mt-0.5">{company.email}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Action Toggle Pin */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="absolute top-5 -right-3 p-1.5 rounded-full border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors shadow-xl"
+        >
+          <ChevronLeft className={`w-3 h-3 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
+        </button>
+
+        {/* Navigation Layer */}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar mt-2">
+          <NavLinks />
+        </nav>
+      </aside>
+
+      {/* ─── MOBILE DRAWER SHEET ───────────────────────────── */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm md:hidden animate-fade-in"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+      
+      <aside 
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-zinc-950 border-r border-zinc-900 flex flex-col transform transition-transform duration-300 md:hidden ${
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="p-5 border-b border-zinc-900 h-[73px] flex items-center justify-between">
+          {company && (
+            <div className="min-w-0">
+              <h2 className="font-semibold text-xs tracking-wide text-zinc-200 truncate uppercase">{company.name}</h2>
+              <p className="text-[10px] text-zinc-500 truncate">{company.email}</p>
+            </div>
+          )}
+          <button 
+            onClick={() => setIsMobileOpen(false)}
+            className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <NavLinks onClickItem={() => setIsMobileOpen(false)} />
+        </nav>
+      </aside>
+    </>
   );
 }

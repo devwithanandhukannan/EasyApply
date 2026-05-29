@@ -19,6 +19,7 @@ import {
 
     // Candidate
     respondToOffer,
+    respondToNegotiation,
 } from '../controllers/offer.controller.ts';
 
 const router = express.Router();
@@ -46,5 +47,6 @@ router.get('/:id/download', downloadOfferPDF);
 // ─── TRACKING & RESPONSE ───────────────────────────────────────────
 router.get('/:id/track', trackOfferEmail);
 router.post('/:id/respond', respondToOffer);
+router.post('/:id/respond-negotiation', respondToNegotiation);
 
 export default router;

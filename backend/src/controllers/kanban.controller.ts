@@ -63,8 +63,6 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
       res.status(400).json({ success: false, message: "Missing required core coordination indices." });
       return;
     }
-
-    // ✅ Get current status and user info before transaction
     const currentApp = await prisma.application.findUnique({
       where: { id: applicationId },
       select: { status: true }

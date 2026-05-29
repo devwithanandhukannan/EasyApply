@@ -38,6 +38,7 @@ import {
 } from '../controllers/interview.controller.ts';
 import { getApplicationsTracker, updateApplicationNotes, withdrawApplicationTracker } from '../controllers/applicationTracker.controller.ts';
 import offerRoutes from './offer.routes.ts';
+import { getJobSeekerDashboard, getApplicationInsights } from '../controllers/jobseekerDashboard.controller.ts';
 
 const router = express.Router();
 
@@ -116,5 +117,9 @@ router.patch('/applications/:id/notes', updateApplicationNotes);
 router.post('/applications/:id/withdraw', withdrawApplicationTracker);
 
 router.use('/offers', offerRoutes);
+
+router.get('/dashboard', getJobSeekerDashboard);
+router.get('/insights', getApplicationInsights);
+
 
 export default router;

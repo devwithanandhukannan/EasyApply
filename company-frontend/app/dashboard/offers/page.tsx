@@ -298,6 +298,7 @@ export default function OffersPage() {
               )}
 
               {/* Actions */}
+{/* Actions */}
 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-900/50">
   
   {/* DRAFT STATUS - Edit + Sign */}
@@ -324,8 +325,19 @@ export default function OffersPage() {
     </>
   )}
 
-  {/* PENDING STATUS - Send to Candidate */}
-  {offer.status === 'pending' && (
+  {/* ✅ NEW: PENDING STATUS WITHOUT SIGNATURE - Show Sign Button */}
+  {offer.status === 'pending' && !offer.companySignature && (
+    <button
+      onClick={() => handleSign(offer.id)}
+      className="px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
+    >
+      <Signature className="w-3.5 h-3.5" />
+      Sign Updated Offer
+    </button>
+  )}
+
+  {/* PENDING STATUS WITH SIGNATURE - Send to Candidate */}
+  {offer.status === 'pending' && offer.companySignature && (
     <button
       onClick={() => handleSend(offer.id)}
       className="px-3 py-1.5 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"

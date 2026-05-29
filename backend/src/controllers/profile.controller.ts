@@ -5,10 +5,6 @@ interface AuthRequest extends Request {
   user?: { userId: string; mobileNumber: string; role: string };
 }
 
-/**
- * Calculate the holistic profile completion percentage.
- * Total points yield a score bounded exactly between 0 and 100.
- */
 const calculateCompletionScore = (profile: any): number => {
   let score = 0;
 
@@ -37,12 +33,10 @@ const calculateCompletionScore = (profile: any): number => {
   return Math.min(score, 100);
 };
 
-// Helper: convert buffer to base64
 const bufferToBase64 = (buffer: Buffer, mimeType: string): string => {
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
 };
 
-// GET /api/jobseeker/profile
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -156,7 +150,6 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// PUT /api/jobseeker/profile
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   console.log('Received updateProfile request with body:', req.body);
   try {

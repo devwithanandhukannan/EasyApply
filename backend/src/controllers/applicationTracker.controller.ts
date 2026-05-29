@@ -6,7 +6,6 @@ interface AuthRequest extends Request {
   user?: { userId: string; mobileNumber: string; globalRoles: number; email?: string };
 }
 
-// 1. GET /api/jobseeker/applications/tracker
 export const getApplicationsTracker = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -142,8 +141,6 @@ export const getApplicationsTracker = async (req: AuthRequest, res: Response) =>
     return res.status(500).json({ success: false, error: 'Internal system tracking service failure' });
   }
 };
-
-// 2. PATCH /api/jobseeker/applications/:id/notes
 export const updateApplicationNotes = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -176,9 +173,6 @@ export const updateApplicationNotes = async (req: AuthRequest, res: Response) =>
     return res.status(500).json({ success: false, error: 'Failed to update personal application metadata structure' });
   }
 };
-
-
-// 3. POST /api/jobseeker/applications/:id/withdraw
 export const withdrawApplicationTracker = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;

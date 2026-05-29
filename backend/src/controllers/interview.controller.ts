@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 import { prisma } from '../utils/prisma.ts';
 import { ApplicationStatus, InterviewStatus } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
+import { ROLES } from '../constants/roles.ts';
+import { PermissionHelper } from '../utils/permissions.ts';
 
 const getProfileId = async (userId: string): Promise<string | null> => {
   const profile = await prisma.jobSeekerProfile.findUnique({
@@ -10,7 +12,132 @@ const getProfileId = async (userId: string): Promise<string | null> => {
   });
   return profile ? profile.id : null;
 };
+export const getApplicationDetailById = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const companyId = (req as any).company?.companyId;
 
+    if (!companyId) {
+      res.status(401).json({ success: false, message: 'Unauthorized access.' });
+      return;
+    }
+
+    const application = await prisma.application.findFirst({
+      where: {
+        id,
+        jobPosting: { companyId }
+      },
+      include: {
+        jobSeekerProfile: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            location: true,
+            profilePhotoUrl: true,
+            linkedin: true,
+            github: true,
+            portfolio: true,
+            bio: true,
+            availabilityStatus: true,
+          }
+        },
+        resume: {
+          select: {
+            id: true,
+            name: true,
+            filePath: true,
+            atsScore: true,
+          }
+        },
+        jobPosting: {
+          select: {
+            id: true,
+            title: true,
+            department: true,
+            jobType: true,
+            locationType: true,
+            salaryRange: true,
+            requiredSkills: true,
+          }
+        },
+        interviews: {
+          include: {
+            feedbacks: {
+              include: {
+                interviewer: {
+                  select: {
+                    id: true,
+                    jobSeekerProfile: {
+                      select: { 
+                        fullName: true,
+                        email: true 
+                      }
+                    }
+                  }
+                }
+              },
+              orderBy: { createdAt: 'desc' }
+            },
+            batch: {
+              include: {
+                interviewers: {
+                  include: {
+                    teamMember: {
+                      include: {
+                        user: {
+                          select: {
+                            id: true,
+                            jobSeekerProfile: {
+                              select: { 
+                                fullName: true,
+                                email: true
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          orderBy: { scheduledTime: 'desc' }
+        },
+        statusHistory: {
+          orderBy: { createdAt: 'desc' }
+        },
+        activities: {
+          orderBy: { createdAt: 'desc' },
+          take: 50
+        },
+        offerLetters: {
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    if (!application) {
+      res.status(404).json({ success: false, message: 'Application not found.' });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: application
+    });
+
+  } catch (error: any) {
+    console.error('getApplicationDetailById error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch application details.',
+      error: error.message 
+    });
+  }
+};
 export const requestReschedule = async (req: AuthRequest, res: Response) => {
     try {
       console.log('Reachedddd');
@@ -48,7 +175,6 @@ export const requestReschedule = async (req: AuthRequest, res: Response) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 };
-// ─── 1. BULK GENERATION ENGINE (COMPANY WORKSPACE) ──────────────────────
 export const scheduleBulkInterviews = async (req: Request, res: Response): Promise<void> => {
   try {
     const { 
@@ -222,8 +348,6 @@ export const scheduleBulkInterviews = async (req: Request, res: Response): Promi
     });
   }
 };
-
-// ─── 2. PIPELINE INTERVIEW QUEUE LISTER (COMPANY DASHBOARD) ──────────────
 export const getCompanyInterviewsList = async (req: Request, res: Response): Promise<void> => {
   try {
     const companyId = (req as any).company?.companyId;
@@ -341,8 +465,6 @@ export const getCompanyInterviewsList = async (req: Request, res: Response): Pro
     res.status(500).json({ success: false, message: "Internal runtime server pipeline evaluation failure.", error: error.message });
   }
 };
-
-// ─── 3. EXTRACT TARGET ALLOCATIONS (JOB SEEKER PIPELINE Hub) ────────────
 export const getMyScheduledInterviews = async (req: Request, res: Response) => {
   try { 
     const userId = req.user!.userId;
@@ -391,8 +513,6 @@ export const getMyScheduledInterviews = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Failed to extract active pipeline slots.' });
   }
 };
-
-// ─── 4. CONFIRM SCHEDULING INTERFACE ACTION (JOB SEEKER METHOD) ─────────
 export const confirmInterviewPresence = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -412,8 +532,6 @@ export const confirmInterviewPresence = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Failed to update schedule allocation status.' });
   }
 };
-
-// ─── 5. DISPATCH RESCHEDULE REQUEST PARAMETERS (JOB SEEKER METHOD) ──────
 export const requestInterviewReschedule = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -448,8 +566,6 @@ export const requestInterviewReschedule = async (req: Request, res: Response) =>
     return res.status(500).json({ success: false, message: 'Failed to submit reschedule request.' });
   }
 };
-
-// ─── 6. RESPOND TO CANDIDATE RESCHEDULE PROPOSAL (COMPANY METHOD) ───────
 export const respondToReschedule = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params; 
@@ -498,8 +614,6 @@ export const respondToReschedule = async (req: Request, res: Response): Promise<
     res.status(500).json({ success: false, message: "Failed adjusting profile scheduling requirements workflow records." });
   }
 };
-
-// ─── 7. FORCE UPDATE INTERVIEW STATUS MANUALLY (COMPANY METHOD) ─────────
 export const updateInterviewStatus = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -516,16 +630,22 @@ export const updateInterviewStatus = async (req: Request, res: Response): Promis
     res.status(500).json({ success: false, message: "Failed assigning target inline manual pipeline block modifications." });
   }
 };
-
-// ─── 8. SUBMIT INTERVIEW EVALUATION FEEDBACK (COMPANY METHOD) ─────────────
 export const addInterviewFeedback = async (req: Request, res: Response): Promise<void> => {
   try {
     const { interviewId } = req.params;
     const { technicalRating, communicationRating, problemSolvingRating, verdict, notes } = req.body;
     const userId = (req as any).user?.id || (req as any).user?.userId;
+    const companyRoles = (req as any).company?.companyRoles ?? 0;
 
     if (!userId) {
-      res.status(401).json({ success: false, message: "Missing authorized authentication token state." });
+      res.status(401).json({ success: false, message: 'Missing authorized authentication token.' });
+      return;
+    }
+
+    // Block VIEWER from submitting feedback
+    if (PermissionHelper.hasRole(companyRoles, ROLES.COMPANY_VIEWER) &&
+        !PermissionHelper.hasAnyRole(companyRoles, [ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER])) {
+      res.status(403).json({ success: false, message: 'Viewers cannot submit interview feedback.' });
       return;
     }
 
@@ -535,77 +655,55 @@ export const addInterviewFeedback = async (req: Request, res: Response): Promise
     });
 
     if (!interview) {
-      res.status(404).json({ success: false, message: "Target interview record resource could not be found." });
+      res.status(404).json({ success: false, message: 'Interview not found.' });
       return;
     }
 
     const verifiedAssignment = await prisma.interviewInterviewer.findFirst({
-      where: {
-        interviewId: interviewId,
-        teamMember: { userId: userId }
-      }
+      where: { interviewId, teamMember: { userId } }
     });
 
     if (!verifiedAssignment) {
-      res.status(403).json({ 
-        success: false, 
-        message: "Access Denied: You are not registered as an assigned interviewer for this session execution pool." 
-      });
+      res.status(403).json({ success: false, message: 'You are not assigned to this interview.' });
       return;
     }
 
     const existingFeedback = await prisma.interviewFeedback.findFirst({
-      where: {
-        interviewId,
-        interviewerId: userId
-      }
+      where: { interviewId, interviewerId: userId }
     });
 
     if (existingFeedback) {
-      res.status(409).json({ success: false, message: "Feedback metric payload already synchronized for this user node." });
+      res.status(409).json({ success: false, message: 'Feedback already submitted. Use update endpoint.' });
       return;
     }
 
-    const feedbackResult = await prisma.$transaction(async (tx) => {
-      const feedback = await tx.interviewFeedback.create({
-        data: {
-          interviewId,
-          interviewerId: userId,
-          technicalRating: parseInt(technicalRating, 10),
-          communicationRating: parseInt(communicationRating, 10),
-          problemSolvingRating: parseInt(problemSolvingRating, 10),
-          verdict, 
-          notes: notes || ''
-        }
-      });
-
-      if (interview.status !== 'completed') {
-        await tx.interview.update({
-          where: { id: interviewId },
-          data: { status: 'completed' }
-        });
+    // Create feedback
+    await prisma.interviewFeedback.create({
+      data: {
+        interviewId,
+        interviewerId: userId,
+        technicalRating: parseInt(technicalRating, 10),
+        communicationRating: parseInt(communicationRating, 10),
+        problemSolvingRating: parseInt(problemSolvingRating, 10),
+        verdict,
+        notes: notes || ''
       }
-
-      return feedback;
     });
 
-    res.status(201).json({
-      success: true,
-      message: "Interview evaluation performance array synchronized successfully.",
-      data: feedbackResult
-    });
+    // Recalculate pipeline state after this new feedback
+    await recalculateInterviewPipeline(interviewId, interview.applicationId, userId);
 
+    res.status(201).json({ success: true, message: 'Feedback submitted successfully.' });
   } catch (error: any) {
-    console.error("Critical feedback commitment failure:", error);
-    res.status(500).json({ success: false, message: "Internal feedback evaluation loop failure.", error: error.message });
+    console.error('addInterviewFeedback error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
-
-// ─── 9. QUERY SUBMITTED FEEDBACK RECORD RECOGNITION (DASHBOARD HUB) ──────
 export const getInterviewFeedbacksList = async (req: Request, res: Response): Promise<void> => {
   try {
     const { interviewId } = req.params;
-
+    console.log(interviewId);
+    
     const feedbacks = await prisma.interviewFeedback.findMany({
       where: { interviewId },
       include: {
@@ -630,16 +728,22 @@ export const getInterviewFeedbacksList = async (req: Request, res: Response): Pr
     res.status(500).json({ success: false, message: "Failed extracting targeted feedback elements." });
   }
 };
-
-// ─── 10. QUERY UPDATE SUBMITTED FEEDBACK RECORD ──────────────────────────
-export const upsertInterviewFeedback = async (req: Request, res: Response): Promise<void> => {
+export const updateInterviewFeedback = async (req: Request, res: Response): Promise<void> => {
   try {
     const { interviewId } = req.params;
     const { technicalRating, communicationRating, problemSolvingRating, verdict, notes } = req.body;
     const userId = (req as any).user?.id || (req as any).user?.userId;
+    const companyRoles = (req as any).company?.companyRoles ?? 0;
 
     if (!userId) {
-      res.status(401).json({ success: false, message: "Unauthorized credentials context." });
+      res.status(401).json({ success: false, message: 'Missing authorized authentication token.' });
+      return;
+    }
+
+    // Block VIEWER from executing updates
+    if (PermissionHelper.hasRole(companyRoles, ROLES.COMPANY_VIEWER) &&
+        !PermissionHelper.hasAnyRole(companyRoles, [ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER])) {
+      res.status(403).json({ success: false, message: 'Viewers cannot modify interview feedback.' });
       return;
     }
 
@@ -649,22 +753,80 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
     });
 
     if (!interview) {
-      res.status(404).json({ success: false, message: "Interview target not identified." });
+      res.status(404).json({ success: false, message: 'Interview tracking context not found.' });
       return;
     }
 
+    // Locate the explicit existing feedback record for this unique interviewer
     const existingFeedback = await prisma.interviewFeedback.findFirst({
-      where: {
-        interviewId,
-        interviewerId: userId
+      where: { interviewId, interviewerId: userId }
+    });
+
+    if (!existingFeedback) {
+      res.status(404).json({ 
+        success: false, 
+        message: 'No existing feedback track found to update. Submit initial feedback first.' 
+      });
+      return;
+    }
+
+    // Update operational parameters
+    await prisma.interviewFeedback.update({
+      where: { id: existingFeedback.id },
+      data: {
+        technicalRating: technicalRating !== undefined ? parseInt(technicalRating, 10) : undefined,
+        communicationRating: communicationRating !== undefined ? parseInt(communicationRating, 10) : undefined,
+        problemSolvingRating: problemSolvingRating !== undefined ? parseInt(problemSolvingRating, 10) : undefined,
+        verdict: verdict || undefined,
+        notes: notes !== undefined ? notes : undefined
       }
     });
 
-    let feedback;
+    // Execute state sync engine via the pipeline calculator
+    await recalculateInterviewPipeline(interviewId, interview.applicationId, userId);
 
-    if (existingFeedback) {
-      feedback = await prisma.interviewFeedback.update({
-        where: { id: existingFeedback.id },
+    res.status(200).json({ success: true, message: 'Interview feedback records updated successfully.' });
+  } catch (error: any) {
+    console.error('updateInterviewFeedback error:', error);
+    res.status(500).json({ success: false, message: 'Internal server failure updating evaluation metrics.', error: error.message });
+  }
+};
+export const upsertInterviewFeedback = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { interviewId } = req.params;
+    const { technicalRating, communicationRating, problemSolvingRating, verdict, notes } = req.body;
+    const userId = (req as any).user?.id || (req as any).user?.userId;
+    const companyRoles = (req as any).company?.companyRoles ?? 0;
+
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized.' });
+      return;
+    }
+
+    // Block VIEWER
+    if (PermissionHelper.hasRole(companyRoles, ROLES.COMPANY_VIEWER) &&
+        !PermissionHelper.hasAnyRole(companyRoles, [ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER])) {
+      res.status(403).json({ success: false, message: 'Viewers cannot submit interview feedback.' });
+      return;
+    }
+
+    const interview = await prisma.interview.findUnique({
+      where: { id: interviewId },
+      select: { applicationId: true }
+    });
+
+    if (!interview) {
+      res.status(404).json({ success: false, message: 'Interview not found.' });
+      return;
+    }
+
+    const existing = await prisma.interviewFeedback.findFirst({
+      where: { interviewId, interviewerId: userId }
+    });
+
+    if (existing) {
+      await prisma.interviewFeedback.update({
+        where: { id: existing.id },
         data: {
           technicalRating: Number(technicalRating),
           communicationRating: Number(communicationRating),
@@ -674,7 +836,7 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
         }
       });
     } else {
-      feedback = await prisma.interviewFeedback.create({
+      await prisma.interviewFeedback.create({
         data: {
           interviewId,
           interviewerId: userId,
@@ -687,69 +849,189 @@ export const upsertInterviewFeedback = async (req: Request, res: Response): Prom
       });
     }
 
-    // Automatically synchronize tracking changes back to seeker's historical audit timeline log
-    let timelineLogNote = `Interviewer updated evaluation review metrics. Performance Verdict: ${verdict}.`;
-    
-    if (verdict === 'reject') {
-  const currentApp = await prisma.application.findUnique({
-    where: { id: interview.applicationId },
-    select: { status: true }
-  });
+    await recalculateInterviewPipeline(interviewId, interview.applicationId, userId);
 
-  await prisma.$transaction([
-    prisma.interview.update({
-      where: { id: interviewId },
-      data: { status: 'cancelled' }
-    }),
-    prisma.application.update({
-      where: { id: interview.applicationId },
-      data: { status: ApplicationStatus.rejected }
-    }),
-    prisma.applicationHistory.create({
-      data: {
-        applicationId: interview.applicationId,
-        fromStatus: currentApp?.status || null,
-        toStatus: ApplicationStatus.rejected,
-        changedBy: userId,
-        changedByType: 'user',
-        notes: 'Application moved to rejected stage following panel interview performance evaluations.'
+    res.status(200).json({ success: true, message: 'Feedback synchronized.' });
+  } catch (error: any) {
+    console.error('upsertInterviewFeedback error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+export const getInterviewFeedbackByCandidate = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, applicationId } = req.params;
+
+    if (!userId || !applicationId) {
+      res.status(400).json({ 
+        success: false, 
+        message: 'Explicit parameters for both target candidate userId and applicationId tracking are required.' 
+      });
+      return;
+    }
+
+    // Extract all structured feedback objects belonging to an interview linked directly to the application and user
+    const feedbacks = await prisma.interviewFeedback.findMany({
+      where: {
+        interview: {
+          applicationId: applicationId,
+          application: {
+            jobSeekerProfile: {
+              userId: userId
+            }
+          }
+        }
+      },
+      include: {
+        interviewer: {
+          select: {
+            id: true,
+            jobSeekerProfile: {
+              select: { fullName: true }
+            }
+          }
+        },
+        interview: {
+          select: {
+            id: true,
+            status: true,
+            scheduledTime: true,
+            format: true
+          }
+        }
+      },
+      orderBy: {
+        createdAt: 'desc'
       }
-    })
-  ]);
-} else if (verdict === 'shortlist' || verdict === 'next_round') {
-  const currentApp = await prisma.application.findUnique({
-    where: { id: interview.applicationId },
-    select: { status: true }
-  });
-
-  const newStatus = verdict === 'shortlist' ? ApplicationStatus.screened : ApplicationStatus.technical_round;
-
-  await prisma.$transaction([
-    prisma.interview.update({
-      where: { id: interviewId },
-      data: { status: 'completed' }
-    }),
-    prisma.applicationHistory.create({
-      data: {
-        applicationId: interview.applicationId,
-        fromStatus: currentApp?.status || null,
-        toStatus: newStatus,
-        changedBy: userId,
-        changedByType: 'user',
-        notes: timelineLogNote
-      }
-    })
-  ]);
-}
+    });
 
     res.status(200).json({
       success: true,
-      message: "Feedback payload synchronized cleanly to repository ledger.",
-      data: feedback
+      count: feedbacks.length,
+      data: feedbacks
     });
-
   } catch (error: any) {
-    console.error("Critical breakdown tracking feedback payload:", error);
-    res.status(500).json({ success: false, message: "Internal update failure.", error: error.message });
+    console.error('getInterviewFeedbackByCandidate execution error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed compiling structural feedback matrix using the candidate criteria specifications.', 
+      error: error.message 
+    });
   }
 };
+async function recalculateInterviewPipeline(
+  interviewId: string,
+  applicationId: string,
+  changedByUserId: string
+): Promise<void> {
+
+  // 1. Get all assigned interviewers for this interview
+  const assignedInterviewers = await prisma.interviewInterviewer.findMany({
+    where: { interviewId },
+    select: { teamMember: { select: { userId: true } } }
+  });
+
+  const assignedUserIds = assignedInterviewers.map(a => a.teamMember.userId);
+  const totalAssigned = assignedUserIds.length;
+
+  if (totalAssigned === 0) return;
+
+  // 2. Get all feedback submitted so far
+  const allFeedbacks = await prisma.interviewFeedback.findMany({
+    where: { interviewId },
+    select: { interviewerId: true, verdict: true }
+  });
+
+  const submittedCount = allFeedbacks.length;
+  const verdicts = allFeedbacks.map(f => f.verdict);
+
+  // 3. Determine pipeline state
+  const hasAnyRejection = verdicts.some(v => v === 'reject');
+  const allSubmitted = submittedCount >= totalAssigned;
+  const allAccepted = allSubmitted && verdicts.every(v => v === 'shortlist' || v === 'next_round');
+
+  const currentApp = await prisma.application.findUnique({
+    where: { id: applicationId },
+    select: { status: true }
+  });
+
+  const currentInterview = await prisma.interview.findUnique({
+    where: { id: interviewId },
+    select: { status: true }
+  });
+
+  // 4. ANY rejection → immediately reject candidate
+  if (hasAnyRejection) {
+    // Only act if not already rejected
+    if (currentInterview?.status !== 'cancelled') {
+      await prisma.$transaction([
+        prisma.interview.update({
+          where: { id: interviewId },
+          data: { status: 'cancelled' }
+        }),
+        prisma.application.update({
+          where: { id: applicationId },
+          data: { status: ApplicationStatus.rejected, lastActivityAt: new Date() }
+        }),
+        prisma.applicationHistory.create({
+          data: {
+            applicationId,
+            fromStatus: currentApp?.status ?? null,
+            toStatus: ApplicationStatus.rejected,
+            changedBy: changedByUserId,
+            changedByType: 'user',
+            notes: `Candidate rejected after panel review. ${submittedCount}/${totalAssigned} interviewers responded. Rejection verdict submitted.`
+          }
+        })
+      ]);
+    }
+    return;
+  }
+
+  // 5. Partial responses (not everyone submitted yet, no rejections) → in_progress
+  if (!allSubmitted) {
+    if (currentInterview?.status !== 'in_progress') {
+      await prisma.interview.update({
+        where: { id: interviewId },
+        data: { status: 'in_progress' }
+      });
+    }
+    return;
+  }
+
+  // 6. ALL submitted + ALL accepted → advance candidate
+  if (allAccepted) {
+    // Determine next stage: if current is technical_round → hr_round, else → screened
+    const currentStatus = currentApp?.status;
+    let nextStatus: ApplicationStatus;
+
+    if (currentStatus === ApplicationStatus.technical_round) {
+      nextStatus = ApplicationStatus.hr_round;
+    } else if (currentStatus === ApplicationStatus.hr_round) {
+      // HR round passed — ready for offer (stays hr_round, company manually sends offer)
+      nextStatus = ApplicationStatus.hr_round;
+    } else {
+      nextStatus = ApplicationStatus.screened;
+    }
+
+    await prisma.$transaction([
+      prisma.interview.update({
+        where: { id: interviewId },
+        data: { status: 'completed' }
+      }),
+      prisma.application.update({
+        where: { id: applicationId },
+        data: { status: nextStatus, lastActivityAt: new Date() }
+      }),
+      prisma.applicationHistory.create({
+        data: {
+          applicationId,
+          fromStatus: currentApp?.status ?? null,
+          toStatus: nextStatus,
+          changedBy: changedByUserId,
+          changedByType: 'user',
+          notes: `All ${totalAssigned} interviewers accepted. Interview completed. Candidate advanced to ${nextStatus}.`
+        }
+      })
+    ]);
+  }
+}

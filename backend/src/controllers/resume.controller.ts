@@ -26,7 +26,6 @@ const pushVersion = (contentData: any, label?: string) => {
   contentData.versions = versions;
 };
 
-// POST /api/jobseeker/resumes/upload
 export const uploadAndAnalyze = async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -91,7 +90,6 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
   }
 };
 
-// POST /api/jobseeker/resumes/generate
 export const generateCV = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -143,7 +141,6 @@ export const generateCV = async (req: Request, res: Response) => {
   }
 };
 
-// POST /api/jobseeker/resumes/:id/convert
 export const convertResumeToHTML = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -168,7 +165,6 @@ export const convertResumeToHTML = async (req: Request, res: Response) => {
   }
 };
 
-// POST /api/jobseeker/resumes/:id/optimize
 export const optimizeResume = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -210,7 +206,6 @@ export const optimizeResume = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/jobseeker/resumes/:id/keywords
 export const getKeywordSuggestions = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -231,7 +226,6 @@ export const getKeywordSuggestions = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/jobseeker/resumes
 export const getAllResumes = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -252,7 +246,6 @@ export const getAllResumes = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/jobseeker/resumes/:id
 export const getResumeById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -268,7 +261,6 @@ export const getResumeById = async (req: Request, res: Response) => {
   }
 };
 
-// PUT /api/jobseeker/resumes/:id
 export const updateResume = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -304,7 +296,6 @@ export const updateResume = async (req: Request, res: Response) => {
   }
 };
 
-// PATCH /api/jobseeker/resumes/:id/restore/:versionId
 export const restoreVersion = async (req: Request, res: Response) => {
   try {
     const { id, versionId } = req.params;
@@ -329,7 +320,6 @@ export const restoreVersion = async (req: Request, res: Response) => {
   }
 };
 
-// DELETE /api/jobseeker/resumes/:id
 export const deleteResume = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

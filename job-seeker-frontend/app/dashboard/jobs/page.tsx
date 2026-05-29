@@ -13,7 +13,9 @@ import {
   Upload,
   FileText,
   X,
-  AlertCircle
+  AlertCircle,
+  Globe,
+  Layers
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
@@ -62,7 +64,7 @@ export default function JobsPage() {
         setTotalPages(response.data.pagination.totalPages);
       }
     } catch (error) {
-      console.error('Error fetching jobs:', error);
+      console.error('Error fetching positions:', error);
     } finally {
       setIsLoading(false);
     }
@@ -107,106 +109,99 @@ export default function JobsPage() {
     setSelectedJob(null);
   };
 
-  const getLocationTypeIcon = (type: string) => {
-    if (type === 'Remote') return '🌐';
-    if (type === 'Hybrid') return '🏢';
-    return '📍';
-  };
-
   const calculateDaysAgo = (date: string) => {
     const diff = Date.now() - new Date(date).getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'TODAY';
-    if (days === 1) return 'YESTERDAY';
-    return `${days} DAYS AGO`;
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return `${days} days ago`;
   };
 
   return (
-    <div className="space-y-5 font-mono text-zinc-300 max-w-7xl mx-auto p-4 md:p-0">
-      {/* Page Title Context */}
-      <div>
-        <h1 className="text-xl font-bold text-white uppercase tracking-wider">Browse Index Metrics</h1>
-        <p className="text-zinc-600 text-[11px] uppercase tracking-tight mt-0.5">
-          {filteredJobs.length} Node Pipeline Position{filteredJobs.length !== 1 ? 's' : ''} Online
+    <div className="space-y-6 text-zinc-300 max-w-7xl mx-auto p-2 md:p-0 font-sans antialiased">
+      {/* Header Context */}
+      <div className="border-b border-zinc-900 pb-5">
+        <h1 className="text-xl font-bold text-white tracking-tight sm:text-2xl">Explore Vacancies</h1>
+        <p className="text-zinc-500 text-xs sm:text-sm mt-0.5 font-medium">
+          {filteredJobs.length} matching position{filteredJobs.length !== 1 ? 's' : ''} available in the directory
         </p>
       </div>
 
-      {/* Query Search Matrix Filters Panel */}
-      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4">
+      {/* Filter Options Panel */}
+      <div className="bg-zinc-950 border border-zinc-900/80 rounded-xl p-4 shadow-xl shadow-black/20">
         <div className="space-y-3">
-          {/* Input Interface */}
+          {/* Input Search Field */}
           <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={15} />
             <input
               type="text"
-              placeholder="QUERY JOB TITLE, ENTERPRISE ENTITY, OR ORG DEPT..."
+              placeholder="Search by title, corporate division, or company name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-white placeholder:text-zinc-700 focus:outline-none focus:border-zinc-700 uppercase"
+              className="w-full pl-10 pr-4 py-2.5 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700 transition-colors"
             />
           </div>
 
-          {/* Selector Drops Coordinates */}
+          {/* Quick Filter Sliders */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <select
               value={filters.jobType}
               onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
-              className="px-3 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 focus:outline-none focus:border-zinc-700 uppercase"
+              className="px-3 py-2 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-400 focus:outline-none focus:border-zinc-800"
             >
-              <option value="all">All Job Tiers</option>
+              <option value="all">All Employment Types</option>
               <option value="Full-time">Full-time</option>
               <option value="Part-time">Part-time</option>
               <option value="Contract">Contract</option>
               <option value="Freelance">Freelance</option>
-              <option value="Spot">Spot</option>
             </select>
 
             <select
               value={filters.locationType}
               onChange={(e) => setFilters({ ...filters, locationType: e.target.value })}
-              className="px-3 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 focus:outline-none focus:border-zinc-700 uppercase"
+              className="px-3 py-2 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-400 focus:outline-none focus:border-zinc-800"
             >
-              <option value="all">All Ecosystems</option>
+              <option value="all">All Environments</option>
               <option value="Remote">Remote</option>
               <option value="On-site">On-site</option>
               <option value="Hybrid">Hybrid</option>
             </select>
 
             <div className="relative">
-              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={12} />
+              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
               <input
                 type="text"
-                placeholder="REGIONAL BOUND"
+                placeholder="Preferred location..."
                 value={filters.location}
                 onChange={(e) => setFilters({ ...filters, location: e.target.value })}
-                className="w-full pl-9 pr-4 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-white placeholder:text-zinc-700 focus:outline-none focus:border-zinc-700 uppercase"
+                className="w-full pl-9 pr-4 py-2 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-800"
               />
             </div>
           </div>
         </div>
       </div>
 
-      {/* Grid Allocation Blocks */}
+      {/* Main Stream Execution Block */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
-          <div className="flex flex-col items-center space-y-3">
-            <div className="w-6 h-6 border border-zinc-800 border-t-white rounded-full animate-spin"></div>
-            <p className="text-zinc-600 text-[10px] tracking-widest uppercase">Fetching Stream...</p>
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-5 h-5 border border-zinc-900 border-t-zinc-400 rounded-full animate-spin"></div>
+            <p className="text-zinc-500 text-[11px] tracking-wide font-medium">Loading records...</p>
           </div>
         </div>
       ) : filteredJobs.length === 0 ? (
-        <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-12 text-center max-w-xl mx-auto">
-          <Briefcase className="mx-auto mb-3 text-zinc-700" size={28} />
-          <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-1">Zero Node Matches</h3>
-          <p className="text-zinc-600 text-[11px] mb-4 uppercase">No current records conform to active search coordinates.</p>
+        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-12 text-center max-w-md mx-auto">
+          <Briefcase className="mx-auto mb-3 text-zinc-700" size={24} />
+          <h3 className="text-sm font-semibold text-white mb-1">No vacancies found</h3>
+          <p className="text-zinc-500 text-xs mb-4">No current listings match your specific filtration criteria.</p>
           <button
             onClick={() => {
               setSearchQuery('');
               setFilters({ jobType: 'all', locationType: 'all', location: '' });
             }}
-            className="px-4 py-2 bg-zinc-900 text-white rounded text-xs font-bold uppercase tracking-wide border border-zinc-800 hover:border-zinc-600 transition-colors"
+            className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs font-medium transition-colors"
           >
-            Reset Matrix Parameters
+            Reset Filters
           </button>
         </div>
       ) : (
@@ -219,109 +214,107 @@ export default function JobsPage() {
                 <Link
                   key={job.id}
                   href={`/dashboard/jobs/${job.id}`}
-                  className="bg-zinc-950 border border-zinc-900 rounded-lg p-4 hover:border-zinc-700 transition-all flex flex-col group relative cursor-pointer"
+                  className="bg-zinc-950 border border-zinc-900/80 rounded-2xl p-5 hover:border-zinc-800 transition-all flex flex-col group relative"
                 >
-                  {/* Card Header Metadata Row */}
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center space-x-3 min-w-0">
+                  {/* Card Corporate Branding Row */}
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-3 min-w-0">
                       {job.company.logoUrl ? (
                         <img
                           src={job.company.logoUrl}
                           alt={job.company.name}
-                          className="w-9 h-9 rounded border border-zinc-900 object-cover flex-shrink-0"
+                          className="w-9 h-9 rounded-xl border border-zinc-900 object-cover shrink-0 shadow-inner"
                         />
                       ) : (
-                        <div className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded flex items-center justify-center flex-shrink-0">
-                          <Building2 size={16} className="text-zinc-500" />
+                        <div className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center shrink-0">
+                          <Building2 size={15} className="text-zinc-500" />
                         </div>
                       )}
                       <div className="min-w-0">
-                        <h3 className="text-white text-xs font-bold truncate uppercase tracking-tight">{job.company.name}</h3>
-                        <p className="text-[10px] text-zinc-600 truncate uppercase mt-0.5">{job.company.industry || 'Tech Sector'}</p>
+                        <h3 className="text-zinc-200 text-xs font-bold truncate group-hover:text-white transition-colors">{job.company.name}</h3>
+                        <p className="text-[10px] text-zinc-500 truncate mt-0.5 uppercase tracking-wide font-medium">{job.company.industry || 'Technology'}</p>
                       </div>
                     </div>
                     {job.company.verificationBadge === 'verified' && (
-                      <div className="bg-zinc-900 text-zinc-400 border border-zinc-800 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-tighter flex-shrink-0">
+                      <span className="shrink-0 text-[9px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
                         Verified
-                      </div>
+                      </span>
                     )}
                   </div>
 
-                  {/* Core Job Header Position */}
+                  {/* Core Content Elements */}
                   <div className="mb-1">
-                    <h4 className="text-sm font-bold text-zinc-100 group-hover:text-white transition-colors truncate uppercase">
+                    <h4 className="text-sm font-bold text-zinc-100 tracking-tight group-hover:text-white truncate">
                       {job.title}
                     </h4>
+                    {job.department && (
+                      <p className="text-[10px] text-zinc-500 font-medium tracking-wide uppercase mt-0.5">{job.department}</p>
+                    )}
                   </div>
 
-                  {/* Operational Department Tag */}
-                  {job.department && (
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-tight mb-3 font-semibold">{job.department}</p>
-                  )}
-
-                  {/* Technical Specifications Blocks */}
-                  <div className="space-y-1.5 text-[11px] mb-4 flex-1 text-zinc-500">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-zinc-300 font-bold uppercase text-[10px] bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded">
+                  {/* Metadata Indicators info */}
+                  <div className="space-y-2 text-xs my-4 flex-1 text-zinc-400">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg">
                         {job.jobType}
                       </span>
-                      <span className="flex items-center text-zinc-400 font-medium uppercase">
-                        <span className="mr-1">{getLocationTypeIcon(job.locationType)}</span>
+                      <span className="text-[11px] text-zinc-500 font-medium inline-flex items-center gap-1">
+                        <Globe className="w-3 h-3 text-zinc-600" />
                         {job.locationType}
                       </span>
                     </div>
 
-                    {job.location && (
-                      <div className="flex items-center space-x-1.5 truncate uppercase">
-                        <MapPin size={11} className="text-zinc-700" />
-                        <span className="truncate">{job.location}</span>
-                      </div>
-                    )}
-
-                    {job.salaryRange && (
-                      <div className="flex items-center space-x-1.5 uppercase">
-                        <DollarSign size={11} className="text-zinc-700" />
-                        <span>{job.salaryRange}</span>
-                      </div>
-                    )}
-
-                    {job.experienceRequired && (
-                      <div className="flex items-center space-x-1.5 uppercase">
-                        <Briefcase size={11} className="text-zinc-700" />
-                        <span>{job.experienceRequired} EXP</span>
-                      </div>
-                    )}
+                    <div className="space-y-1 text-[11px] text-zinc-500">
+                      {job.location && (
+                        <div className="flex items-center gap-1.5 truncate">
+                          <MapPin size={12} className="text-zinc-700" />
+                          <span className="truncate">{job.location}</span>
+                        </div>
+                      )}
+                      {job.salaryRange && (
+                        <div className="flex items-center gap-1.5">
+                          <DollarSign size={12} className="text-zinc-700" />
+                          <span>{job.salaryRange}</span>
+                        </div>
+                      )}
+                      {job.experienceRequired && (
+                        <div className="flex items-center gap-1.5">
+                          <Briefcase size={12} className="text-zinc-700" />
+                          <span>{job.experienceRequired} experience</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Embedded Technical Skills Arrays */}
+                  {/* Technical Tags Array */}
                   {job.requiredSkills && job.requiredSkills.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-4">
                       {job.requiredSkills.slice(0, 2).map((skill: string, idx: number) => (
                         <span
                           key={idx}
-                          className="px-1.5 py-0.5 bg-black text-zinc-400 text-[10px] rounded border border-zinc-900 uppercase font-medium"
+                          className="px-2 py-0.5 bg-zinc-900/40 text-zinc-400 text-[10px] rounded-md border border-zinc-900/60 font-medium"
                         >
                           {skill}
                         </span>
                       ))}
                       {job.requiredSkills.length > 2 && (
-                        <span className="px-1.5 py-0.5 bg-black text-zinc-500 text-[10px] rounded border border-zinc-900 font-bold">
+                        <span className="px-1.5 py-0.5 bg-zinc-900/20 text-zinc-600 text-[10px] font-bold">
                           +{job.requiredSkills.length - 2}
                         </span>
                       )}
                     </div>
                   )}
 
-                  {/* Core Card Bottom Footer Controls */}
-                  <div className="pt-3 border-t border-zinc-900 space-y-2">
-                    <div className="flex items-center justify-between text-[10px] text-zinc-600">
-                      <div className="flex items-center space-x-1 uppercase">
-                        <Clock size={10} />
+                  {/* Card Trigger Baselines Footer */}
+                  <div className="pt-3 border-t border-zinc-900/80 space-y-2.5">
+                    <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">
+                      <div className="flex items-center gap-1">
+                        <Clock size={11} className="text-zinc-700" />
                         <span>{calculateDaysAgo(job.createdAt)}</span>
                       </div>
-                      <div className="flex items-center space-x-0.5 text-zinc-400 group-hover:text-white transition-colors uppercase font-bold text-[9px] tracking-wide">
-                        <span>Inspect Node</span>
-                        <ChevronRight size={12} />
+                      <div className="flex items-center gap-0.5 text-zinc-400 group-hover:text-white transition-colors font-medium">
+                        <span>View position</span>
+                        <ChevronRight size={13} className="transform group-hover:translate-x-0.5 transition-transform" />
                       </div>
                     </div>
                     
@@ -329,17 +322,17 @@ export default function JobsPage() {
                       <button
                         disabled
                         onClick={(e) => e.preventDefault()}
-                        className="w-full py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded text-[10px] font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-not-allowed"
+                        className="w-full py-2 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed shadow-inner"
                       >
-                        <CheckCircle2 size={12} className="text-zinc-600" />
-                        <span>Deployment Complete</span>
+                        <CheckCircle2 size={13} className="text-zinc-600" />
+                        <span>Application Submitted</span>
                       </button>
                     ) : (
                       <button
                         onClick={(e) => handleApplyClick(job, e)}
-                        className="w-full py-1.5 bg-white text-black rounded text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-colors"
+                        className="w-full py-2 bg-white text-black rounded-xl text-xs font-bold hover:bg-zinc-200 transition-colors shadow-lg shadow-white/5"
                       >
-                        Apply Payload
+                        Apply Now
                       </button>
                     )}
                   </div>
@@ -348,32 +341,32 @@ export default function JobsPage() {
             })}
           </div>
 
-          {/* Interface Pagination Array Node Controls */}
+          {/* Simple Pagination Layout controls */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center space-x-1 pt-4">
+            <div className="flex items-center justify-center gap-4 pt-6">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded text-xs text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed uppercase font-bold hover:border-zinc-800 transition-colors"
+                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded-xl text-xs font-medium text-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed hover:border-zinc-800 transition-colors"
               >
-                Prev Block
+                Previous
               </button>
-              <span className="px-3 py-1.5 text-zinc-600 text-xs">
-                BLOCK {page} / {totalPages}
+              <span className="text-zinc-600 text-xs font-medium tracking-wide">
+                Page {page} of {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded text-xs text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed uppercase font-bold hover:border-zinc-800 transition-colors"
+                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded-xl text-xs font-medium text-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed hover:border-zinc-800 transition-colors"
               >
-                Next Block
+                Next
               </button>
             </div>
           )}
         </>
       )}
 
-      {/* Embedded Transmit Modal Core Entry */}
+      {/* Application Sheet Drawer Modal */}
       {showApplicationModal && selectedJob && (
         <ApplicationModal
           job={selectedJob}
@@ -388,16 +381,8 @@ export default function JobsPage() {
   );
 }
 
-// ─── LOCAL APPLICATION INJECTED MODAL SUBSYSTEM COMPONENT ───
-function ApplicationModal({
-  job,
-  onClose,
-  onSuccess,
-}: {
-  job: any;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
+// ─── LOCAL APPLICATION DIALOG COMPONENT ────────────────────
+function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () => void; onSuccess: () => void; }) {
   const [resumes, setResumes] = useState<any[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [uploadNew, setUploadNew] = useState(false);
@@ -420,7 +405,7 @@ function ApplicationModal({
         }
       }
     } catch (error) {
-      console.error('Error fetching resumes:', error);
+      console.error('Error loading documents:', error);
     } finally {
       setIsLoading(false);
     }
@@ -434,7 +419,7 @@ function ApplicationModal({
         return;
       }
       if (!['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
-        alert('Only PDF and DOCX files are allowed');
+        alert('Only PDF and DOCX formats are supported.');
         return;
       }
       setNewResumeFile(file);
@@ -443,12 +428,11 @@ function ApplicationModal({
 
   const handleSubmit = async () => {
     if (!uploadNew && !selectedResumeId) {
-      alert('Please select a resume');
+      alert('Please select a resume profile.');
       return;
     }
-
     if (uploadNew && !newResumeFile) {
-      alert('Please upload a resume');
+      alert('Please select a valid document archive.');
       return;
     }
 
@@ -470,79 +454,72 @@ function ApplicationModal({
       });
 
       if (response.data.success) {
-        alert('Application submitted successfully!');
+        alert('Application submitted successfully.');
         onSuccess();
       }
     } catch (error: any) {
-      console.error('Application error:', error);
-      alert(error.response?.data?.message || 'Failed to submit application');
+      console.error('Submission error:', error);
+      alert(error.response?.data?.message || 'Failed to file application.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 font-mono">
-      <div className="bg-black border border-zinc-900 rounded-xl max-w-xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl">
-        {/* Modal Header */}
-        <div className="p-4 border-b border-zinc-900 flex items-center justify-between bg-zinc-950">
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+      <div className="bg-zinc-950 border border-zinc-900 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-fade-in">
+        {/* Top bar header */}
+        <div className="p-5 border-b border-zinc-900 flex items-center justify-between bg-zinc-900/20">
           <div>
-            <h2 className="text-xs uppercase font-bold tracking-widest text-white">Transmit Payload Credentials</h2>
-            <p className="text-[10px] text-zinc-500 uppercase mt-0.5 tracking-tight">target: {job.company.name} // {job.title}</p>
+            <h2 className="text-sm font-bold text-white tracking-tight">Submit Application</h2>
+            <p className="text-[11px] text-zinc-500 mt-0.5 font-medium">{job.title} — {job.company.name}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-zinc-900 rounded transition-colors text-zinc-500 hover:text-white"
-          >
-            <X size={14} />
+          <button onClick={onClose} className="p-1.5 rounded-lg border border-zinc-900 hover:border-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
+            <X size={15} />
           </button>
         </div>
 
-        {/* Modal Selection Pipeline Data Blocks */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div className="flex p-1 bg-zinc-950 border border-zinc-900 rounded-lg">
+        {/* Modal body Content selections */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="flex p-1 bg-zinc-900/60 border border-zinc-900 rounded-xl">
             <button
               onClick={() => setUploadNew(false)}
-              className={`flex-1 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded transition-all ${
-                !uploadNew
-                  ? 'bg-zinc-900 text-white border border-zinc-800'
-                  : 'text-zinc-600 hover:text-zinc-400'
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                !uploadNew ? 'bg-zinc-950 text-white border border-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              Registry Records
+              Saved Resumes
             </button>
             <button
               onClick={() => setUploadNew(true)}
-              className={`flex-1 py-1.5 text-[10px] uppercase font-bold tracking-wider rounded transition-all ${
-                uploadNew
-                  ? 'bg-zinc-900 text-white border border-zinc-800'
-                  : 'text-zinc-600 hover:text-zinc-400'
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                uploadNew ? 'bg-zinc-950 text-white border border-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
               }`}
             >
-              External Ingestion
+              Upload Document
             </button>
           </div>
 
-          {/* Local Existing Registries */}
+          {/* List Profiles matching selection tags */}
           {!uploadNew && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {isLoading ? (
                 <div className="text-center py-6">
-                  <div className="w-4 h-4 border border-zinc-800 border-t-white rounded-full animate-spin mx-auto"></div>
+                  <div className="w-4 h-4 border border-zinc-900 border-t-zinc-400 rounded-full animate-spin mx-auto"></div>
                 </div>
               ) : resumes.length === 0 ? (
-                <div className="text-center py-6 bg-zinc-950 border border-zinc-900 rounded-lg p-4">
+                <div className="text-center py-8 bg-zinc-900/10 border border-zinc-900 rounded-xl p-4">
                   <FileText className="mx-auto mb-2 text-zinc-700" size={20} />
-                  <p className="text-zinc-500 text-[10px] uppercase font-bold">No Local Registry Files Identified</p>
+                  <p className="text-zinc-500 text-xs font-medium">No saved resumes found in profile account</p>
                 </div>
               ) : (
                 resumes.map((resume) => (
                   <label
                     key={resume.id}
-                    className={`flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                       selectedResumeId === resume.id
-                        ? 'border-zinc-600 bg-zinc-950'
-                        : 'border-zinc-900 bg-black hover:border-zinc-800'
+                        ? 'border-zinc-700 bg-zinc-900/40 shadow-inner'
+                        : 'border-zinc-900 bg-transparent hover:border-zinc-800'
                     }`}
                   >
                     <input
@@ -551,14 +528,14 @@ function ApplicationModal({
                       value={resume.id}
                       checked={selectedResumeId === resume.id}
                       onChange={() => setSelectedResumeId(resume.id)}
-                      className="accent-white w-3.5 h-3.5"
+                      className="accent-white w-3.5 h-3.5 text-zinc-950"
                     />
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-zinc-300 font-bold text-xs truncate uppercase tracking-tight">{resume.name}</h4>
-                      <div className="flex items-center space-x-2 mt-0.5 text-[9px] uppercase tracking-tighter text-zinc-500">
-                        <span>{resume.source === 'uploaded' ? 'Static Context' : 'Model Output'}</span>
+                      <h4 className="text-zinc-200 font-semibold text-xs truncate">{resume.name}</h4>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-500 font-medium">
+                        <span>{resume.source === 'uploaded' ? 'Uploaded PDF' : 'Generated Document'}</span>
                         {resume.atsScore && (
-                          <span className="text-zinc-400 bg-zinc-900 px-1 border border-zinc-800 rounded">ATS: {resume.atsScore}%</span>
+                          <span className="text-zinc-400 bg-zinc-900 px-1.5 py-0.2 border border-zinc-800 rounded-md">Match: {resume.atsScore}%</span>
                         )}
                       </div>
                     </div>
@@ -568,66 +545,58 @@ function ApplicationModal({
             </div>
           )}
 
-          {/* Upload New Data Payload */}
+          {/* Action Drag Drop panel view */}
           {uploadNew && (
             <div>
-              <label className="block border border-dashed border-zinc-900 bg-zinc-950/40 rounded-lg p-6 text-center hover:border-zinc-700 transition-colors cursor-pointer">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
+              <label className="block border border-dashed border-zinc-900 bg-zinc-900/10 hover:bg-zinc-900/20 rounded-xl p-6 text-center hover:border-zinc-700 transition-all cursor-pointer">
+                <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="hidden" />
                 {newResumeFile ? (
-                  <div className="space-y-1.5">
-                    <FileText className="mx-auto text-white" size={24} />
-                    <p className="text-white font-bold text-xs max-w-xs truncate mx-auto uppercase tracking-tight">{newResumeFile.name}</p>
-                    <p className="text-zinc-600 text-[9px]">{(newResumeFile.size / 1024 / 1024).toFixed(2)} MB ARCHIVE</p>
+                  <div className="space-y-2">
+                    <FileText className="mx-auto text-zinc-300 animate-pulse" size={24} />
+                    <p className="text-zinc-200 font-semibold text-xs max-w-xs truncate mx-auto">{newResumeFile.name}</p>
+                    <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider">{(newResumeFile.size / 1024 / 1024).toFixed(2)} MB</p>
                     <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setNewResumeFile(null);
-                      }}
-                      className="text-red-400 text-[10px] uppercase font-bold underline underline-offset-2 pt-1 inline-block"
+                      onClick={(e) => { e.preventDefault(); setNewResumeFile(null); }}
+                      className="text-red-400 text-[11px] font-medium hover:underline pt-1 inline-block"
                     >
-                      Clear File
+                      Remove File
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Upload className="mx-auto text-zinc-700" size={22} />
-                    <p className="text-zinc-400 font-bold text-xs uppercase tracking-wider">Stream Upload Socket</p>
-                    <p className="text-zinc-600 text-[9px] uppercase">PDF, DOCX Tiers (MAX 10MB CAP)</p>
+                    <Upload className="mx-auto text-zinc-600" size={20} />
+                    <p className="text-zinc-300 font-medium text-xs">Choose document archive</p>
+                    <p className="text-zinc-600 text-[10px]">Supports PDF or DOCX formats up to 10MB</p>
                   </div>
                 )}
               </label>
             </div>
           )}
 
-          {/* Evaluation Block Notice */}
-          <div className="bg-zinc-950 border border-zinc-900 rounded-lg p-3 flex space-x-2.5">
-            <AlertCircle className="text-zinc-600 flex-shrink-0 mt-0.5" size={14} />
-            <div className="text-[10px] text-zinc-500 uppercase tracking-tight font-medium leading-normal">
-              <p className="text-zinc-400 font-bold tracking-wider mb-0.5">Automated Parser Query</p>
-              <p>Injected structures deploy through compilation checks to track compatibility scores before record storage indexing routines execution.</p>
+          {/* Verification Notices footer info */}
+          <div className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3 flex gap-2.5">
+            <AlertCircle className="text-zinc-600 shrink-0 mt-0.5" size={14} />
+            <div className="text-[11px] text-zinc-500 font-medium leading-relaxed">
+              <p className="text-zinc-400 font-semibold mb-0.5">Automated screening note</p>
+              <p>Your resume credentials will be reviewed by the internal system parser to map keyword matching states before HR notifications open.</p>
             </div>
           </div>
         </div>
 
-        {/* Modal Base Triggers */}
-        <div className="p-3.5 border-t border-zinc-900 flex items-center justify-end space-x-1.5 bg-zinc-950">
+        {/* Action Triggers panel */}
+        <div className="p-4 border-t border-zinc-900 flex items-center justify-end gap-2 bg-zinc-900/20">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded text-[10px] uppercase font-bold tracking-wider transition-colors"
+            className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-medium transition-colors"
           >
-            Abort Channel
+            Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitting || (!uploadNew && !selectedResumeId) || (uploadNew && !newResumeFile)}
-            className="px-4 py-1.5 bg-white text-black rounded text-[10px] font-bold uppercase tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+            className="px-4 py-1.5 bg-white text-black rounded-xl text-xs font-bold hover:bg-zinc-200 transition-colors disabled:opacity-20 disabled:cursor-not-allowed shadow-sm"
           >
-            {isSubmitting ? 'Syncing...' : 'Deploy Payload'}
+            {isSubmitting ? 'Submitting...' : 'Submit Application'}
           </button>
         </div>
       </div>

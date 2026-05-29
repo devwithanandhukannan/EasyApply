@@ -2,7 +2,6 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../utils/prisma.ts';
 
-// ─── Get Public Job Listings ──────────────────────────────────────────────
 export const getPublicJobs = async (req: Request, res: Response) => {
   try {
     const {
@@ -98,7 +97,6 @@ export const getPublicJobs = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Get Public Job Details ───────────────────────────────────────────────
 export const getPublicJobDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

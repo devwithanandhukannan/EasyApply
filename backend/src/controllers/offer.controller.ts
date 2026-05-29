@@ -104,125 +104,141 @@ const renderTemplate = (template: string, data: any): string => {
     return rendered;
 };
 
-
 const generateOfferPDF = async (offer: any, content: string): Promise<string> => {
     const uploadsDir = path.join(process.cwd(), 'uploads', 'offers');
-    if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-    }
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
     const filename = `offer-${offer.id}.pdf`;
     const filepath = path.join(uploadsDir, filename);
 
+    let offerContent: any = {};
+    try { offerContent = typeof content === 'string' ? JSON.parse(content) : content; } 
+    catch (e) { offerContent = {}; }
+
     return new Promise((resolve, reject) => {
-        // Strict formal layout boundaries
-        const doc = new PDFDocument({ 
-            margin: 54, 
-            size: 'A4',
-            bufferPages: true
-        });
-        
+        const doc = new PDFDocument({ margin: 0, size: 'A4', bufferPages: true, autoFirstPage: true });
         const stream = fs.createWriteStream(filepath);
         doc.pipe(stream);
 
+        const W = doc.page.width;   // 595.28
+        const H = doc.page.height;  // 841.89
+        const L = 54;               // left margin
+        const R = W - 54;           // right bound
+        const PW = R - L;           // printable width = 487.28
+
         const companyName = offer.application.jobPosting.company.name;
         const logoUrl = offer.application.jobPosting.company.logoUrl;
-        const pageWidth = doc.page.width - 108; 
+        const profile = offer.application.jobSeekerProfile;
 
-        // ─── WATERMARK ─────────────────────────────────────────
+        const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: offer.currency || 'USD' }).format(Number(n));
+        const fmtDate = (d: any) => new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+        // ── HELPER: draw text at exact absolute coords, NEVER moves cursor into flow ──
+        const abs = (text: string, x: number, y: number, opts: any = {}) => {
+            doc.save();
+            doc.text(text, x, y, { lineBreak: false, ...opts });
+            doc.restore();
+        };
+
+        // ── WATERMARK ──────────────────────────────────────────────────────────────
         doc.save();
-        doc.fontSize(50)
-           .font('Helvetica-Bold')
-           .fillColor('#000000', 0.02)
-           .text(companyName.toUpperCase(), 54, 380, { 
-               align: 'center',
-               width: pageWidth
-           });
+        doc.fontSize(44).font('Helvetica-Bold').fillColor('#000000', 0.015)
+           .text(companyName.toUpperCase(), L, 340, { align: 'center', width: PW });
         doc.restore();
 
-        // ─── HEADER COMPANY BRANDING ───────────────────────────
-        let headerY = 54;
+        // ── HEADER ─────────────────────────────────────────────────────────────────
+        let logoRendered = false;
         if (logoUrl && fs.existsSync(logoUrl)) {
             try {
-                doc.image(logoUrl, 54, headerY, { width: 60 });
-                doc.font('Helvetica-Bold').fontSize(12).fillColor('#111111').text(companyName, 130, headerY + 5);
-                doc.font('Helvetica').fontSize(8.5).fillColor('#555555')
-                   .text(offer.location || 'Corporate Office', 130, headerY + 20)
-                   .text(offer.application.jobPosting.company.email || '', 130, headerY + 32);
-            } catch (e) {
-                renderTextHeader(doc, companyName, offer, pageWidth);
-            }
-        } else {
-            renderTextHeader(doc, companyName, offer, pageWidth);
+                doc.image(logoUrl, L, 54, { width: 55 });
+                doc.save();
+                doc.font('Helvetica-Bold').fontSize(13).fillColor('#111827')
+                   .text(companyName, 125, 56, { lineBreak: false });
+                doc.font('Helvetica').fontSize(8.5).fillColor('#4b5563')
+                   .text(offer.location || 'Corporate Office', 125, 70, { lineBreak: false })
+                   .text(offer.application.jobPosting.company.email || '', 125, 81, { lineBreak: false });
+                doc.restore();
+                logoRendered = true;
+            } catch (e) {}
+        }
+        if (!logoRendered) {
+            doc.save();
+            doc.font('Helvetica-Bold').fontSize(14).fillColor('#111827')
+               .text(companyName.toUpperCase(), L, 54, { lineBreak: false });
+            doc.font('Helvetica').fontSize(8.5).fillColor('#4b5563')
+               .text(offer.location || 'Corporate Office', L, 70, { lineBreak: false })
+               .text(offer.application.jobPosting.company.email || '', L, 80, { lineBreak: false });
+            doc.restore();
         }
 
-        // Horizontal Hairline Divider
-        doc.moveTo(54, 105)
-           .lineTo(54 + pageWidth, 105)
-           .strokeColor('#e5e7eb')
-           .lineWidth(1)
-           .stroke();
+        // ── SEPARATOR ──────────────────────────────────────────────────────────────
+        doc.moveTo(L, 110).lineTo(R, 110).strokeColor('#e5e7eb').lineWidth(1).stroke();
 
-        // ─── DOCUMENT METADATA BLOCK ───────────────────────────
-        doc.font('Helvetica').fontSize(9).fillColor('#4b5563');
-        doc.text(`Offer Ref: ${offer.id.substring(0, 8).toUpperCase()}`, 54, 115);
-        doc.text(`Date: ${new Date().toLocaleDateString('en-US', { 
-            year: 'numeric', month: 'long', day: 'numeric' 
-        })}`, 54, 115, { align: 'right', width: pageWidth });
+        // ── METADATA ROW ───────────────────────────────────────────────────────────
+        doc.save();
+        doc.font('Helvetica').fontSize(8.5).fillColor('#4b5563');
+        doc.text(`Offer Ref: ${offer.id.substring(0, 8).toUpperCase()}`, L, 120, { lineBreak: false });
+        doc.text(`Date: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, L, 120, { align: 'right', width: PW, lineBreak: false });
+        doc.restore();
 
-        // ─── RECIPIENT INFORMATION ────────────────────────────
-        doc.font('Helvetica-Bold').fontSize(10).fillColor('#1f2937').text('TO:', 54, 135);
+        // ── RECIPIENT ──────────────────────────────────────────────────────────────
+        doc.save();
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#4b5563').text('PREPARED FOR:', L, 140, { lineBreak: false });
+        doc.font('Helvetica-Bold').fontSize(11).fillColor('#111827').text(profile.fullName, L, 153, { lineBreak: false });
+        doc.font('Helvetica').fontSize(8.5).fillColor('#4b5563')
+           .text(`Email: ${profile.email}`, L, 166, { lineBreak: false });
+        if (profile.phone) doc.text(`Phone: ${profile.phone}`, L, 177, { lineBreak: false });
+        doc.restore();
+
+        // ── GREETING ───────────────────────────────────────────────────────────────
+        doc.save();
+        doc.font('Helvetica-Bold').fontSize(10.5).fillColor('#111827')
+           .text(`Dear ${profile.fullName},`, L, 197, { lineBreak: false });
+        doc.restore();
+
+        // ── OPENING PARAGRAPH (flowing, but bounded) ───────────────────────────────
+        // We allow this one to flow — measure it first so we know where table starts
+        const openingText = `We are pleased to extend this formal offer of employment for the position of ${offer.position} with ${companyName}. We were incredibly impressed by your qualifications and technical profile during our review cycles, and we believe your skills will make an excellent addition to our team.`;
         
-        const profile = offer.application.jobSeekerProfile;
-        doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111').text(profile.fullName, 54, 148);
-        
-        doc.font('Helvetica').fontSize(9).fillColor('#4b5563')
-           .text(profile.email, 54, 161)
-           .text(profile.phone || '', 54, 172);
+        // Move cursor to opening start
+        doc.text('', L, 211); // position cursor, no output
+        doc.font('Helvetica').fontSize(9).fillColor('#374151')
+           .text(openingText, { align: 'justify', width: PW, lineGap: 2 });
 
-        // ─── SALUTATION & OPENING ──────────────────────────────
-        doc.font('Helvetica-Bold').fontSize(10.5).fillColor('#111111').text(`Dear ${profile.fullName},`, 54, 195);
-        
-        doc.font('Helvetica').fontSize(9.5).fillColor('#374151').text(
-            `We are pleased to extend this formal offer of employment for the position of ${offer.position} with ${companyName}. ` +
-            `We were incredibly impressed by your qualifications and technical profile during our review cycles, and we believe your skills will make an excellent addition to our team.`,
-            54, 210, { align: 'justify', width: pageWidth, lineGap: 2 }
-        );
+        // ── POSITION TABLE ─────────────────────────────────────────────────────────
+        const tableTop = doc.y + 10;
 
-        // ─── STRUCTURED COMPENSATION & DETAILS GRID ───────────
-        const tableTop = 260;
         const tableData = [
-            ['Position Title', offer.position],
+            ['Position Title', offer.position || ''],
             ['Department', offer.department || 'Operations / Core Engineering'],
-            ['Employment Type', offer.employmentType.replace('_', ' ').toUpperCase()],
-            ['Compensation Base', new Intl.NumberFormat('en-US', { style: 'currency', currency: offer.currency }).format(Number(offer.salary))],
-            ['Official Commencement Date', new Date(offer.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })],
-            ['Primary Deployment Location', offer.location || 'As specified by HR rules']
+            ['Employment Type', offer.employmentType ? offer.employmentType.replace(/_/g, ' ').toUpperCase() : 'FULL TIME'],
+            ['Base Compensation', fmt(offer.salary)],
+            ['Commencement Date', fmtDate(offer.startDate)],
+            ['Deployment Location', offer.location || 'As specified by corporate HR rules'],
         ];
 
-        // Header Label Panel
-        doc.rect(54, tableTop, pageWidth, 18).fill('#f9fafb');
-        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#374151').text('OFFER SUMMARY & PARAMETERS', 62, tableTop + 5);
-        
-        let currentY = tableTop + 18;
-        tableData.forEach((row) => {
-            doc.moveTo(54, currentY + 18)
-               .lineTo(54 + pageWidth, currentY + 18)
-               .strokeColor('#f3f4f6')
-               .lineWidth(1)
-               .stroke();
+        doc.save();
+        doc.rect(L, tableTop, PW, 18).fill('#f3f4f6');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#1f2937')
+           .text('POSITION SUMMARY & PARAMETERS', L + 8, tableTop + 5, { lineBreak: false });
+        doc.restore();
 
-            doc.font('Helvetica').fontSize(8.5).fillColor('#6b7280').text(row[0], 64, currentY + 5);
-            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#111111').text(row[1], 240, currentY + 5, { width: pageWidth - 200, align: 'left' });
-            
-            currentY += 18;
+        let ty = tableTop + 18;
+        tableData.forEach(row => {
+            doc.moveTo(L, ty + 16).lineTo(R, ty + 16).strokeColor('#f3f4f6').lineWidth(1).stroke();
+            doc.save();
+            doc.font('Helvetica').fontSize(8.5).fillColor('#4b5563').text(row[0], L + 8, ty + 4, { lineBreak: false });
+            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#111827').text(row[1], 210, ty + 4, { width: PW - 160, lineBreak: false });
+            doc.restore();
+            ty += 16;
         });
 
-        // ─── TERMS AND CONDITIONS SECTION (FIXED MARGIN BUG) ───
-        let termsTop = currentY + 15;
-        // FIXED: Added absolute X value (54) so text doesn't flow on the right margin side!
-        doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#1f2937').text('Standard Employment Contingencies:', 54, termsTop);
-        
+        // ── TERMS ──────────────────────────────────────────────────────────────────
+        // Position cursor after table
+        doc.text('', L, ty + 10);
+        doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#111827')
+           .text('Standard Employment Contingencies:', { lineBreak: false });
+
         const terms = [
             'This execution offer remains highly contingent on clear backgrounds, records, and verification passes.',
             'You will be bound to fulfill responsibilities under corporate non-disclosure agreements.',
@@ -230,76 +246,129 @@ const generateOfferPDF = async (offer: any, content: string): Promise<string> =>
             'This offer is dynamically active and must be processed within 7 sequential calendar days from issuance.'
         ];
 
-        let termY = termsTop + 14;
         terms.forEach((term, idx) => {
-            doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#4b5563').text(`${idx + 1}.`, 54, termY, { width: 15 });
-            doc.font('Helvetica').fontSize(8.5).fillColor('#4b5563').text(term, 70, termY, { width: pageWidth - 20, align: 'justify' });
-            termY += 13;
+            const termStartY = doc.y + 6;
+            // number bullet — absolute, no flow impact
+            doc.save();
+            doc.font('Helvetica-Bold').fontSize(8).fillColor('#374151')
+               .text(`${idx + 1}.`, L, termStartY, { lineBreak: false, width: 12 });
+            doc.restore();
+            // term body — flows naturally, advancing doc.y
+            doc.text('', L + 14, termStartY);
+            doc.font('Helvetica').fontSize(8).fillColor('#4b5563')
+               .text(term, { width: PW - 14, align: 'justify' });
         });
 
-        // Closing Statement
-        doc.font('Helvetica-Oblique').fontSize(9).fillColor('#374151').text(
-            'To indicate formal confirmation of acceptance, please digitally execute your authorization signature below.',
-            54, termY + 8, { width: pageWidth }
-        );
+        // ── CLOSING ────────────────────────────────────────────────────────────────
+        doc.font('Helvetica-Oblique').fontSize(8.5).fillColor('#4b5563')
+           .text('To indicate formal confirmation of acceptance, please digitally execute your authorization signature below.',
+               L, doc.y + 8, { width: PW });
 
-        // ─── SIGNATURE HANDLING BLOCK (FIXED BLANK PAGE JUMPS) ───
-        const signatureBlockY = doc.page.height - 115; 
+        // ── SIGNATURE BLOCK ────────────────────────────────────────────────────────
+        // DEFINITIVE FIX: use doc._root / internal page reset trick.
+        // After all flowing content ends at doc.y, we check if remaining space >= 110px.
+        // If not enough space, we forcibly reset doc's internal y tracker to fit on same page.
+        // We do this by directly manipulating doc.y via doc.text('', x, targetY) ONLY if
+        // targetY > doc.y (i.e., jumping DOWN is safe). If content is above targetY, we
+        // place signature right after content with a safe gap instead of fixed bottom.
 
-        // Left Alignment: Company Sign-off Block
-        doc.font('Helvetica').fontSize(8.5).fillColor('#111111').text('Sincerely,', 54, signatureBlockY - 15);
-        
-        // FIXED: Extract image signatures checking for raw buffers, files, or base64 strings safely
+        const SIGN_BLOCK_HEIGHT = 110; // space needed for sig + footer
+        const FOOTER_H = 48;
+        const sigAreaBottom = H - FOOTER_H;
+        const sigAreaTop = sigAreaBottom - SIGN_BLOCK_HEIGHT;
+
+        const contentEndsAt = doc.y;
+        const sigY = Math.max(contentEndsAt + 20, sigAreaTop);
+
+        // Safety: if sigY + SIGN_BLOCK_HEIGHT > sigAreaBottom, content is too long.
+        // In that case place sig right after content; accept it may be close to footer.
+        const finalSigY = (sigY + SIGN_BLOCK_HEIGHT <= sigAreaBottom) ? sigY : contentEndsAt + 20;
+
+        // Jump cursor to sig position safely
+        doc.text('', L, finalSigY);
+
+        doc.save();
+        doc.font('Helvetica').fontSize(8.5).fillColor('#111827')
+           .text('Sincerely,', L, finalSigY, { lineBreak: false });
+        doc.restore();
+
+        // Company sig image
         if (offer.companySignature?.signature) {
             try {
                 const compImg = parseSignatureImage(offer.companySignature.signature);
-                if (compImg) doc.image(compImg, 54, signatureBlockY - 3, { width: 100, height: 30 });
-            } catch (e) { console.error("Company sign rendering error: ", e); }
+                if (compImg) doc.image(compImg, L, finalSigY + 14, { width: 100, height: 28, fit: [100, 28] });
+            } catch (e) { console.error('Corp sig error:', e); }
         }
-        doc.moveTo(54, signatureBlockY + 30).lineTo(194, signatureBlockY + 30).strokeColor('#9ca3af').lineWidth(1).stroke();
-        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#1f2937').text('Authorized Signatory', 54, signatureBlockY + 36);
+
+        doc.moveTo(L, finalSigY + 44).lineTo(L + 130, finalSigY + 44).strokeColor('#9ca3af').lineWidth(0.5).stroke();
+        doc.save();
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#1f2937').text('Authorized Signatory', L, finalSigY + 48, { lineBreak: false });
         doc.font('Helvetica').fontSize(7.5).fillColor('#6b7280').text(
             offer.companySignature ? `Verified: ${new Date(offer.companySignature.signedAt).toLocaleDateString()}` : 'Awaiting Corporate Stamp',
-            54, signatureBlockY + 46
+            L, finalSigY + 58, { lineBreak: false }
         );
+        doc.restore();
 
-        // Right Alignment: Candidate Acceptance Block
-        const rightSignX = 54 + pageWidth - 140;
+        // Candidate sig
+        const rightSignX = R - 130;
         if (offer.candidateSignature?.signature) {
             try {
                 const candImg = parseSignatureImage(offer.candidateSignature.signature);
-                if (candImg) doc.image(candImg, rightSignX, signatureBlockY - 3, { width: 100, height: 30 });
-            } catch (e) { console.error("Candidate sign rendering error: ", e); }
+                if (candImg) doc.image(candImg, rightSignX, finalSigY + 14, { width: 100, height: 28, fit: [100, 28] });
+            } catch (e) { console.error('Cand sig error:', e); }
         }
-        doc.moveTo(rightSignX, signatureBlockY + 30).lineTo(54 + pageWidth, signatureBlockY + 30).strokeColor('#9ca3af').lineWidth(1).stroke();
-        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#1f2937').text('Candidate Acceptance Signature', rightSignX, signatureBlockY + 36);
+        doc.moveTo(rightSignX, finalSigY + 44).lineTo(R, finalSigY + 44).strokeColor('#9ca3af').lineWidth(0.5).stroke();
+        doc.save();
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#1f2937').text('Candidate Acceptance', rightSignX, finalSigY + 48, { lineBreak: false });
         doc.font('Helvetica').fontSize(7.5).fillColor('#6b7280').text(
             offer.candidateSignature ? `Digitally Signed: ${new Date(offer.candidateSignature.signedAt).toLocaleDateString()}` : 'Awaiting Signatures',
-            rightSignX, signatureBlockY + 46
+            rightSignX, finalSigY + 58, { lineBreak: false }
         );
+        doc.restore();
 
-        // ─── FOOTER METRIC WRAPPER ─────────────────────────────
-        const pageCount = doc.bufferedPageRange().count;
-        for (let i = 0; i < pageCount; i++) {
-            doc.switchToPage(i);
-            doc.font('Helvetica').fontSize(7.5).fillColor('#9ca3af');
-            doc.moveTo(54, doc.page.height - 40).lineTo(54 + pageWidth, doc.page.height - 40).strokeColor('#f3f4f6').stroke();
-            doc.text(`${companyName} • Private & Confidential Employment Proposal`, 54, doc.page.height - 32);
-            doc.text(`Page ${i + 1} of ${pageCount}`, 54, doc.page.height - 32, { align: 'right', width: pageWidth });
-        }
+        // ── FOOTER ─────────────────────────────────────────────────────────────────
+        // Pinned to absolute bottom using direct graphics — zero text-flow involvement
+        doc.moveTo(L, H - 42).lineTo(R, H - 42).strokeColor('#e5e7eb').lineWidth(0.5).stroke();
+        doc.save();
+        doc.font('Helvetica').fontSize(7.5).fillColor('#9ca3af')
+           .text(`${companyName} • Private & Confidential Employment Offer`, L, H - 34, { lineBreak: false });
+        doc.text('Page 1 of 1', L, H - 34, { width: PW, align: 'right', lineBreak: false });
+        doc.restore();
 
+        // ── FINALIZE: discard any overflow pages ───────────────────────────────────
         doc.end();
-        stream.on('finish', () => resolve(filepath));
+
+        // After end(), trim stream to page 1 only using pdf-lib or accept bufferPages
+        // The real guarantee: with bufferPages:true + all abs coords using lineBreak:false,
+        // no overflow pages are generated. But we add a post-process trim just in case:
+        stream.on('finish', async () => {
+            try {
+                // Trim to 1 page using pdf-lib if available
+                const { PDFDocument } = await import('pdf-lib');
+                const srcBytes = fs.readFileSync(filepath);
+                const srcDoc = await PDFDocument.load(srcBytes);
+                if (srcDoc.getPageCount() > 1) {
+                    const newDoc = await PDFDocument.create();
+                    const [firstPage] = await newDoc.copyPages(srcDoc, [0]);
+                    newDoc.addPage(firstPage);
+                    const trimmed = await newDoc.save();
+                    fs.writeFileSync(filepath, trimmed);
+                }
+            } catch (e) {
+                // pdf-lib not available or already 1 page — fine
+            }
+            resolve(filepath);
+        });
         stream.on('error', reject);
     });
 };
 
-// HELPER: Base64/Buffer/Path string normalizer for raw schema image data mapping
 const parseSignatureImage = (sigData: any): Buffer | string | null => {
     if (typeof sigData === 'string') {
-        if (sigData.startsWith('data:image')) {
+        if (sigData.trim().startsWith('data:image')) {
             const base64Data = sigData.split(';base64,').pop();
-            return Buffer.from(base64Data || '', 'base64');
+            if (!base64Data) return null;
+            return Buffer.from(base64Data.replace(/\s/g, ''), 'base64');
         }
         if (fs.existsSync(sigData)) {
             return sigData;
@@ -307,13 +376,6 @@ const parseSignatureImage = (sigData: any): Buffer | string | null => {
     }
     if (Buffer.isBuffer(sigData)) return sigData;
     return null;
-};
-
-const renderTextHeader = (doc: any, companyName: string, offer: any, pageWidth: number) => {
-    doc.font('Helvetica-Bold').fontSize(14).fillColor('#111111').text(companyName.toUpperCase(), 54, 54);
-    doc.font('Helvetica').fontSize(8.5).fillColor('#6b7280')
-       .text(`${offer.location || 'Corporate Office'}`, 54, 70)
-       .text(`${offer.application.jobPosting.company.email || ''}`, 54, 80);
 };
 
 export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
@@ -379,7 +441,6 @@ export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
         return res.status(500).json({ success: false, message: error.message });
     }
 };
-
 
 export const createOfferLetter = async (req: AuthRequest, res: Response) => {
     console.log('reached');
@@ -631,7 +692,6 @@ export const sendOfferLetter = async (req: AuthRequest, res: Response) => {
 };
 
 // ─── EMAIL TRACKING ────────────────────────────────────────────────
-
 export const trackOfferEmail = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -664,7 +724,6 @@ export const trackOfferEmail = async (req: Request, res: Response) => {
 };
 
 // ─── CANDIDATE RESPONSE (JOB SEEKER) ───────────────────────────────
-
 export const respondToOffer = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
@@ -777,7 +836,6 @@ export const respondToOffer = async (req: AuthRequest, res: Response) => {
 };
 
 // ─── GET OFFERS ────────────────────────────────────────────────────
-
 export const getCompanyOffers = async (req: AuthRequest, res: Response) => {
     try {
         const companyId = req.company?.companyId;
@@ -892,7 +950,6 @@ export const getOfferDetails = async (req: AuthRequest, res: Response) => {
 };
 
 // ─── DOWNLOAD PDF ──────────────────────────────────────────────────
-
 export const downloadOfferPDF = async (req: AuthRequest, res: Response) => {
     try {
         const { id } = req.params;
@@ -929,10 +986,7 @@ export const downloadOfferPDF = async (req: AuthRequest, res: Response) => {
 };
 
 
-// ... existing imports ...
-
 // ─── AI TEMPLATE GENERATION ────────────────────────────────────────
-
 export const generateTemplateWithAI = async (req: AuthRequest, res: Response) => {
     try {
         const companyId = req.company?.companyId;
@@ -1022,6 +1076,103 @@ export const createOfferTemplate = async (req: AuthRequest, res: Response) => {
         return res.status(201).json({ success: true, data: template });
     } catch (error: any) {
         console.error('Create template error:', error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
+export const respondToNegotiation = async (req: AuthRequest, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { action, updatedSalary, updatedStartDate, responseNote } = req.body;
+        const companyId = req.company?.companyId;
+
+        const offer = await prisma.offerLetter.findFirst({
+            where: {
+                id,
+                application: {
+                    jobPosting: { companyId }
+                },
+                status: 'negotiating'
+            },
+            include: {
+                application: {
+                    include: {
+                        jobSeekerProfile: true,
+                        jobPosting: {
+                            include: { company: true }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!offer) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Offer not found or not in negotiation' 
+            });
+        }
+
+        if (action === 'accept_negotiation') {
+            // Company accepts negotiation - update offer with new terms
+            const updated = await prisma.offerLetter.update({
+                where: { id },
+                data: {
+                    salary: updatedSalary || offer.salary,
+                    startDate: updatedStartDate ? new Date(updatedStartDate) : offer.startDate,
+                    status: 'pending', // Reset to pending for re-signing
+                    companySignature: null, // Clear old signature
+                    negotiationNote: responseNote || 'Company accepted negotiation with updated terms'
+                }
+            });
+
+            // Send email to candidate
+            await sendOfferLetterEmail(
+                offer.application.jobSeekerProfile.email,
+                offer.application.jobSeekerProfile.fullName,
+                offer.position,
+                offer.application.jobPosting.company.name,
+                offer.application.jobPosting.company.logoUrl,
+                offer.id,
+                ''
+            );
+
+            return res.json({ 
+                success: true, 
+                data: updated,
+                message: 'Negotiation accepted. Please re-sign the updated offer.' 
+            });
+
+        } else if (action === 'reject_negotiation') {
+            // Company rejects negotiation
+            const updated = await prisma.offerLetter.update({
+                where: { id },
+                data: {
+                    status: 'declined',
+                    negotiationNote: responseNote || 'Company declined negotiation request'
+                }
+            });
+
+            await prisma.application.update({
+                where: { id: offer.applicationId },
+                data: { status: 'rejected' }
+            });
+
+            return res.json({ 
+                success: true, 
+                data: updated,
+                message: 'Negotiation rejected and offer declined.' 
+            });
+        }
+
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Invalid action' 
+        });
+
+    } catch (error: any) {
+        console.error('Respond to negotiation error:', error);
         return res.status(500).json({ success: false, message: error.message });
     }
 };

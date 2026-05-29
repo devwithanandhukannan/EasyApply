@@ -3,10 +3,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../utils/prisma.ts';
 import { rankCandidates, rankCandidatesAgainstQuery } from '../services/groq.service.ts';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/company/dashboard
-// Returns every job posting for the company with aggregate application counts
-// ─────────────────────────────────────────────────────────────────────────────
+
 export const getCompanyDashboard = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
@@ -71,11 +68,6 @@ export const getCompanyDashboard = async (req: Request, res: Response) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/company/jobs/:jobId/applications
-// Returns all applicants for a specific job with profile + resume summary
-// Query params: ?status=applied|shortlisted|... (optional filter)
-// ─────────────────────────────────────────────────────────────────────────────
 export const getJobApplications = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
@@ -166,11 +158,6 @@ export const getJobApplications = async (req: Request, res: Response) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/company/jobs/:jobId/ai-filter
-// Uses Groq to rank applicants against the job description
-// Body: { topN: number }  — how many top candidates to surface
-// ─────────────────────────────────────────────────────────────────────────────
 export const aiFilterCandidates = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
@@ -303,10 +290,6 @@ export const aiFilterCandidates = async (req: Request, res: Response) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/company/applications/:applicationId
-// Returns complete candidate profile, all resume content, and application history
-// ─────────────────────────────────────────────────────────────────────────────
 export const getCandidateDetail = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
@@ -395,11 +378,6 @@ export const getCandidateDetail = async (req: Request, res: Response) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATCH /api/company/applications/:applicationId/status
-// Update application status (shortlisted, rejected, interview, etc.)
-// Body: { status: ApplicationStatus }
-// ─────────────────────────────────────────────────────────────────────────────
 export const updateApplicationStatus = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
@@ -442,7 +420,6 @@ export const updateApplicationStatus = async (req: Request, res: Response) => {
   }
 };
 
-// POST /api/company/candidates/search
 export const searchCandidates = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;

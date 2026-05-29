@@ -1,13 +1,55 @@
 import { Router } from 'express';
 import { getCompanyToken, getJobSeekerToken } from '../controllers/livekit.controller.ts';
-import { authenticateCompany, authenticateToken, requireJobSeeker } from '../middleware/auth.middleware.ts';
-import { addInterviewFeedback, getInterviewFeedbacksList, requestReschedule } from '../controllers/interview.controller.ts';
+import { 
+  authenticateCompany, 
+  authenticateToken, 
+  requireJobSeeker, 
+  requireCompanyRole 
+} from '../middleware/auth.middleware.ts';
+import { ROLES } from '../constants/roles.ts';
+import { 
+  addInterviewFeedback, 
+  getInterviewFeedbacksList, 
+  requestReschedule,
+  upsertInterviewFeedback,
+  updateInterviewFeedback, 
+  getInterviewFeedbackByCandidate
+} from '../controllers/interview.controller.ts';
 
 const router = Router();
 
 router.post('/:id/token/company', authenticateCompany, getCompanyToken);
 router.post('/:id/token/jobseeker', authenticateToken, requireJobSeeker, getJobSeekerToken);
-router.post('/:interviewId/feedback', authenticateCompany, addInterviewFeedback);
-router.get('/:interviewId/feedback', authenticateCompany, getInterviewFeedbacksList);
-router.post('/:interviewId/reschedule', requestReschedule);
+
+// Feedback submit — Admin, HR, Interviewer only (Viewer blocked in controller too)
+router.post(
+  '/:interviewId/feedback',
+  authenticateCompany,
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER),
+  addInterviewFeedback
+);
+
+// Feedback upsert — Admin, HR, Interviewer only
+router.put(
+  '/:interviewId/feedback',
+  authenticateCompany,
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER),
+  upsertInterviewFeedback
+);
+
+// Feedback list — all company roles can view
+router.get(
+  '/:interviewId/feedback',
+  authenticateCompany,
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER),
+  getInterviewFeedbacksList
+);
+
+router.post('/:interviewId/reschedule', authenticateToken, requestReschedule);
+// Update existing feedback block
+router.put('/interviews/:interviewId/feedback', updateInterviewFeedback);
+
+// Extract feedback using cross-referenced Candidate application keys
+router.get('/candidates/:userId/applications/:applicationId/feedback', getInterviewFeedbackByCandidate);
+
 export default router;

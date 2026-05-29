@@ -20,6 +20,7 @@ import {
   getCompanyInterviewsList,
   respondToReschedule,
   updateInterviewStatus,
+  getApplicationDetailById
 } from '../controllers/interview.controller.ts';
 import {
   inviteTeamMember,
@@ -82,5 +83,8 @@ router.post('/jobs/:jobId/ai-filter', requireCompanyRole(ROLES.COMPANY_ADMIN, RO
 router.get('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getJobDetails);
 router.put('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateJob);
 router.delete('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN), deleteJob);
+
+
+router.get('/applications/:id/detail', getApplicationDetailById);
 
 export default router;
