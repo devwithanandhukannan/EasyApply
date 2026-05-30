@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node src/index.ts",
+    "dev": "nodemon --watch src --ext ts --exec ts-node src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js"
   },
@@ -30,7 +30,6 @@
     "mammoth": "^1.12.0",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.7",
-    "nodemon": "^3.1.14",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.18.0",
     "pg": "^8.21.0",
@@ -46,6 +45,7 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^25.9.1",
     "@types/pg": "^8.20.0",
+    "nodemon": "^3.1.14",
     "prisma": "^7.8.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",

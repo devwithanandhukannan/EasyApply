@@ -4,9 +4,9 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-// ─── PIPELINE ENUMS ──────────────────────────────────────────────────
 
 enum ActivityType {
   STATUS_CHANGED
@@ -24,8 +24,6 @@ enum ActivityType {
   OFFER_SENT
   OFFER_RESPONDED
 }
-
-
 
 enum RequestStatus {
   pending
@@ -45,15 +43,37 @@ enum OfferLetterStatus {
   withdrawn
 }
 
-
 enum ApplicationStatus {
-  applied           // Applied
-  screened          // Screened
-  technical_round   // Technical Round
-  hr_round          // HR Round
-  offer_sent        // Offer Sent
-  hired             // Hired
-  rejected          // Rejected (Accessible dynamically from any stage)
+  applied // Applied
+  screened // Screened
+  technical_round // Technical Round
+  hr_round // HR Round
+  offer_sent // Offer Sent
+  hired // Hired
+  rejected // Rejected (Accessible dynamically from any stage)
+}
+
+enum CandidatePriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum CandidateSource {
+  LINKEDIN
+  GITHUB
+  REFERRAL
+  CAREERS_PAGE
+  JOB_PORTAL
+  MANUAL
+}
+
+enum CandidateCrmStatus {
+  ACTIVE
+  NURTURING
+  FUTURE_OPPORTUNITY
+  DO_NOT_CONTACT
+  HIRED_ELSEWHERE
 }
 
 enum InterviewStatus {
@@ -84,20 +104,12 @@ enum Verdict {
   next_round
 }
 
-enum OfferStatus {
-  sent
-  accepted
-  declined
-  negotiation
-}
-
 enum AvailabilityStatus {
   available
   not_available
   spot_available
 }
 
-// ─── CORE SYSTEM MODELS ──────────────────────────────────────────────
 
 model User {
   id           String   @id @default(uuid())
@@ -147,15 +159,17 @@ model JobSeekerProfile {
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
-  resumes        Resume[]
-  skills         Skill[]
-  education      Education[]
-  experience     Experience[]
-  projects       Project[]
-  certifications Certification[]
-  languages      Language[]
-  achievements   Achievement[]
-  applications   Application[]
+  resumes               Resume[]
+  skills                Skill[]
+  education             Education[]
+  experience            Experience[]
+  projects              Project[]
+  certifications        Certification[]
+  languages             Language[]
+  achievements          Achievement[]
+  applications          Application[]
+  companyCrmProfiles    CompanyCandidateProfile[]
+  talentPoolMemberships TalentPoolMember[]
 
   @@index([email])
   @@index([userId])
@@ -187,6 +201,8 @@ model Skill {
   createdAt          DateTime         @default(now())
 
   @@index([jobSeekerProfileId])
+
+  @@unique([jobSeekerProfileId, name])
 }
 
 model Education {
@@ -282,47 +298,67 @@ model Achievement {
   @@index([jobSeekerProfileId])
 }
 
+// ─── COMPANY & TEAM MANAGEMENT ───────────────────────────────────────
+
 model Company {
-  id                 String   @id @default(uuid())
-  name               String   @unique
-  email              String   @unique
+  id                 String                    @id @default(uuid())
+  name               String                    @unique
+  email              String                    @unique
   password           String
   industry           String
   size               String
-  logoUrl            String?  @db.Text
+  logoUrl            String?                   @db.Text
   registrationNumber String?
-  isVerified         Boolean  @default(false)
-  verificationBadge  String   @default("none")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  teamMembers       TeamMember[]
-  jobPostings       JobPosting[]
-  interviewBatches  InterviewBatch[]
-  offerTemplates    OfferTemplate[]
+  isVerified         Boolean                   @default(false)
+  verificationBadge  String                    @default("none")
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  teamMembers        TeamMember[]
+  jobPostings        JobPosting[]
+  interviewBatches   InterviewBatch[]
+  offerTemplates     OfferTemplate[]
+  crmProfiles        CompanyCandidateProfile[]
+  talentPools        TalentPool[]
 
   @@index([name])
   @@index([email])
 }
 
 model TeamMember {
-  id        String   @id @default(uuid())
-  companyId String
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roles     Int      @default(8)
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  password  String?
-  
+  id              String @id @default(uuid())
+
+  companyId       String
+  company         Company @relation(
+    fields: [companyId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  userId          String
+  user            User @relation(
+    fields: [userId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  roles           Int @default(8)
+  status          String @default("active")
+
+  password        String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
   batchInterviews InterviewBatchInterviewer[]
   interviews      InterviewInterviewer[]
 
+  ownedCandidates CompanyCandidateProfile[]
+    @relation("CandidateOwner")
+
   @@unique([companyId, userId])
-  @@index([userId])
+
   @@index([companyId])
+  @@index([userId])
 }
 
 model InterviewBatchInterviewer {
@@ -346,6 +382,8 @@ model InterviewInterviewer {
   @@unique([interviewId, teamMemberId])
   @@index([teamMemberId])
 }
+
+// ─── VACANCY & APPLICATIONS MODULES ──────────────────────────────────
 
 model JobPosting {
   id                 String           @id @default(uuid())
@@ -384,61 +422,38 @@ model Application {
   resumeId           String
   resume             Resume            @relation(fields: [resumeId], references: [id], onDelete: Cascade)
   
-  // Pipeline Stage (NOT selection state)
   status             ApplicationStatus @default(applied)
   pipelineIndex      Int               @default(0)
   
-  // Recruiter Metadata Flags
-  isStarred          Boolean           @default(false)  // ⭐ Top talent bookmark
-  starredAt          DateTime?                          // When starred
-  starredBy          String?                            // Who starred (userId)
-  
-  priority           Int?                               // 1=High, 2=Medium, 3=Low, null=None
-  prioritySetAt      DateTime?
-  prioritySetBy      String?
-  
-  // Internal Notes (visible only to company)
-  internalNotes      String?           @db.Text
-  tags               String[]          @default([])     // ["culture-fit", "senior-level", "urgent"]
-  
-  // Candidate Private Notes
   candidateNotes     String?           @db.Text
   isWithdrawn        Boolean           @default(false)
   
-  // Timestamps
   appliedAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
-  lastActivityAt     DateTime          @default(now())  // Any action taken
+  lastActivityAt     DateTime          @default(now())
 
-  // Relations
-  interviews         Interview[]
-  offerLetters       OfferLetter[]
-  statusHistory      ApplicationHistory[]
-  activities         ApplicationActivity[]  // New: Detailed activity log
+  interviews    Interview[]
+  offerLetters  OfferLetter[]
+  statusHistory ApplicationHistory[]
+  activities    ApplicationActivity[]
 
   @@index([jobSeekerProfileId])
   @@index([jobPostingId])
   @@index([status])
-  @@index([isStarred])
-  @@index([priority])
   @@index([lastActivityAt])
 }
 
 model ApplicationHistory {
-  id            String            @id @default(uuid())
+  id            String             @id @default(uuid())
   applicationId String
-  application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  
-  fromStatus    ApplicationStatus? // null if initial creation
+  application   Application        @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fromStatus    ApplicationStatus?
   toStatus      ApplicationStatus
-  
-  changedBy     String            // userId or "system"
-  changedByType String            @default("user") // "user" | "system" | "automation"
-  
-  notes         String?           @db.Text
-  metadata      Json?             // Store additional context
-  
-  createdAt     DateTime          @default(now())
+  changedBy     String
+  changedByType String             @default("user")
+  notes         String?            @db.Text
+  metadata      Json?
+  createdAt     DateTime           @default(now())
 
   @@index([applicationId])
   @@index([createdAt])
@@ -446,62 +461,183 @@ model ApplicationHistory {
 }
 
 model ApplicationActivity {
-  id            String      @id @default(uuid())
+  id            String       @id @default(uuid())
   applicationId String
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  
+  application   Application  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   activityType  ActivityType
-  performedBy   String      // userId
-  
-  // Flexible metadata for different activity types
-  metadata      Json?       // { previousValue, newValue, reason, etc. }
-  
-  createdAt     DateTime    @default(now())
+  performedBy   String
+  metadata      Json?
+  createdAt DateTime @default(now())
 
   @@index([applicationId])
   @@index([activityType])
   @@index([createdAt])
 }
 
+// ─── CANDIDATE RELATIONSHIP MANAGEMENT (CRM) MODULES ─────────────────
+
+model CompanyCandidateProfile {
+  id                 String @id @default(uuid())
+
+  companyId          String
+  company            Company @relation(
+    fields: [companyId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(
+    fields: [jobSeekerProfileId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  ownerId            String?
+
+  owner TeamMember? @relation(
+    "CandidateOwner",
+    fields: [ownerId],
+    references: [id]
+  )
+
+  source             CandidateSource?
+  sourceUrl          String?
+
+  isStarred          Boolean @default(false)
+
+  crmPriority        CandidatePriority?
+
+  tags               String[] @default([])
+
+  crmNotes           String? @db.Text
+
+  status             CandidateCrmStatus @default(ACTIVE)
+
+  lastContactedAt    DateTime?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  crmInteractions    CrmInteractionLog[]
+
+  @@unique([companyId, jobSeekerProfileId])
+
+  @@index([companyId])
+  @@index([jobSeekerProfileId])
+  @@index([ownerId])
+  @@index([status])
+  @@index([isStarred])
+  @@index([crmPriority])
+}
+
+model TalentPool {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name        String
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     TalentPoolMember[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+model TalentPoolMember {
+  id                 String @id @default(uuid())
+
+  talentPoolId       String
+  talentPool         TalentPool @relation(
+    fields: [talentPoolId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(
+    fields: [jobSeekerProfileId],
+    references: [id],
+    onDelete: Cascade
+  )
+
+  addedBy            String?
+
+  createdAt          DateTime @default(now())
+
+  @@unique([talentPoolId, jobSeekerProfileId])
+
+  @@index([talentPoolId])
+  @@index([jobSeekerProfileId])
+}
+
+model CrmInteractionLog {
+  id                        String @id @default(uuid())
+
+  companyCandidateProfileId String
+
+  companyCandidateProfile CompanyCandidateProfile
+    @relation(
+      fields: [companyCandidateProfileId],
+      references: [id],
+      onDelete: Cascade
+    )
+
+  activityType ActivityType
+
+  performedBy String
+
+  note String? @db.Text
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([companyCandidateProfileId])
+  @@index([createdAt])
+}
+
+// ─── VETTED MEETINGS & INTERVIEWS ────────────────────────────────────
+
 model InterviewBatch {
-  id                   String          @id @default(uuid())
+  id                   String                    @id @default(uuid())
   companyId            String
-  company              Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company              Company                   @relation(fields: [companyId], references: [id], onDelete: Cascade)
   jobPostingId         String?
-  jobPosting           JobPosting?     @relation(fields: [jobPostingId], references: [id])
+  jobPosting           JobPosting?               @relation(fields: [jobPostingId], references: [id])
   startTime            DateTime
   slotDuration         Int
   interviewFormat      InterviewFormat
   selectedCandidateIds String[]
-  status               String          @default("scheduled")
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
-
-  interviewers InterviewBatchInterviewer[]
-  interviews   Interview[]
+  status               String                    @default("scheduled")
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  interviewers         InterviewBatchInterviewer[]
+  interviews           Interview[]
 
   @@index([companyId])
   @@index([startTime])
 }
 
 model Interview {
-  id              String          @id @default(uuid())
+  id              String                 @id @default(uuid())
   applicationId   String
-  application     Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  application     Application            @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   batchId         String?
-  batch           InterviewBatch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  batch           InterviewBatch?        @relation(fields: [batchId], references: [id], onDelete: Cascade)
   scheduledTime   DateTime
-  durationMinutes Int             @default(15)
-  format          InterviewFormat @default(video)
-  livekitRoomName String          @unique
+  durationMinutes Int                    @default(15)
+  format          InterviewFormat        @default(video)
+  livekitRoomName String                 @unique
   joinLink        String
-  status          InterviewStatus @default(scheduled)
+  status          InterviewStatus        @default(scheduled)
   recordingPath   String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-
-  interviewers       InterviewInterviewer[]
-  feedbacks          InterviewFeedback[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  interviewers    InterviewInterviewer[]
+  feedbacks       InterviewFeedback[]
   rescheduleRequests RescheduleRequest[]
 
   @@index([applicationId])
@@ -526,7 +662,7 @@ model RescheduleRequest {
 }
 
 model InterviewFeedback {
-  id                   String    @id @default(uuid())
+  id                   String   @id @default(uuid())
   interviewId          String
   interview            Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
   interviewerId        String
@@ -535,49 +671,43 @@ model InterviewFeedback {
   communicationRating  Int
   problemSolvingRating Int
   verdict              Verdict
-  notes                String?   @db.Text
-  createdAt            DateTime  @default(now())
+  notes                String?  @db.Text
+  createdAt            DateTime @default(now())
 
   @@index([interviewId])
   @@index([interviewerId])
 }
 
-model OfferLetter {
-  id               String            @id @default(uuid())
-  applicationId    String
-  application      Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  templateId       String?
-  template         OfferTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  
-  // Offer Details
-  position         String
-  department       String?
-  salary           Decimal
-  currency         String            
-  startDate        DateTime
-  location         String?
-  employmentType   String            
-  
-  content          Json              
-  filePath         String?           
-  
-  status           OfferLetterStatus @default(pending)
-  sentAt           DateTime?
-  viewedAt         DateTime?         
-  respondedAt      DateTime?
+// ─── OFFERS & COMPLIANCE SIGNING ─────────────────────────────────────
 
-  candidateResponse String?         
-  negotiationNote   String?         
-  
-  companySignature  Json?            
-  candidateSignature Json?          
-  
-  emailSentAt      DateTime?
-  whatsappSentAt   DateTime?
-  emailOpenCount   Int              @default(0)
-  
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+model OfferLetter {
+  id                 String            @id @default(uuid())
+  applicationId      String
+  application        Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  templateId         String?
+  template           OfferTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  position           String
+  department         String?
+  salary             Decimal
+  currency           String
+  startDate          DateTime
+  location           String?
+  employmentType     String
+  content            Json
+  filePath           String?
+  status             OfferLetterStatus @default(pending)
+  sentAt             DateTime?
+  viewedAt           DateTime?
+  respondedAt        DateTime?
+  candidateResponse  String?
+  negotiationNote    String?
+  companySignature   Json?
+  candidateSignature Json?
+  emailSentAt        DateTime?
+  whatsappSentAt     DateTime?
+  emailOpenCount     Int               @default(0)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   @@index([applicationId])
   @@index([status])
@@ -585,16 +715,15 @@ model OfferLetter {
 }
 
 model OfferTemplate {
-  id          String   @id @default(uuid())
+  id          String        @id @default(uuid())
   companyId   String
-  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
   name        String
-  content     Json     // HTML template with placeholders
-  isDefault   Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
+  content     Json
+  isDefault   Boolean       @default(false)
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   offers      OfferLetter[]
 
   @@index([companyId])
