@@ -260,7 +260,7 @@ export default function DashboardPage() {
                     {recentApps.map((app: any) => (
                       <Link 
                         key={app.applicationId} 
-                        href={`/dashboard/applications/${app.applicationId}`}
+                        href={`/dashboard/applications`}
                         className="p-4 flex items-center justify-between gap-4 hover:bg-zinc-900/40 transition-colors group"
                       >
                         <div className="flex items-center gap-3 min-w-0">

@@ -20,6 +20,7 @@ import {
   updateResume,
   restoreVersion,
   deleteResume,
+  downloadResume,
 } from '../controllers/resume.controller.ts';
 import {
   applyToJob,
@@ -39,6 +40,8 @@ import {
 import { getApplicationsTracker, updateApplicationNotes, withdrawApplicationTracker } from '../controllers/applicationTracker.controller.ts';
 import offerRoutes from './offer.routes.ts';
 import { getJobSeekerDashboard, getApplicationInsights } from '../controllers/jobseekerDashboard.controller.ts';
+import {getSalaryComparison} from '../controllers/offer.controller.ts';
+import { saveNotificationToken } from '../controllers/notification.controller.ts';
 
 const router = express.Router();
 
@@ -98,6 +101,7 @@ router.get('/resumes', getAllResumes);
 router.get('/resumes/:id', getResumeById);
 router.put('/resumes/:id', updateResume);
 router.delete('/resumes/:id', deleteResume);
+router.get('/resumes/:id/download', downloadResume);
 
 // ─── APPLICATION MANAGEMENT ──────────────────────────────────────────────
 router.post('/applications/apply', resumeUpload.single('newResume'), applyToJob);
@@ -121,5 +125,8 @@ router.use('/offers', offerRoutes);
 router.get('/dashboard', getJobSeekerDashboard);
 router.get('/insights', getApplicationInsights);
 
+router.get('/salary-compare', getSalaryComparison);
 
+
+router.post('/notification/token', saveNotificationToken);
 export default router;

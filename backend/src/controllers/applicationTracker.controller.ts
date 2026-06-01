@@ -5,7 +5,6 @@ import { ApplicationStatus } from '@prisma/client';
 interface AuthRequest extends Request {
   user?: { userId: string; mobileNumber: string; globalRoles: number; email?: string };
 }
-
 export const getApplicationsTracker = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -59,81 +58,94 @@ export const getApplicationsTracker = async (req: AuthRequest, res: Response) =>
       orderBy: { updatedAt: 'desc' }
     });
 
-  const mappedTrackerData = applications.map(app => {
-  let liveStatusBadge = app.status.toLowerCase();
-  if (app.isWithdrawn) {
-    liveStatusBadge = 'withdrawn';
-  }
+    const mappedTrackerData = applications.map(app => {
+      let liveStatusBadge = app.status.toLowerCase();
+      if (app.isWithdrawn) {
+        liveStatusBadge = 'withdrawn';
+      }
 
-  const interviewHistory = app.interviews.map(interview => ({
-    interviewId: interview.id,
-    scheduledTime: interview.scheduledTime,
-    durationMinutes: interview.durationMinutes,
-    format: interview.format,
-    status: interview.status,
-    livekitRoomName: interview.livekitRoomName,
-    joinLink: ['scheduled', 'in_progress'].includes(interview.status) ? interview.joinLink : null,
-    companyFeedback: interview.feedbacks.map(f => ({
-      verdict: f.verdict,
-      notes: f.notes || 'No notes shared by interviewer.',
-      createdAt: f.createdAt
-    }))
-  }));
+      const interviewHistory = app.interviews.map(interview => ({
+        interviewId: interview.id,
+        scheduledTime: interview.scheduledTime,
+        durationMinutes: interview.durationMinutes,
+        format: interview.format,
+        status: interview.status,
+        livekitRoomName: interview.livekitRoomName,
+        joinLink: ['scheduled', 'in_progress'].includes(interview.status) ? interview.joinLink : null,
+        companyFeedback: interview.feedbacks.map(f => ({
+          verdict: f.verdict,
+          notes: f.notes || 'No notes shared by interviewer.',
+          createdAt: f.createdAt
+        }))
+      }));
 
-  // ✅ FIXED: Map toStatus to stage
-  const visualTimeline = app.statusHistory.map(log => ({
-    stage: log.toStatus, // ✅ Changed from log.status
-    date: log.createdAt,
-    notes: log.notes || `Moved to stage: ${log.toStatus.replace(/_/g, ' ')}`
-  }));
+      const visualTimeline = app.statusHistory.map(log => ({
+        stage: log.toStatus,
+        date: log.createdAt,
+        notes: log.notes || `Moved to stage: ${log.toStatus.replace(/_/g, ' ')}`
+      }));
 
-  const hasInterviewsStarted = app.interviews.some(i => 
-    ['confirmed', 'in_progress', 'completed'].includes(i.status)
-  );
-  
-  const canWithdraw = !app.isWithdrawn && 
-                      !['hired', 'rejected', 'offer_sent'].includes(app.status) && 
-                      !hasInterviewsStarted;
+      const hasInterviewsStarted = app.interviews.some(i => 
+        ['confirmed', 'in_progress', 'completed'].includes(i.status)
+      );
+      
+      const canWithdraw = !app.isWithdrawn && 
+                          !['hired', 'rejected', 'offer_sent'].includes(app.status) && 
+                          !hasInterviewsStarted;
 
-  return {
-    applicationId: app.id,
-    liveStatusBadge,
-    isWithdrawn: app.isWithdrawn,
-    currentStage: app.status,
-    pipelineIndex: app.pipelineIndex,
-    candidateNotes: app.candidateNotes || '',
-    appliedAt: app.appliedAt,
-    updatedAt: app.updatedAt,
-    jobDetails: {
-      id: app.jobPostingId,
-      title: app.jobPosting.title,
-      department: app.jobPosting.department || '',
-      jobType: app.jobPosting.jobType,
-      location: app.jobPosting.location || 'Remote'
-    },
-    companyDetails: {
-      name: app.jobPosting.company.name,
-      logoUrl: app.jobPosting.company.logoUrl,
-      industry: app.jobPosting.company.industry
-    },
-    resumeUsed: {
-      id: app.resume.id,
-      name: app.resume.name,
-      downloadPath: app.resume.filePath
-    },
-    timelineView: visualTimeline,
-    interviewHistory,
-    activeOffer: app.offerLetters[0] 
-      ? {
-          id: app.offerLetters[0].id,
-          status: app.offerLetters[0].status,
-          filePath: app.offerLetters[0].filePath,
-          sentAt: app.offerLetters[0].sentAt
-        } 
-      : null,
-    canWithdraw
-  };
-});
+      // Extract details from the most recent offer letter context if available
+      const activeOfferRecord = app.offerLetters[0];
+
+      return {
+        applicationId: app.id,
+        liveStatusBadge,
+        isWithdrawn: app.isWithdrawn,
+        currentStage: app.status,
+        pipelineIndex: app.pipelineIndex,
+        candidateNotes: app.candidateNotes || '',
+        appliedAt: app.appliedAt,
+        updatedAt: app.updatedAt,
+        jobDetails: {
+          id: app.jobPostingId,
+          title: activeOfferRecord?.position || app.jobPosting.title,
+          department: activeOfferRecord?.department || app.jobPosting.department || '',
+          jobType: app.jobPosting.jobType,
+          locationType: app.jobPosting.locationType || 'Onsite',
+          location: activeOfferRecord?.location || app.jobPosting.location || 'Remote',
+          experienceRequired: app.jobPosting.experienceRequired || 'Not specified',
+          // Maps either the finalized compensation package or the listing bracket
+          compensationContext: activeOfferRecord 
+            ? `${activeOfferRecord.currency} ${Number(activeOfferRecord.salary).toLocaleString()}`
+            : app.jobPosting.salaryRange || 'Disclosed upon screening'
+        },
+        companyDetails: {
+          name: app.jobPosting.company.name,
+          logoUrl: app.jobPosting.company.logoUrl,
+          industry: app.jobPosting.company.industry
+        },
+        resumeUsed: {
+          id: app.resume.id,
+          name: app.resume.name,
+          downloadPath: app.resume.filePath
+        },
+        timelineView: visualTimeline,
+        interviewHistory,
+        activeOffer: activeOfferRecord 
+          ? {
+              id: activeOfferRecord.id,
+              status: activeOfferRecord.status,
+              filePath: activeOfferRecord.filePath,
+              sentAt: activeOfferRecord.sentAt,
+              finalPosition: activeOfferRecord.position,
+              finalSalary: activeOfferRecord.salary,
+              currency: activeOfferRecord.currency,
+              startDate: activeOfferRecord.startDate,
+              employmentType: activeOfferRecord.employmentType
+            } 
+          : null,
+        canWithdraw
+      };
+    });
 
     return res.status(200).json({ success: true, data: mappedTrackerData });
   } catch (error) {
@@ -204,7 +216,11 @@ export const withdrawApplicationTracker = async (req: AuthRequest, res: Response
       });
     }
 
+    // Capture the current status before updating it for complete history metrics
+    const previousStatus = application.status;
+
     await prisma.$transaction([
+      // 1. Update the application status flags cleanly
       prisma.application.update({
         where: { id: applicationId },
         data: {
@@ -212,10 +228,15 @@ export const withdrawApplicationTracker = async (req: AuthRequest, res: Response
           status: ApplicationStatus.rejected
         }
       }),
+      
+      // 2. Write the audit log history entry with all schema-required keys
       prisma.applicationHistory.create({
         data: {
           applicationId,
-          status: ApplicationStatus.rejected,
+          fromStatus: previousStatus, // Populates the optional tracking field
+          toStatus: ApplicationStatus.rejected, // This is where toStatus belongs!
+          changedBy: userId, // Required by schema
+          changedByType: 'candidate', // Required by schema
           notes: 'Candidate triggered one-tap withdrawal pipeline rejection directly from dashboard.'
         }
       })

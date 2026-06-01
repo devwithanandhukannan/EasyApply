@@ -90,6 +90,86 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
   }
 };
 
+const compileResumeHtml = (data: any): string => {
+  const headingStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; margin-bottom: 5px;";
+  const sectionTitleStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-top: 20px;";
+  const bodyStyle = "color: #333; font-family: 'Georgia, serif'; font-size: 14px; line-height: 1.5;";
+  const subStyle = "color: #555; font-family: Arial, sans-serif; font-size: 13px;";
+  const linkStyle = "color: #2563EB; text-decoration: none; margin-right: 10px;";
+
+  let html = `<h1 style="${headingStyle}">${data.fullName || ''}</h1>`;
+  
+  // Contact Section
+  html += `<p style="${bodyStyle}">`;
+  if (data.contact?.email) html += `Email: ${data.contact.email} | `;
+  if (data.contact?.phone) html += `Phone: ${data.contact.phone} | `;
+  if (data.contact?.location) html += `Location: ${data.contact.location}<br>`;
+  if (data.contact?.links) {
+    html += data.contact.links.map((link: string) => `<a style="${linkStyle}" href="${link}">${link}</a>`).join(' ');
+  }
+  html += `</p><hr>`;
+
+  // Summary Section
+  if (data.summary) {
+    html += `<h2 style="${sectionTitleStyle}">Professional Summary</h2>`;
+    html += `<p style="${bodyStyle}">${data.summary}</p>`;
+  }
+
+  // Skills Section
+  if (data.skills?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Skills</h2>`;
+    html += `<p style="${bodyStyle}"><strong>Core Competencies:</strong> ${data.skills.join(', ')}</p>`;
+  }
+
+  // Experience Section
+  if (data.experience?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Professional Experience</h2>`;
+    data.experience.forEach((exp: any) => {
+      html += `<p style="${bodyStyle}"><strong>${exp.company}</strong> — <em>${exp.role}</em> <span style="${subStyle}">(${exp.duration || ''})</span></p>`;
+      if (exp.bullets?.length) {
+        html += `<ul style="${bodyStyle}">`;
+        exp.bullets.forEach((b: string) => html += `<li>${b}</li>`);
+        html += `</ul>`;
+      }
+    });
+  }
+
+  // Projects Section
+  if (data.projects?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Key Projects</h2>`;
+    data.projects.forEach((proj: any) => {
+      html += `<p style="${bodyStyle}"><strong>${proj.name}</strong> ${proj.technologies ? `(${proj.technologies.join(', ')})` : ''}<br>${proj.description}</p>`;
+    });
+  }
+
+  // Education Section
+  if (data.education?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Education</h2>`;
+    data.education.forEach((edu: any) => {
+      html += `<p style="${bodyStyle}"><strong>${edu.institution}</strong> — ${edu.degree} ${edu.field ? `in ${edu.field}` : ''} <span style="${subStyle}">(${edu.duration || ''})</span><br>${edu.details || ''}</p>`;
+    });
+  }
+
+  // Certifications Section
+  if (data.certifications?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Certifications</h2>`;
+    html += `<ul style="${bodyStyle}">` + data.certifications.map((c: string) => `<li>${c}</li>`).join('') + `</ul>`;
+  }
+
+  // Languages Section
+  if (data.languages?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Languages</h2>`;
+    html += `<p style="${bodyStyle}">${data.languages.join(', ')}</p>`;
+  }
+
+  // Achievements Section
+  if (data.achievements?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Key Achievements</h2>`;
+    html += `<ul style="${bodyStyle}">` + data.achievements.map((a: string) => `<li>${a}</li>`).join('') + `</ul>`;
+  }
+
+  return html;
+};
 export const generateCV = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -101,10 +181,14 @@ export const generateCV = async (req: Request, res: Response) => {
     });
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
 
+    // Call the updated LLM prompt function
     const generated = await generateFreshCV(profile, customPrompt, jobDescription);
 
+    // Render the HTML cleanly on the backend server side 
+    const finalHtmlContent = generated.resumeData ? compileResumeHtml(generated.resumeData) : '';
+
     const contentData = {
-      htmlContent: generated.htmlContent ?? '',
+      htmlContent: finalHtmlContent,
       atsBreakdown: generated.atsBreakdown ?? {},
       margins: { top: 60, right: 72, bottom: 60, left: 72 },
       template: 'default',
@@ -335,5 +419,23 @@ export const deleteResume = async (req: Request, res: Response) => {
     return res.json({ success: true, message: 'Deleted' });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to delete' });
+  }
+};
+
+export const downloadResume = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+    if (!profileId) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
+    if (!resume) return res.status(404).json({ success: false, message: 'Not found' });
+    if (!resume.filePath || !fs.existsSync(resume.filePath)) return res.status(404).json({ success: false, message: 'File not found' });
+
+    res.download(resume.filePath, resume.name + (resume.filePath.endsWith('.pdf') ? '.pdf' : '.docx'));
+  } catch (err) {
+    console.error('downloadResume error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to download' });
   }
 };

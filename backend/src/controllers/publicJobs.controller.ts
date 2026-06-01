@@ -1,4 +1,3 @@
-// src/controllers/publicJobs.controller.ts
 import type { Request, Response } from 'express';
 import { prisma } from '../utils/prisma.ts';
 
@@ -17,42 +16,36 @@ export const getPublicJobs = async (req: Request, res: Response) => {
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const take = parseInt(limit as string);
 
-    const where: any = { status: 'active' };
+    // FIX: Normalize today's date to midnight so jobs expiring "today" remain active
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
 
-    // Search in title, department, description
-    if (search) {
-      where.OR = [
-        { title: { contains: search as string, mode: 'insensitive' } },
-        { department: { contains: search as string, mode: 'insensitive' } },
-        { description: { contains: search as string, mode: 'insensitive' } },
-      ];
-    }
-
-    // Filter by job type
-    if (jobType && jobType !== 'all') {
-      where.jobType = jobType;
-    }
-
-    // Filter by location type
-    if (locationType && locationType !== 'all') {
-      where.locationType = locationType;
-    }
-
-    // Filter by city location
-    if (location) {
-      where.location = { contains: location as string, mode: 'insensitive' };
-    }
-
-    // Filter by company
-    if (companyId) {
-      where.companyId = companyId;
-    }
-
-    // Only show jobs with future or no deadline
-    where.OR = [
-      { deadline: null },
-      { deadline: { gte: new Date() } }
+    const andConditions: any[] = [
+      { status: 'active' },
+      {
+        OR: [
+          { deadline: null },
+          { deadline: { gte: todayMidnight } }, // Compares cleanly against the start of the day
+        ],
+      },
     ];
+
+    if (search) {
+      andConditions.push({
+        OR: [
+          { title: { contains: search as string, mode: 'insensitive' } },
+          { department: { contains: search as string, mode: 'insensitive' } },
+          { description: { contains: search as string, mode: 'insensitive' } },
+        ],
+      });
+    }
+
+    if (jobType && jobType !== 'all') andConditions.push({ jobType });
+    if (locationType && locationType !== 'all') andConditions.push({ locationType });
+    if (location) andConditions.push({ location: { contains: location as string, mode: 'insensitive' } });
+    if (companyId) andConditions.push({ companyId });
+
+    const where = { AND: andConditions };
 
     const [jobs, total] = await Promise.all([
       prisma.jobPosting.findMany({
@@ -66,13 +59,9 @@ export const getPublicJobs = async (req: Request, res: Response) => {
               industry: true,
               size: true,
               verificationBadge: true,
-            }
+            },
           },
-          _count: {
-            select: {
-              applications: true,
-            }
-          }
+          _count: { select: { applications: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -89,14 +78,13 @@ export const getPublicJobs = async (req: Request, res: Response) => {
         page: parseInt(page as string),
         limit: parseInt(limit as string),
         totalPages: Math.ceil(total / take),
-      }
+      },
     });
   } catch (error) {
     console.error('Get public jobs error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch jobs' });
   }
 };
-
 export const getPublicJobDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -112,19 +100,13 @@ export const getPublicJobDetails = async (req: Request, res: Response) => {
             industry: true,
             size: true,
             verificationBadge: true,
-          }
+          },
         },
-        _count: {
-          select: {
-            applications: true,
-          }
-        }
-      }
+        _count: { select: { applications: true } },
+      },
     });
 
-    if (!job) {
-      return res.status(404).json({ success: false, message: 'Job not found' });
-    }
+    if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
     return res.json({ success: true, data: job });
   } catch (error) {

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { User, Calendar, Terminal, ChevronRight, CheckCircle, Eye, Clock, XCircle, Star } from 'lucide-react';
+import { User, Calendar, Terminal, ChevronRight, CheckCircle, Eye, Clock, XCircle, Star, UserPlus } from 'lucide-react';
 import api from '@/app/lib/axios';
 import FeedbackModal from '@/app/components/FeedbackModal';
+import AddToTalentPoolModal from '@/app/components/AddToTalentPoolModal'; // NEW
 
 interface FeedbackEntry {
   id: string;
@@ -87,6 +88,7 @@ export default function PostInterviewReviewPage() {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [poolModalOpen, setPoolModalOpen] = useState(false); // NEW
 
   const loadData = async () => {
     try {
@@ -393,6 +395,15 @@ export default function PostInterviewReviewPage() {
           </div>
         )}
 
+        {/* NEW: Add to Talent Pool button */}
+        <button
+          onClick={() => setPoolModalOpen(true)}
+          className="w-full py-2.5 border border-zinc-900 hover:border-zinc-800 bg-zinc-950 hover:bg-zinc-900/50 text-zinc-400 hover:text-white font-medium text-xs uppercase tracking-wider rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <UserPlus className="w-4 h-4" />
+          Add to Talent Pool
+        </button>
+
         <button
           onClick={() => router.push('/dashboard/interviews')}
           className="w-full py-2.5 border border-zinc-900 hover:border-zinc-800 bg-zinc-950 hover:bg-zinc-900/50 text-zinc-400 hover:text-white font-medium text-xs uppercase tracking-wider rounded-lg transition-colors"
@@ -408,6 +419,14 @@ export default function PostInterviewReviewPage() {
         interviewId={interview.id}
         existingFeedback={myFeedback}
         onSuccess={handleFeedbackSuccess}
+      />
+
+      {/* NEW: Add to Talent Pool Modal */}
+      <AddToTalentPoolModal
+        open={poolModalOpen}
+        onClose={() => setPoolModalOpen(false)}
+        jobSeekerProfileId={interview.application.jobSeekerProfile.id}
+        candidateName={interview.application.jobSeekerProfile.fullName}
       />
     </div>
   );

@@ -5,10 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Calendar, Clock, User, Mail, Phone, MapPin, FileText, 
   Star, TrendingUp, CheckCircle, XCircle, AlertCircle, Clock as ClockIcon,
-  ChevronRight, Edit3, Eye, Download, ExternalLink, Activity, MessageSquare
+  ChevronRight, Edit3, Eye, Download, ExternalLink, Activity, MessageSquare,
+  UserPlus
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import FeedbackModal from '@/app/components/FeedbackModal';
+import AddToTalentPoolModal from '@/app/components/AddToTalentPoolModal';
 
 interface JobSeekerProfile {
   id: string;
@@ -157,6 +159,9 @@ export default function ApplicationDetailPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
   const [myFeedbackForInterview, setMyFeedbackForInterview] = useState<FeedbackEntry | null>(null);
+  
+  // Talent Pool Modal State
+  const [poolModalOpen, setPoolModalOpen] = useState(false);
 
   const loadData = async () => {
     try {
@@ -235,15 +240,26 @@ export default function ApplicationDetailPage() {
             Back to Pipeline
           </button>
           
-          <div className="flex items-center gap-2">
-            {application.isStarred && (
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-            )}
-            {application.priority && (
-              <span className="px-2 py-1 bg-red-950/40 border border-red-900 text-red-400 text-[10px] font-bold rounded uppercase">
-                P{application.priority}
-              </span>
-            )}
+          <div className="flex items-center gap-3">
+            {/* Save to Talent Pool Button */}
+            <button
+              onClick={() => setPoolModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider bg-indigo-950/30 border border-indigo-900 text-indigo-400 hover:bg-indigo-950/50 rounded-lg transition-all"
+            >
+              <UserPlus className="w-4 h-4" />
+              Save to Pool
+            </button>
+
+            <div className="flex items-center gap-2">
+              {application.isStarred && (
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              )}
+              {application.priority && (
+                <span className="px-2 py-1 bg-red-950/40 border border-red-900 text-red-400 text-[10px] font-bold rounded uppercase">
+                  P{application.priority}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -757,6 +773,14 @@ export default function ApplicationDetailPage() {
           onSuccess={handleFeedbackSuccess}
         />
       )}
+
+      {/* Talent Pool Modal */}
+      <AddToTalentPoolModal
+        open={poolModalOpen}
+        onClose={() => setPoolModalOpen(false)}
+        jobSeekerProfileId={application.jobSeekerProfile.id}
+        candidateName={application.jobSeekerProfile.fullName}
+      />
     </div>
   );
 }

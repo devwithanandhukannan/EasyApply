@@ -1,5 +1,6 @@
 // app/layout.tsx
 import { AuthProvider } from '@/app/contexts/AuthContext';
+import { PublicAuthProvider } from '@/app/contexts/PublicAuthContext';
 import '@/app/globals.css';
 
 export const metadata = {
@@ -12,7 +13,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark">
       <body className="bg-black text-white antialiased">
         <AuthProvider>
-          {children}
+          <PublicAuthProvider>
+            {children}
+          </PublicAuthProvider>
         </AuthProvider>
       </body>
     </html>

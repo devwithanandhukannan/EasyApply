@@ -14,13 +14,16 @@ import {
   FileText,
   X,
   AlertCircle,
-  Globe,
-  Layers
+  Globe
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 export default function JobsPage() {
+  // Initialize toast hook
+  const { showToast } = useGlassToast();
+
   const [jobs, setJobs] = useState<any[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,7 +133,6 @@ export default function JobsPage() {
       {/* Filter Options Panel */}
       <div className="bg-zinc-950 border border-zinc-900/80 rounded-xl p-4 shadow-xl shadow-black/20">
         <div className="space-y-3">
-          {/* Input Search Field */}
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={15} />
             <input
@@ -142,7 +144,6 @@ export default function JobsPage() {
             />
           </div>
 
-          {/* Quick Filter Sliders */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <select
               value={filters.jobType}
@@ -216,7 +217,6 @@ export default function JobsPage() {
                   href={`/dashboard/jobs/${job.id}`}
                   className="bg-zinc-950 border border-zinc-900/80 rounded-2xl p-5 hover:border-zinc-800 transition-all flex flex-col group relative"
                 >
-                  {/* Card Corporate Branding Row */}
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3 min-w-0">
                       {job.company.logoUrl ? (
@@ -242,7 +242,6 @@ export default function JobsPage() {
                     )}
                   </div>
 
-                  {/* Core Content Elements */}
                   <div className="mb-1">
                     <h4 className="text-sm font-bold text-zinc-100 tracking-tight group-hover:text-white truncate">
                       {job.title}
@@ -252,7 +251,6 @@ export default function JobsPage() {
                     )}
                   </div>
 
-                  {/* Metadata Indicators info */}
                   <div className="space-y-2 text-xs my-4 flex-1 text-zinc-400">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[10px] font-bold px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg">
@@ -286,7 +284,6 @@ export default function JobsPage() {
                     </div>
                   </div>
 
-                  {/* Technical Tags Array */}
                   {job.requiredSkills && job.requiredSkills.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-4">
                       {job.requiredSkills.slice(0, 2).map((skill: string, idx: number) => (
@@ -305,7 +302,6 @@ export default function JobsPage() {
                     </div>
                   )}
 
-                  {/* Card Trigger Baselines Footer */}
                   <div className="pt-3 border-t border-zinc-900/80 space-y-2.5">
                     <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">
                       <div className="flex items-center gap-1">
@@ -341,7 +337,6 @@ export default function JobsPage() {
             })}
           </div>
 
-          {/* Simple Pagination Layout controls */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-4 pt-6">
               <button
@@ -366,7 +361,6 @@ export default function JobsPage() {
         </>
       )}
 
-      {/* Application Sheet Drawer Modal */}
       {showApplicationModal && selectedJob && (
         <ApplicationModal
           job={selectedJob}
@@ -383,6 +377,9 @@ export default function JobsPage() {
 
 // ─── LOCAL APPLICATION DIALOG COMPONENT ────────────────────
 function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () => void; onSuccess: () => void; }) {
+  // Initialize context hook inside dialog
+  const { showToast } = useGlassToast();
+
   const [resumes, setResumes] = useState<any[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [uploadNew, setUploadNew] = useState(false);
@@ -415,11 +412,11 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       if (file.size > 10 * 1024 * 1024) {
-        alert('File size must be less than 10MB');
+        showToast('File Too Large', 'File size must be less than 10MB', 'danger');
         return;
       }
       if (!['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
-        alert('Only PDF and DOCX formats are supported.');
+        showToast('Unsupported Format', 'Only PDF and DOCX formats are supported.', 'danger');
         return;
       }
       setNewResumeFile(file);
@@ -428,11 +425,11 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
 
   const handleSubmit = async () => {
     if (!uploadNew && !selectedResumeId) {
-      alert('Please select a resume profile.');
+      showToast('Selection Required', 'Please select a resume profile.', 'info');
       return;
     }
     if (uploadNew && !newResumeFile) {
-      alert('Please select a valid document archive.');
+      showToast('Document Missing', 'Please select a valid document archive.', 'info');
       return;
     }
 
@@ -454,12 +451,22 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
       });
 
       if (response.data.success) {
-        alert('Application submitted successfully.');
+        // Professional Success Notification without emoji
+        showToast(
+          'Application Submitted',
+          `Successfully applied for ${job.title} at ${job.company.name}.`,
+          'success'
+        );
         onSuccess();
       }
     } catch (error: any) {
       console.error('Submission error:', error);
-      alert(error.response?.data?.message || 'Failed to file application.');
+      // Professional Failure Notification without emoji
+      showToast(
+        'Submission Failed',
+        error.response?.data?.message || 'Failed to file application.',
+        'danger'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -468,7 +475,6 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
       <div className="bg-zinc-950 border border-zinc-900 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-fade-in">
-        {/* Top bar header */}
         <div className="p-5 border-b border-zinc-900 flex items-center justify-between bg-zinc-900/20">
           <div>
             <h2 className="text-sm font-bold text-white tracking-tight">Submit Application</h2>
@@ -479,7 +485,6 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
           </button>
         </div>
 
-        {/* Modal body Content selections */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div className="flex p-1 bg-zinc-900/60 border border-zinc-900 rounded-xl">
             <button
@@ -500,7 +505,6 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
             </button>
           </div>
 
-          {/* List Profiles matching selection tags */}
           {!uploadNew && (
             <div className="space-y-2">
               {isLoading ? (
@@ -545,7 +549,6 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
             </div>
           )}
 
-          {/* Action Drag Drop panel view */}
           {uploadNew && (
             <div>
               <label className="block border border-dashed border-zinc-900 bg-zinc-900/10 hover:bg-zinc-900/20 rounded-xl p-6 text-center hover:border-zinc-700 transition-all cursor-pointer">
@@ -573,7 +576,6 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
             </div>
           )}
 
-          {/* Verification Notices footer info */}
           <div className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3 flex gap-2.5">
             <AlertCircle className="text-zinc-600 shrink-0 mt-0.5" size={14} />
             <div className="text-[11px] text-zinc-500 font-medium leading-relaxed">
@@ -583,7 +585,6 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
           </div>
         </div>
 
-        {/* Action Triggers panel */}
         <div className="p-4 border-t border-zinc-900 flex items-center justify-end gap-2 bg-zinc-900/20">
           <button
             onClick={onClose}

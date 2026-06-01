@@ -28,9 +28,12 @@ import {
   XOctagon,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import api from '@/app/lib/axios';
 import OfferResponseModal from '@/app/components/OfferResponseModal';
 import RescheduleInterviewModal from '@/app/components/RescheduleInterviewModal';
+import SalaryBenchmarkingModal from '@/app/components/SalaryBenchmarkingModal';
+
 
 interface TimelineEvent {
   stage: string;
@@ -67,7 +70,10 @@ interface ApplicationTrackItem {
     title: string;
     department: string;
     jobType: string;
+    locationType?: string;
     location: string;
+    experienceRequired?: string;
+    compensationContext?: string;
   };
   companyDetails: {
     name: string;
@@ -92,6 +98,8 @@ interface ApplicationTrackItem {
 }
 
 export default function ApplicationsPage() {
+  const [salaryModalOpen, setSalaryModalOpen] = useState(false);
+  const router = useRouter();
   const [applications, setApplications] = useState<ApplicationTrackItem[]>([]);
   const [filteredApplications, setFilteredApplications] = useState<ApplicationTrackItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -108,6 +116,7 @@ export default function ApplicationsPage() {
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
   const [selectedInterviewTime, setSelectedInterviewTime] = useState<string>('');
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
+  const [downloadingOffer, setDownloadingOffer] = useState<boolean>(false);
 
   useEffect(() => {
     fetchApplications();
@@ -116,6 +125,11 @@ export default function ApplicationsPage() {
   useEffect(() => {
     handleSearchAndFilter();
   }, [searchQuery, statusFilter, applications]);
+
+  const handleSalaryBenchmarking = () => {
+    if (!selectedApp) return;
+    setSalaryModalOpen(true);
+  };
 
   const fetchApplications = async () => {
     try {
@@ -219,6 +233,35 @@ export default function ApplicationsPage() {
     } catch (error) {
       console.error('Download failed:', error);
       alert('Failed to download resume');
+    }
+  };
+
+  const handleDownloadOffer = async (offerId: string, companyName: string, roleName: string) => {
+    try {
+      setDownloadingOffer(true);
+      // Fetches direct file buffer using internal dynamic endpoints
+      const response = await api.get(`/jobseeker/offers/${offerId}/download`, {
+        responseType: 'blob'
+      });
+      
+      const fileBlob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(fileBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const safeCompanyName = companyName.replace(/\s+/g, '_');
+      const safeRoleName = roleName.replace(/\s+/g, '_');
+      link.setAttribute('download', `Offer_Letter_${safeCompanyName}_${safeRoleName}.pdf`);
+      
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Offer download failed:', error);
+      alert('Failed to download offer letter documentation.');
+    } finally {
+      setDownloadingOffer(false);
     }
   };
 
@@ -507,6 +550,14 @@ export default function ApplicationsPage() {
 
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={handleSalaryBenchmarking}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-black border border-zinc-800 rounded-lg hover:bg-zinc-900 hover:border-emerald-900/50 transition-colors"
+                    >
+                      <TrendingUp size={14} />
+                      Salary Benchmarking
+                    </button>
+
+                    <button
                       onClick={handleExportApplicationData}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 bg-black border border-zinc-800 rounded-lg hover:bg-zinc-900"
                     >
@@ -538,15 +589,14 @@ export default function ApplicationsPage() {
                       Sent: {new Date(selectedApp.activeOffer.sentAt).toLocaleDateString()} — Status: {selectedApp.activeOffer.status.toUpperCase()}
                     </p>
                     <div className="flex gap-3">
-                      <a
-                        href={selectedApp.activeOffer.filePath}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-black border border-indigo-800 text-indigo-300 text-sm font-medium rounded-lg hover:bg-indigo-950/40"
+                      <button
+                        onClick={() => handleDownloadOffer(selectedApp.activeOffer!.id, selectedApp.companyDetails.name, selectedApp.jobDetails.title)}
+                        disabled={downloadingOffer}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-black border border-indigo-800 text-indigo-300 text-sm font-medium rounded-lg hover:bg-indigo-950/40 disabled:opacity-50"
                       >
                         <FileText size={14} />
-                        View Offer
-                      </a>
+                        {downloadingOffer ? 'Downloading...' : 'Download Offer'}
+                      </button>
                       {selectedApp.activeOffer.status === 'sent' && (
                         <button
                           onClick={() => setOfferModalOpen(true)}
@@ -558,6 +608,30 @@ export default function ApplicationsPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Job & Salary Benchmarking Insights Meta Information Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-black border border-zinc-800 rounded-lg">
+                    <p className="text-xs text-zinc-500 uppercase font-medium">Experience Level</p>
+                    <p className="text-sm font-semibold text-white mt-0.5">
+                      {selectedApp.jobDetails.experienceRequired || 'Not specified'}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-black border border-zinc-800 rounded-lg">
+                    <p className="text-xs text-zinc-500 uppercase font-medium">Work Setting</p>
+                    <p className="text-sm font-semibold text-white mt-0.5">
+                      {selectedApp.jobDetails.locationType || 'On-site'}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-black border border-zinc-800 rounded-lg border-emerald-900/30 bg-emerald-950/5">
+                    <p className="text-xs text-emerald-500 uppercase font-medium flex items-center gap-1">
+                      Compensation
+                    </p>
+                    <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                      {selectedApp.jobDetails.compensationContext || 'Disclosed later'}
+                    </p>
+                  </div>
+                </div>
 
                 {/* Resume & Info */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -656,74 +730,39 @@ export default function ApplicationsPage() {
                               )}
                             </div>
                           </div>
-                          {interview.companyFeedback.length > 0 && (
-                            <div className="mt-3 pt-3 border-t border-zinc-800">
-                              <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Company Feedback</p>
-                              {interview.companyFeedback.map((fb, idx) => (
-                                <div key={idx} className="mt-2 bg-zinc-900/50 p-3 rounded-lg text-sm">
-                                  <div className="flex items-center justify-between text-zinc-300">
-                                    <span className="font-semibold">Verdict: {fb.verdict}</span>
-                                    <span className="text-xs text-zinc-500">{new Date(fb.createdAt).toLocaleDateString()}</span>
-                                  </div>
-                                  <p className="text-zinc-400 mt-1 italic">"{fb.notes}"</p>
-                                </div>
-                              ))}
-                            </div>
-                          )}
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
-
-                {/* Private Notes */}
-                <div className="space-y-3 pt-2">
-                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Edit3 size={16} className="text-zinc-500" />
-                    Private Notes
-                  </h3>
-                  <div className="space-y-2">
-                    <textarea
-                      value={editingNotes}
-                      onChange={(e) => setEditingNotes(e.target.value)}
-                      placeholder="Add private notes about this application..."
-                      className="w-full min-h-[100px] text-sm bg-black border border-zinc-800 rounded-lg p-3 text-zinc-200 placeholder-zinc-700 focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:border-transparent"
-                    />
-                    <div className="flex justify-end">
-                      <button
-                        onClick={handleUpdateNotes}
-                        disabled={savingNotes}
-                        className="px-4 py-2 text-sm font-medium text-white bg-zinc-800 rounded-lg hover:bg-zinc-700 disabled:opacity-50"
-                      >
-                        {savingNotes ? 'Saving...' : 'Save Notes'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
               </>
-            ) : (
-              <div className="py-16 text-center text-zinc-600 flex flex-col items-center">
-                <Info size={32} className="mb-2" />
-                <p className="text-sm">Select an application to view details</p>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       )}
 
-      {/* Modals */}
-      {selectedApp?.activeOffer && (
+      {/* Modals List */}
+      {salaryModalOpen && selectedApp && (
+        <SalaryBenchmarkingModal
+          isOpen={salaryModalOpen}
+          onClose={() => setSalaryModalOpen(false)}
+          title={selectedApp.jobDetails.title}
+          location={selectedApp.jobDetails.location}
+          experience={selectedApp.jobDetails.experienceRequired || '1-2 Years'}
+          offeredSalary={selectedApp.jobDetails.compensationContext}
+        />
+      )}
+
+      {offerModalOpen && selectedApp?.activeOffer && (
         <OfferResponseModal
           isOpen={offerModalOpen}
           onClose={() => setOfferModalOpen(false)}
           offerId={selectedApp.activeOffer.id}
-          position={selectedApp.activeOffer.position}
-          companyName={selectedApp.companyDetails.name}
           onSuccess={fetchApplications}
         />
       )}
 
-      {selectedInterviewId && (
+      {rescheduleModalOpen && selectedInterviewId && (
         <RescheduleInterviewModal
           isOpen={rescheduleModalOpen}
           onClose={() => {

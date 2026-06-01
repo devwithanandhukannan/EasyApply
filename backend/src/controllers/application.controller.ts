@@ -3,7 +3,7 @@ import fs from 'fs';
 import { prisma } from '../utils/prisma.ts';
 import { extractText } from '../utils/textExtractor.ts';
 import { analyzeResume } from '../services/groq.service.ts';
-import { ROLES } from '../constants/roles.ts';           
+import { ROLES } from '../constants/roles.ts';
 import { PermissionHelper } from '../utils/permissions.ts';
 import { ApplicationStatus } from '@prisma/client';
 
@@ -15,7 +15,7 @@ const getProfileId = async (userId: string) => {
 const ensureJobSeeker = async (userId: string): Promise<boolean> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { globalRoles: true },          
+    select: { globalRoles: true },
   });
   return user ? PermissionHelper.hasRole(user.globalRoles, ROLES.JOB_SEEKER) : false;
 };
@@ -58,10 +58,7 @@ export const applyToJob = async (req: Request, res: Response) => {
     }
 
     const existingApplication = await prisma.application.findFirst({
-      where: {
-        jobSeekerProfileId: profileId,
-        jobPostingId,
-      }
+      where: { jobSeekerProfileId: profileId, jobPostingId }
     });
 
     if (existingApplication) {
@@ -105,7 +102,6 @@ export const applyToJob = async (req: Request, res: Response) => {
           keywordGaps: analysis.keywordGaps ?? [],
           jdOptimizationNotes: analysis.jdOptimizationNotes ?? '',
         };
-        const atsScore = analysis.scores?.ats ?? null;
 
         const newResume = await prisma.resume.create({
           data: {
@@ -113,7 +109,7 @@ export const applyToJob = async (req: Request, res: Response) => {
             name: `Resume for ${jobPosting.title} at ${jobPosting.company.name}`,
             source: 'uploaded',
             filePath: req.file.path,
-            atsScore,
+            atsScore: analysis.scores?.ats ?? null,
             content: contentData,
             aiSuggestions: aiData,
             isPrimary: false,
@@ -139,18 +135,17 @@ export const applyToJob = async (req: Request, res: Response) => {
         return res.status(422).json({ success: false, message: 'Selected resume is corrupted. Please upload a new one.' });
       }
       const reanalysis = await analyzeResume(contentData.rawText, jobPosting.description);
-      const updatedAiData = {
-        scores: reanalysis.scores ?? {},
-        strengths: reanalysis.strengths ?? [],
-        improvements: reanalysis.improvements ?? {},
-        missingSections: reanalysis.missingSections ?? [],
-        keywordGaps: reanalysis.keywordGaps ?? [],
-        jdOptimizationNotes: reanalysis.jdOptimizationNotes ?? '',
-      };
       await prisma.resume.update({
         where: { id: resumeId },
         data: {
-          aiSuggestions: updatedAiData,
+          aiSuggestions: {
+            scores: reanalysis.scores ?? {},
+            strengths: reanalysis.strengths ?? [],
+            improvements: reanalysis.improvements ?? {},
+            missingSections: reanalysis.missingSections ?? [],
+            keywordGaps: reanalysis.keywordGaps ?? [],
+            jdOptimizationNotes: reanalysis.jdOptimizationNotes ?? '',
+          },
           atsScore: reanalysis.scores?.ats ?? existingResume.atsScore,
         }
       });
@@ -171,26 +166,23 @@ export const applyToJob = async (req: Request, res: Response) => {
           resumeId: finalResumeId,
           status: 'applied',
           pipelineIndex: 0,
-          candidateNotes: '',  
-          isWithdrawn: false   
+          candidateNotes: '',
+          isWithdrawn: false
         },
         include: {
           jobPosting: {
-            include: {
-              company: { select: { name: true, logoUrl: true } }
-            }
+            include: { company: { select: { name: true, logoUrl: true } } }
           },
           resume: { select: { name: true, atsScore: true } }
         }
       });
 
-      // 🎯 FIXED: Supplied the missing required 'changedBy' parameter
       await tx.applicationHistory.create({
         data: {
           applicationId: app.id,
           toStatus: 'applied',
           changedBy: userId,
-          notes: 'Application initialized and synchronized to hiring pipeline matrix successfully.'
+          notes: 'Application submitted successfully.'
         }
       });
 
@@ -212,15 +204,13 @@ export const applyToJob = async (req: Request, res: Response) => {
 export const getMyApplications = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
-    
-    if (!(await ensureJobSeeker(userId))) {
+
+    if (!(await ensureJobSeeker(userId)))
       return res.status(403).json({ success: false, message: 'Access denied: Job seeker role required' });
-    }
 
     const profileId = await getProfileId(userId);
-    if (!profileId) {
+    if (!profileId)
       return res.status(404).json({ success: false, message: 'Profile not found' });
-    }
 
     const { status, limit = '20', page = '1' } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -265,14 +255,13 @@ export const getApplicationDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.user!.userId;
-    if (!(await ensureJobSeeker(userId))) {
+
+    if (!(await ensureJobSeeker(userId)))
       return res.status(403).json({ success: false, message: 'Access denied: Job seeker role required' });
-    }
 
     const profileId = await getProfileId(userId);
-    if (!profileId) {
+    if (!profileId)
       return res.status(404).json({ success: false, message: 'Profile not found' });
-    }
 
     const application = await prisma.application.findFirst({
       where: { id, jobSeekerProfileId: profileId },
@@ -281,26 +270,31 @@ export const getApplicationDetails = async (req: Request, res: Response) => {
           include: { company: { select: { name: true, logoUrl: true, industry: true, size: true } } }
         },
         resume: true,
-        interviews: { 
-          include: { 
+        interviews: {
+          include: {
             feedbacks: {
               include: {
+                // FIX: InterviewFeedback.interviewer → TeamMember, not User
+                // TeamMember has no jobSeekerProfile relation — only user relation
                 interviewer: {
-                  select: { jobSeekerProfile: { select: { fullName: true } } }
+                  select: {
+                    id: true,
+                    user: { select: { id: true } }
+                  }
                 }
-              }
-            } 
-          }, 
-          orderBy: { scheduledTime: 'desc' } 
+              },
+              orderBy: { createdAt: 'desc' }
+            }
+          },
+          orderBy: { scheduledTime: 'desc' }
         },
         offerLetters: { orderBy: { sentAt: 'desc' } },
         statusHistory: { orderBy: { createdAt: 'desc' } }
       }
     });
 
-    if (!application) {
+    if (!application)
       return res.status(404).json({ success: false, message: 'Application not found' });
-    }
 
     return res.json({ success: true, data: application });
   } catch (error) {
@@ -313,33 +307,28 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const profileId = await getProfileId(userId);
-    
-    if (!profileId) {
-      return res.status(404).json({ success: false, message: 'Job seeker profile context not found.' });
-    }
+
+    if (!profileId)
+      return res.status(404).json({ success: false, message: 'Job seeker profile not found.' });
 
     const applications = await prisma.application.findMany({
       where: { jobSeekerProfileId: profileId },
       include: {
-        jobPosting: {
-          include: { company: true }
-        },
+        jobPosting: { include: { company: true } },
         resume: true,
-        statusHistory: { orderBy: { createdAt: 'desc' } },  
+        statusHistory: { orderBy: { createdAt: 'desc' } },
         interviews: {
           include: { feedbacks: true },
           orderBy: { scheduledTime: 'asc' }
         },
-        offerLetters: {
-          orderBy: { sentAt: 'desc' },
-          take: 1
-        }
+        offerLetters: { orderBy: { sentAt: 'desc' }, take: 1 }
       },
       orderBy: { updatedAt: 'desc' }
     });
 
     const structuredTrack = applications.map(app => {
       const currentStatus = app.status;
+
       const livekitInterviews = app.interviews.map(i => ({
         interviewId: i.id,
         scheduledTime: i.scheduledTime,
@@ -347,7 +336,7 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
         format: i.format,
         status: i.status,
         livekitRoomName: i.livekitRoomName,
-        joinLink: i.status === 'confirmed' || i.status === 'scheduled' ? i.joinLink : null,
+        joinLink: ['confirmed', 'scheduled'].includes(i.status) ? i.joinLink : null,
         companyFeedback: i.feedbacks.map(f => ({
           verdict: f.verdict,
           notes: f.notes,
@@ -355,15 +344,17 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
         }))
       }));
 
-      const activeOfferDoc = app.offerLetters[0] ? {
-        id: app.offerLetters[0].id,
-        status: app.offerLetters[0].status,
-        filePath: app.offerLetters[0].filePath,
-        sentAt: app.offerLetters[0].sentAt
-      } : null;
+      const activeOfferDoc = app.offerLetters[0]
+        ? {
+            id: app.offerLetters[0].id,
+            status: app.offerLetters[0].status,
+            filePath: app.offerLetters[0].filePath,
+            sentAt: app.offerLetters[0].sentAt
+          }
+        : null;
 
       const mappedTimeline = app.statusHistory.map(h => ({
-        stage: h.toStatus, 
+        stage: h.toStatus,
         date: h.createdAt,
         notes: h.notes
       }));
@@ -371,10 +362,10 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
       return {
         applicationId: app.id,
         liveStatusBadge: currentStatus,
-        isWithdrawn: app.isWithdrawn,  
+        isWithdrawn: app.isWithdrawn,
         currentStage: currentStatus,
         pipelineIndex: app.pipelineIndex ?? 0,
-        candidateNotes: app.candidateNotes || '',  
+        candidateNotes: app.candidateNotes || '',
         appliedAt: app.appliedAt,
         updatedAt: app.updatedAt,
         jobDetails: {
@@ -394,17 +385,19 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
           name: app.resume.name,
           downloadPath: app.resume.filePath
         },
-        timelineView: mappedTimeline.length > 0 ? mappedTimeline : [{ stage: 'applied', date: app.appliedAt, notes: 'Initial submission synchronized.' }],
+        timelineView: mappedTimeline.length > 0
+          ? mappedTimeline
+          : [{ stage: 'applied', date: app.appliedAt, notes: 'Application submitted.' }],
         interviewHistory: livekitInterviews,
         activeOffer: activeOfferDoc,
-        canWithdraw: !['hired', 'rejected'].includes(currentStatus.toLowerCase()) && !app.isWithdrawn
+        canWithdraw: !['hired', 'rejected', 'offer_sent'].includes(currentStatus) && !app.isWithdrawn
       };
     });
 
     return res.status(200).json({ success: true, data: structuredTrack });
   } catch (error: any) {
-    console.error("Timeline monitoring engine fault:", error);
-    return res.status(500).json({ success: false, message: "Internal metrics query failure.", error: error.message });
+    console.error('Timeline view error:', error);
+    return res.status(500).json({ success: false, message: 'Internal error.', error: error.message });
   }
 };
 
@@ -419,18 +412,17 @@ export const updateCandidatePrivateNotes = async (req: Request, res: Response) =
       where: { id, jobSeekerProfileId: profileId }
     });
 
-    if (!application) {
-      return res.status(404).json({ success: false, message: "Target candidate submission record not discovered." });
-    }
+    if (!application)
+      return res.status(404).json({ success: false, message: 'Application not found.' });
 
     const updated = await prisma.application.update({
       where: { id },
-      data: { candidateNotes: notes }  
+      data: { candidateNotes: notes }
     });
 
-    return res.status(200).json({ success: true, message: "Scratchpad matrix updated successfully.", data: updated });
+    return res.status(200).json({ success: true, message: 'Notes updated successfully.', data: updated });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: "Failed syncing workspace properties.", error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to update notes.', error: error.message });
   }
 };
 
@@ -438,46 +430,54 @@ export const withdrawApplication = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.user!.userId;
-    if (!(await ensureJobSeeker(userId))) {
+
+    if (!(await ensureJobSeeker(userId)))
       return res.status(403).json({ success: false, message: 'Access denied: Job seeker role required' });
-    }
 
     const profileId = await getProfileId(userId);
-    if (!profileId) {
+    if (!profileId)
       return res.status(404).json({ success: false, message: 'Profile not found' });
-    }
 
+    // FIX: include interviews so we can check active interview lock
     const application = await prisma.application.findFirst({
-      where: { id, jobSeekerProfileId: profileId }
+      where: { id, jobSeekerProfileId: profileId },
+      include: { interviews: { select: { status: true } } }
     });
 
-    if (!application) {
+    if (!application)
       return res.status(404).json({ success: false, message: 'Application not found' });
-    }
 
-    if (['hired'].includes(application.status.toLowerCase())) {
+    // FIX: added 'offer_sent' to blocked statuses — consistent with applicationTracker.controller.ts
+    if (['hired', 'offer_sent'].includes(application.status)) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot withdraw application at this stage. Please contact the company directly.'
+        message: 'Cannot withdraw at this stage. Please contact the company directly.'
+      });
+    }
+
+    // FIX: block withdrawal if any interview is confirmed, in progress, or completed
+    const hasActiveInterview = application.interviews.some(i =>
+      ['confirmed', 'in_progress', 'completed'].includes(i.status)
+    );
+    if (hasActiveInterview) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot withdraw after interviews have been confirmed or completed.'
       });
     }
 
     const updatedRecord = await prisma.$transaction(async (tx) => {
       const updated = await tx.application.update({
         where: { id },
-        data: { 
-          status: 'rejected',
-          isWithdrawn: true  
-        }
+        data: { status: 'rejected', isWithdrawn: true }
       });
 
-      // 🎯 FIXED: Supplied the missing required 'changedBy' parameter here too
       await tx.applicationHistory.create({
         data: {
           applicationId: id,
           toStatus: 'rejected',
           changedBy: userId,
-          notes: 'Candidate initiated voluntary withdrawal protocol to cancel application routing.'
+          notes: 'Candidate withdrew application.'
         }
       });
 

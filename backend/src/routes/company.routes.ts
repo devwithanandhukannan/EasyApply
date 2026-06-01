@@ -38,7 +38,18 @@ import {
 import { ROLES } from '../constants/roles.ts';
 import offerRoutes from './offer.routes.ts';
 import selectionRoutes from './selection.routes.ts';
-
+import { sendNotificationToUser } from '../controllers/notification.controller.ts';
+import { getMyCompanyProfile, 
+  updateCompanyProfile,
+  requestMobileChangeOtp,
+  verifyMobileChangeOtp,
+  requestEmailChangeOtp,
+  verifyEmailChangeOtp,
+  updateCompanyPassword,
+  updateCompanyLogo
+ } from '../controllers/companyAuth.controller.ts';
+import multer from 'multer';
+const upload = multer({ storage: multer.memoryStorage() });
 const router = Router();
 
 // ─── PUBLIC COMPANY ROUTES ───────────────────────────────────────────────
@@ -73,9 +84,9 @@ router.get('/applications/:applicationId', requireCompanyRole(ROLES.COMPANY_ADMI
 router.patch('/applications/:applicationId/status', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateApplicationStatus);
 
 // ─── 5. JOB OPERATIONS & DYNAMIC WILDCARDS (Fallback configurations placed at the bottom) ───
+router.post('/jobs/generate-description', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), generateAIDescription);
 router.post('/jobs', requireCompanyRole(ROLES.COMPANY_ADMIN), createJob);
 router.get('/jobs', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getAllCompanyJobs);
-router.post('/jobs/generate-description', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), generateAIDescription);
 
 router.get('/jobs/:jobId/applications', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getJobApplications);
 router.post('/jobs/:jobId/ai-filter', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), aiFilterCandidates);
@@ -86,5 +97,19 @@ router.delete('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN), deleteJob);
 
 
 router.get('/applications/:id/detail', getApplicationDetailById);
+router.post('/notification/send', sendNotificationToUser);
 
+// ─── PROFILE MANAGEMENT (Place before dynamic :id routes) ───
+router.get('/me', getMyCompanyProfile);
+router.patch('/profile', updateCompanyProfile); // Basic fields update
+router.patch('/profile/password', updateCompanyPassword);
+router.patch('/profile/logo', upload.single('logo'), updateCompanyLogo);
+
+// Mobile change flow
+router.post('/profile/mobile/request-otp', requestMobileChangeOtp);
+router.post('/profile/mobile/verify-otp', verifyMobileChangeOtp);
+
+// Email change flow
+router.post('/profile/email/request-otp', requestEmailChangeOtp);
+router.post('/profile/email/verify-otp', verifyEmailChangeOtp);
 export default router;

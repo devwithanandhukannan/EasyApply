@@ -10,7 +10,7 @@ import companyJobRoutes from './routes/company.routes.ts';
 import publicJobRoutes from './routes/publicJobs.routes.ts'; 
 import interviewRouter from './routes/interview.routes.ts';
 import kanbanRouter from './routes/kanban.routes.ts'
-import offerRoutes from './routes/offer.routes.ts';
+import crmRoutes from './routes/crm.routes.ts';
 
 const app = express();
 app.use(cookieParser());
@@ -48,7 +48,9 @@ app.use('/api/company', companyJobRoutes);
 app.use('/api/jobs', publicJobRoutes); 
 app.use('/api/interviews', interviewRouter);
 app.use('/api/kanban', kanbanRouter);
+app.use('/api/crm', crmRoutes);
 
+app.use('/api/public', publicJobRoutes);
 
 app.get('/', (_req, res) => res.send('Backend Running'));
 

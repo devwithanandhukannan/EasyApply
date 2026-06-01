@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Globe,
-  ArrowUpRight,
   ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
@@ -97,6 +96,64 @@ export default function JobDetailsPage() {
     if (days === 0) return 'Today';
     if (days === 1) return 'Yesterday';
     return `${days} days ago`;
+  };
+
+  // Helper helper engine to parse the Markdown content found in Screenshot 2026-06-01 at 10.57.47 AM.jpg
+  const renderFormattedDescription = (text: string) => {
+    if (!text) return <p className="text-zinc-500 text-xs">No detailed description specified.</p>;
+
+    const lines = text.split('\n');
+    let currentListItems: string[] = [];
+    const elements: React.ReactNode[] = [];
+
+    const flushList = (keyPrefix: string | number) => {
+      if (currentListItems.length > 0) {
+        elements.push(
+          <ul key={`list-${keyPrefix}`} className="list-disc pl-5 space-y-2 mb-4 text-zinc-300 text-sm">
+            {currentListItems.map((item, i) => (
+              <li key={i} className="leading-relaxed">{item}</li>
+            ))}
+          </ul>
+        );
+        currentListItems = [];
+      }
+    };
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+
+      // Identify Subheadings (e.g., ### **Key Responsibilities**)
+      if (trimmed.startsWith('###')) {
+        flushList(index);
+        const cleanHeader = trimmed.replace(/###|\*\*/g, '').trim();
+        elements.push(
+          <h4 key={index} className="text-white font-semibold text-sm mt-6 mb-3 tracking-wide first:mt-0">
+            {cleanHeader}
+          </h4>
+        );
+      }
+      // Identify Bullet Lists (e.g., * Implement Java-based...)
+      else if (trimmed.startsWith('*')) {
+        const cleanItem = trimmed.substring(1).trim();
+        currentListItems.push(cleanItem);
+      } 
+      // Handle normal paragraphs / empty spaces
+      else {
+        if (trimmed === '') {
+          flushList(index);
+        } else {
+          flushList(index);
+          elements.push(
+            <p key={index} className="text-zinc-300 text-sm leading-relaxed mb-4">
+              {trimmed.replace(/\*\*/g, '')}
+            </p>
+          );
+        }
+      }
+    });
+
+    flushList('final');
+    return <div className="space-y-1">{elements}</div>;
   };
 
   if (isLoading) {
@@ -185,17 +242,13 @@ export default function JobDetailsPage() {
         
         {/* Main descriptions layout body panel */}
         <div className="md:col-span-2 space-y-6">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-5 shadow-sm">
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider">Role Overview</h3>
-              <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line font-normal">
-                {job.description || 'No detailed layout specified for this career route parameter set.'}
-              </p>
-            </div>
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-sm">
+            {/* Formatted description with layout parsing fixes applied natively */}
+            {renderFormattedDescription(job.description)}
 
             {job.requirements && (
-              <div className="space-y-2 pt-2 border-t border-zinc-900">
-                <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider">Target Profile Criteria</h3>
+              <div className="mt-6 pt-6 border-t border-zinc-900">
+                <h4 className="text-white font-semibold text-sm mb-3 tracking-wide">Target Profile Criteria</h4>
                 <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line font-normal">
                   {job.requirements}
                 </p>
@@ -274,7 +327,7 @@ export default function JobDetailsPage() {
                 {job.requiredSkills.map((skill: string, idx: number) => (
                   <span
                     key={idx}
-                    className="px-2.5 py-1 bg-zinc-900 border border-zinc-850 text-zinc-300 text-[11px] font-medium rounded-lg shadow-sm"
+                    className="px-2.5 py-1 bg-zinc-900 border border-zinc-850 text-zinc-350 text-[11px] font-medium rounded-lg shadow-sm"
                   >
                     {skill}
                   </span>

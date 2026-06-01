@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import {
   Calendar, Clock, Play, User, AlertCircle, Check, X,
   ChevronDown, ChevronRight, Star, Edit3, Filter, Search,
-  Briefcase, SlidersHorizontal, Users, CheckSquare, Trash2
+  Briefcase, SlidersHorizontal, Users, CheckSquare, Trash2, FolderPlus
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import FeedbackModal from '@/app/components/FeedbackModal';
+import AddToTalentPoolModal from '@/app/components/AddToTalentPoolModal'; // NEW
 
 interface FeedbackRecord {
   id: string;
@@ -40,7 +41,9 @@ interface InterviewRecord {
     id: string;
     isStarred: boolean;
     priority: number | null;
+    jobSeekerProfileId: string; // Ensure we map the target foreign key directly
     jobSeekerProfile: {
+      id: string;
       fullName: string;
       email: string;
       profilePhotoUrl: string | null;
@@ -86,10 +89,14 @@ export default function CompanyInterviewsPage() {
   // Group collapse state
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
 
-  // Modal state
+  // Modal states
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // NEW: Talent Pool Modal Local States
+  const [poolModalOpen, setPoolModalOpen] = useState(false);
+  const [targetPoolProfile, setTargetPoolProfile] = useState<{ id: string; name: string } | null>(null);
 
   const fetchInterviews = async () => {
     try {
@@ -155,6 +162,13 @@ export default function CompanyInterviewsPage() {
     setSelectedInterviewId(interviewId);
     setSelectedFeedback(feedback);
     setIsModalOpen(true);
+  };
+
+  // NEW: Trigger handling mapping variables securely to the modal layout
+  const openTalentPoolModal = (seekerId: string, name: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTargetPoolProfile({ id: seekerId, name });
+    setPoolModalOpen(true);
   };
 
   const clearFilters = () => {
@@ -297,7 +311,7 @@ export default function CompanyInterviewsPage() {
             />
           </div>
 
-          {/* Feedback Status + Priority + Starred */}
+          {/* Status + Priority + Starred Filters */}
           <div className="flex gap-2">
             <div className="relative flex-1 flex items-center">
               <select
@@ -398,6 +412,7 @@ export default function CompanyInterviewsPage() {
                         : null;
                       const statusConfig = STATUS_CONFIG[interview.status] || STATUS_CONFIG.scheduled;
                       const priorityConfig = interview.application.priority ? PRIORITY_CONFIG[interview.application.priority] : null;
+                      const candidateProfile = interview.application.jobSeekerProfile || {};
 
                       return (
                         <div
@@ -417,18 +432,27 @@ export default function CompanyInterviewsPage() {
                                 <Star size={14} className={interview.application.isStarred ? 'fill-amber-400 text-amber-400' : ''} />
                               </button>
                               <div className="flex items-center gap-2">
-                                {interview.application.jobSeekerProfile.profilePhotoUrl ? (
+                                {candidateProfile.profilePhotoUrl ? (
                                   <img
-                                    src={interview.application.jobSeekerProfile.profilePhotoUrl}
+                                    src={candidateProfile.profilePhotoUrl}
                                     alt=""
                                     className="w-6 h-6 rounded-full border border-zinc-800 object-cover"
                                   />
                                 ) : (
                                   <User size={12} className="text-zinc-600" />
                                 )}
-                                <div className="text-xs">
-                                  <span className="font-semibold text-zinc-200 uppercase">{interview.application.jobSeekerProfile.fullName}</span>
-                                  <span className="text-zinc-600 ml-2 font-normal text-[11px] font-mono hidden md:inline">// {interview.application.jobSeekerProfile.email}</span>
+                                <div className="text-xs flex flex-wrap items-center gap-x-2">
+                                  <span className="font-semibold text-zinc-200 uppercase">{candidateProfile.fullName}</span>
+                                  <span className="text-zinc-600 font-normal text-[11px] font-mono hidden md:inline">// {candidateProfile.email}</span>
+                                  
+                                  {/* NEW: Direct Link to Pool Modal */}
+                                  <button
+                                    onClick={(e) => openTalentPoolModal(interview.application.jobSeekerProfileId || candidateProfile.id, candidateProfile.fullName, e)}
+                                    className="p-1 text-zinc-500 hover:text-blue-400 rounded hover:bg-zinc-900/60 transition-colors ml-1"
+                                    title="Add to Talent Pool"
+                                  >
+                                    <FolderPlus size={13} />
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -502,7 +526,7 @@ export default function CompanyInterviewsPage() {
                               </div>
                               <div className="flex gap-4 flex-wrap text-zinc-500">
                                 <div>TECH: <span className="text-zinc-300 font-bold">{existingFeedback.technicalRating}/5</span></div>
-                                <div>COMM: <span className="text-zinc-300 font-bold">{existingFeedbackInstance ? '5' : existingFeedback.communicationRating}/5</span></div>
+                                <div>COMM: <span className="text-zinc-300 font-bold">{existingFeedback.communicationRating}/5</span></div>
                                 <div>LOGIC: <span className="text-zinc-300 font-bold">{existingFeedback.problemSolvingRating}/5</span></div>
                               </div>
                               {existingFeedback.notes && (
@@ -598,6 +622,16 @@ export default function CompanyInterviewsPage() {
           interviewId={selectedInterviewId}
           existingFeedback={selectedFeedback}
           onSuccess={fetchInterviews}
+        />
+      )}
+
+      {/* NEW: Talent Pool Sync Management Modal Insertion */}
+      {poolModalOpen && targetPoolProfile && (
+        <AddToTalentPoolModal
+          open={poolModalOpen}
+          onClose={() => { setPoolModalOpen(false); setTargetPoolProfile(null); }}
+          jobSeekerProfileId={targetPoolProfile.id}
+          candidateName={targetPoolProfile.name}
         />
       )}
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
@@ -32,14 +32,17 @@ export default function CompanySidebar({
   setIsMobileOpen 
 }: SidebarProps) {
   const pathname = usePathname();
-  const { isAdmin, isHR, isInterviewer, loading } = useAuth(); // Destructure loading if your context provides it
+  const { isAdmin, isHR, isInterviewer, loading } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
 
-  // Sync mount phase to prevent layout flashes on refresh
+  // Sync mount phase to prevent hydration layout flashes
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  // Moving this INSIDE the component so it dynamically reacts to state adjustments
+// Inside CompanySidebar.tsx -> filteredNav useMemo block
+const filteredNav = useMemo(() => {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, visible: true },
     { name: 'Offers', href: '/dashboard/offers', icon: FileText, visible: true },
@@ -47,6 +50,12 @@ export default function CompanySidebar({
     { 
       name: 'Job Postings', 
       href: '/dashboard/jobs', 
+      icon: Briefcase, 
+      visible: isMounted && !loading && (isAdmin || isHR) 
+    },
+    { 
+      name: 'Company Talent Pool', 
+      href: '/dashboard/talent-pool', 
       icon: Briefcase, 
       visible: isMounted && !loading && (isAdmin || isHR) 
     },
@@ -61,11 +70,18 @@ export default function CompanySidebar({
       href: '/dashboard/team', 
       icon: Users, 
       visible: isMounted && !loading && (isAdmin || isHR) 
+    },
+    // ─── APPEND NEW CONFIGURE PROFILE ROUTE ───
+    { 
+      name: 'Company Profile', 
+      href: '/dashboard/profile', 
+      icon: Building2, 
+      visible: isMounted && !loading && (isAdmin || isHR) 
     }
   ];
 
-  const filteredNav = navigation.filter(item => item.visible);
-
+  return navigation.filter(item => item.visible);
+}, [isMounted, loading, isAdmin, isHR, isInterviewer]);
   const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
     <>
       {filteredNav.map((item) => {
@@ -100,12 +116,12 @@ export default function CompanySidebar({
     <>
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────── */}
       <aside 
-        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-zinc-900/80 transition-all duration-300 relative z-30 select-none ${
+        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-r-zinc-900 transition-all duration-300 relative z-30 select-none ${
           isCollapsed ? 'w-[70px]' : 'w-64'
         }`}
       >
         {/* Brand Space */}
-        <div className="p-4 border-b border-zinc-900/80 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
+        <div className="p-4 border-b border-zinc-900 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
           <div className="flex items-center gap-3 overflow-hidden">
             <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
               <Building2 className="w-4 h-4 text-zinc-300" />

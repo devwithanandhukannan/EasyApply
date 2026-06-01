@@ -68,6 +68,66 @@ Rules:
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
 
+export const aggregateSalaryBenchmarks = async (
+  title: string,
+  location: string,
+  experienceRequired: string,
+  offeredSalaryStr?: string
+) => {
+  const currentYear = 2026;
+  const targetOfferContext = offeredSalaryStr 
+    ? `An offer is currently on the table for this role: "${offeredSalaryStr}". Calculate the exact matching currency baseline percentile and market range orientation mapping.` 
+    : `No specific offer structure provided yet. Provide general benchmark parameters.`;
+
+  const prompt = `You are a principal total compensation analyst and human resources economics engine operating in the current year context: ${currentYear}.
+Analyze the target parameters to calculate highly accurate local market salary statistics.
+
+Target Market Context:
+- Role Title: ${title}
+- Target Hub/Location: ${location}
+- Experience Bracket: ${experienceRequired}
+${targetOfferContext}
+
+Rules for Data Calculations:
+1. Cross-reference localized base-pay indexes for structural metrics. If the explicit currency context cannot be explicitly inferred from the inputs (like USD, INR, etc.), default metrics to local standard market baselines matching the geo-economic landscape.
+2. Formulate realistic Minimum, Median, and Maximum data boundaries based on operational tier ranges.
+3. Determine if the compensation falls into "Below Market", "Market Rate", or "Above Market".
+4. Provide actionable insights regarding negotiating parameters for this specific market configuration.
+
+Return ONLY valid JSON string mapped to this structural interface:
+{
+  "currency": "USD" or "INR" etc,
+  "metrics": {
+    "minimum": 0,
+    "median": 0,
+    "maximum": 0
+  },
+  "marketRating": "Below Market" | "Market Rate" | "Above Market",
+  "percentileIndicator": 0,
+  "analysisNotes": "A structured market explanation detailing localized structural pay variables.",
+  "negotiationTips": [
+    "Tip 1 regarding experience framing",
+    "Tip 2 regarding allowances or benefits matching location variables"
+  ]
+}`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [
+      { 
+        role: 'system', 
+        content: 'You are a precise data analysis engine that returns strict structured JSON schemas without markdown formatting text blocks.' 
+      },
+      { role: 'user', content: prompt }
+    ],
+    model: MODEL,
+    temperature: 0.1, // Keep variance low for consistent data ranges
+    max_tokens: 1500,
+    response_format: { type: 'json_object' },
+  });
+
+  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+};
+
 export const generateFreshCV = async (
   profile: any,
   customPrompt?: string,
@@ -81,26 +141,45 @@ export const generateFreshCV = async (
     : '';
 
   const prompt = `You are an expert resume writer for software engineers and IT professionals.
-Create a professional, ATS-friendly resume in HTML.
+Analyze the user's profile data and optimize it into an exceptionally polished, ATS-friendly resume layout.
+
 ${styleInstructions}${jdSection}
-User Profile:
-${JSON.stringify(profile, null, 2)}
 
-HTML Requirements:
-- ONLY inline styles, no <style> tags, no class names
-- No <html>, <head>, <body> tags — body content only
-- Font: font-family: 'Georgia, serif' (fallback Arial)
-- Colors: #1a1a1a headings, #333 body, #555 secondary, #2563EB links
-- Section order: Header → Summary → Skills → Experience → Projects → Education → Certifications → Languages → Achievements
-- <h1> for name, <h2> for sections, bold company/institution names
-- <hr> dividers between sections
-- Bullet points for experience achievements
-- Skip empty sections entirely
-- Strong action verbs, quantified achievements
+User Profile Data:
+- Full Name: ${profile.fullName}
+- Email: ${profile.email}
+- Phone: ${profile.phone}
+- Location: ${profile.location}
+- Links: LinkedIn: ${profile.linkedin}, GitHub: ${profile.github}, Portfolio: ${profile.portfolio}
+- Professional Summary/Bio: ${profile.bio}
+- Core Skills: ${JSON.stringify(profile.skills)}
+- Work Experience: ${JSON.stringify(profile.experience)}
+- Key Projects: ${JSON.stringify(profile.projects)}
+- Education History: ${JSON.stringify(profile.education)}
+- Certifications: ${JSON.stringify(profile.certifications)}
+- Languages: ${JSON.stringify(profile.languages)}
+- Achievements: ${JSON.stringify(profile.achievements)}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON with this exact schema structure:
 {
-  "htmlContent": "<full resume HTML>",
+  "resumeData": {
+    "fullName": "",
+    "contact": { "email": "", "phone": "", "location": "", "links": [""] },
+    "summary": "A highly tailored, professional summary leveraging strong action verbs.",
+    "skills": [""],
+    "experience": [
+      { "company": "", "role": "", "location": "", "duration": "", "bullets": [""] }
+    ],
+    "projects": [
+      { "name": "", "description": "", "technologies": [""] }
+    ],
+    "education": [
+      { "institution": "", "degree": "", "field": "", "location": "", "duration": "", "details": "" }
+    ],
+    "certifications": [""],
+    "languages": [""],
+    "achievements": [""]
+  },
   "scores": { "ats":0,"formatting":0,"keywords":0,"grammar":0,"readability":0,"impact":0 },
   "atsBreakdown": { "contactInfo":0,"summary":0,"skills":0,"experience":0,"education":0,"formatting":0 },
   "strengths": [""],
@@ -113,12 +192,11 @@ Return ONLY valid JSON:
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.3,
-    max_tokens: 6000,
+    max_tokens: 4000,
     response_format: { type: 'json_object' },
   });
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
-
 export const optimizeForJD = async (htmlContent: string, jobDescription: string) => {
   const prompt = `You are a professional resume optimizer.
 
@@ -208,34 +286,44 @@ Return: { "htmlContent": "<html>" }`;
 export const generateJobDescription = async (
   roughDescription: string,
   title?: string,
-  skills?: string[]
+  department?: string,
+  locationType?: string,
+  experienceRequired?: string,
+  skills?: string[],
+  salaryRange?: string
 ) => {
-  const skillsList = skills && skills.length > 0 ? skills.join(', ') : 'core technical operations';
+  const skillsList = skills && skills.length > 0 ? skills.join(', ') : 'Not specified';
+  const currentYear = 2026;
   
-  const prompt = `You are an expert technical recruiter and senior copywriter. 
+  const prompt = `You are an expert technical recruiter and senior copywriter handling roles for the current year context: ${currentYear}. 
 Optimize and expand this rough job description into a highly engaging, professional markdown job posting.
 
-Target Job Title: ${title || 'Software Engineer'}
-Target Skills: ${skillsList}
-Rough Notes/Description: 
+Target Job Context:
+- Job Title: ${title || 'Software Engineer'}
+- Department: ${department || 'Engineering'}
+- Location Model: ${locationType || 'Remote'}
+- Experience Needed: ${experienceRequired || 'Not explicit'}
+- Target Skills: ${skillsList}
+- Comp Range: ${salaryRange || 'Competitive'}
+
+Rough Notes/Description Input: 
 """
 ${roughDescription}
 """
 
-Create a comprehensive job description with:
-1. **Role Overview** - Compelling 2-3 sentence summary
+Create a comprehensive job description with exactly these sections structured in Markdown:
+1. **Role Overview** - Compelling 2-3 sentence summary relevant to the role demands of ${currentYear}.
 2. **Key Responsibilities** - 5-7 specific, action-oriented bullet points
-3. **Required Qualifications** - Must-have skills and experience
-4. **Preferred Qualifications** - Nice-to-have skills
-5. **What We Offer** - Benefits and perks (if mentioned in rough notes)
+3. **Required Qualifications** - Must-have skills and experience levels matching the parameters
+4. **Preferred Qualifications** - Nice-to-have specialized skills
+5. **What We Offer** - Benefits and perks (synthesized nicely, especially handling the structural setup: ${locationType})
 
 Guidelines:
 - Use strong action verbs (lead, architect, drive, implement, etc.)
-- Quantify where possible (team size, scale, impact)
-- Make it ATS-friendly with relevant keywords
-- Keep tone professional but engaging
-- Use markdown formatting (headers, bullets, bold)
-- Output ONLY the formatted job description, no metadata or explanations`;
+- Quantify context where possible (team collaboration scale, target outputs)
+- Make it highly ATS-friendly using the listed tech stack and skills
+- Keep tone professional but forward-looking
+- Output ONLY the formatted job description markdown block without text wrappers or meta comments`;
 
   const completion = await groq.chat.completions.create({
     messages: [{ role: 'user', content: prompt }],

@@ -319,3 +319,588 @@ export const checkCompanySession = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Session evaluation pipeline failed.' });
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ─────────────────────────────────────────────────────────────────────
+export const getMyCompanyProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Unauthorized execution context.' 
+      });
+    }
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true }
+    });
+
+    if (!membership) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'No active business organizational context found.' 
+      });
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id: membership.companyId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        industry: true,
+        size: true,
+        logoUrl: true,
+        registrationNumber: true,
+        isVerified: true,
+        verificationBadge: true,
+        tagline: true,
+        services: true,
+        products: true,
+        seoKeywords: true,
+        coreValues: true,
+        gallery: true,
+        youtubeLink: true,
+        officeLocations: true,
+        socialMedia: true,
+        corporateLink: true,
+        createdAt: true,
+        updatedAt: true,
+        // Get linked admin's mobile (from User via TeamMember)
+        teamMembers: {
+          where: { userId },
+          select: {
+            user: {
+              select: { mobileNumber: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!company) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Company not found.' 
+      });
+    }
+
+    const mobileNumber = company.teamMembers[0]?.user?.mobileNumber || null;
+
+    const sanitizedCompany = {
+      ...company,
+      mobileNumber, // Include mobile from User
+      services: company.services || [],
+      seoKeywords: company.seoKeywords || [],
+      coreValues: company.coreValues || [],
+      gallery: company.gallery || [],
+      products: company.products || {},
+      officeLocations: company.officeLocations || [],
+      socialMedia: company.socialMedia || {},
+      teamMembers: undefined // Remove relation data
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: sanitizedCompany
+    });
+
+  } catch (error) {
+    console.error('getMyCompanyProfile error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch profile.' 
+    });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// UPDATE BASIC COMPANY PROFILE (excluding mobile, email, password, logo)
+// ─────────────────────────────────────────────────────────────────────
+export const updateCompanyProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: 'No company association.' });
+    }
+
+    const {
+      name,
+      industry,
+      size,
+      registrationNumber,
+      tagline,
+      services,
+      products,
+      seoKeywords,
+      coreValues,
+      gallery,
+      youtubeLink,
+      officeLocations,
+      socialMedia,
+      corporateLink
+    } = req.body;
+
+    // Validate unique name if changing
+    if (name) {
+      const conflict = await prisma.company.findFirst({
+        where: { name: name.trim(), NOT: { id: membership.companyId } }
+      });
+      if (conflict) {
+        return res.status(400).json({ success: false, message: 'Company name already taken.' });
+      }
+    }
+
+    const updatedCompany = await prisma.company.update({
+      where: { id: membership.companyId },
+      data: {
+        name: name?.trim() || undefined,
+        industry: industry || undefined,
+        size: size || undefined,
+        registrationNumber: registrationNumber || undefined,
+        tagline: tagline?.trim() || undefined,
+        services: Array.isArray(services) ? services : undefined,
+        products: products !== undefined ? products : undefined,
+        seoKeywords: Array.isArray(seoKeywords) ? seoKeywords.map((k: string) => k.trim()) : undefined,
+        coreValues: Array.isArray(coreValues) ? coreValues : undefined,
+        gallery: Array.isArray(gallery) ? gallery : undefined,
+        youtubeLink: youtubeLink?.trim() || undefined,
+        officeLocations: officeLocations !== undefined ? officeLocations : undefined,
+        socialMedia: socialMedia !== undefined ? socialMedia : undefined,
+        corporateLink: corporateLink?.trim() || undefined,
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully.',
+      data: updatedCompany
+    });
+  } catch (error) {
+    console.error('updateCompanyProfile error:', error);
+    return res.status(500).json({ success: false, message: 'Update failed.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// UPDATE PASSWORD
+// ─────────────────────────────────────────────────────────────────────
+export const updateCompanyPassword = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: 'No company found.' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Both passwords required.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters.' });
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id: membership.companyId },
+      select: { password: true }
+    });
+
+    if (!company) {
+      return res.status(404).json({ success: false, message: 'Company not found.' });
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, company.password);
+    if (!isValid) {
+      return res.status(401).json({ success: false, message: 'Current password incorrect.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.company.update({
+      where: { id: membership.companyId },
+      data: { password: passwordHash }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password updated successfully.'
+    });
+
+  } catch (error) {
+    console.error('updateCompanyPassword error:', error);
+    return res.status(500).json({ success: false, message: 'Password update failed.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// UPDATE LOGO
+// ─────────────────────────────────────────────────────────────────────
+export const updateCompanyLogo = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: 'No company found.' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Logo file required.' });
+    }
+
+    const logoUrl = bufferToBase64(req.file.buffer, req.file.mimetype);
+
+    const updated = await prisma.company.update({
+      where: { id: membership.companyId },
+      data: { logoUrl }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Logo updated successfully.',
+      logoUrl: updated.logoUrl
+    });
+
+  } catch (error) {
+    console.error('updateCompanyLogo error:', error);
+    return res.status(500).json({ success: false, message: 'Logo update failed.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// MOBILE CHANGE: REQUEST OTP
+// ─────────────────────────────────────────────────────────────────────
+export const requestMobileChangeOtp = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const { newMobileNumber } = req.body;
+
+    if (!newMobileNumber || !/^\d{10}$/.test(newMobileNumber)) {
+      return res.status(400).json({ success: false, message: 'Valid 10-digit mobile required.' });
+    }
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true, user: { select: { mobileNumber: true } } }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: 'No company found.' });
+    }
+
+    if (membership.user.mobileNumber === newMobileNumber) {
+      return res.status(400).json({ success: false, message: 'New mobile same as current.' });
+    }
+
+    // Check if new mobile already used by another User
+    const existingUser = await prisma.user.findUnique({ where: { mobileNumber: newMobileNumber } });
+    if (existingUser && existingUser.id !== userId) {
+      return res.status(409).json({ success: false, message: 'Mobile already in use by another account.' });
+    }
+
+    const otp = generateOTP();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+
+    // Store pending mobile temporarily in Company table
+    await prisma.company.update({
+      where: { id: membership.companyId },
+      data: { pendingMobile: newMobileNumber }
+    });
+
+    await prisma.otp.create({
+      data: {
+        mobileNumber: newMobileNumber,
+        otpHash,
+        expiresAt,
+        purpose: 'mobile_change',
+        userId
+      }
+    });
+
+    console.log(`🟢 MOBILE CHANGE OTP for ${newMobileNumber}: [ ${otp} ]`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent to new mobile number.'
+    });
+
+  } catch (error) {
+    console.error('requestMobileChangeOtp error:', error);
+    return res.status(500).json({ success: false, message: 'OTP request failed.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// MOBILE CHANGE: VERIFY OTP & UPDATE
+// ─────────────────────────────────────────────────────────────────────
+export const verifyMobileChangeOtp = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const { otp } = req.body;
+
+    if (!otp) {
+      return res.status(400).json({ success: false, message: 'OTP required.' });
+    }
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: 'No company found.' });
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id: membership.companyId },
+      select: { pendingMobile: true }
+    });
+
+    if (!company?.pendingMobile) {
+      return res.status(400).json({ success: false, message: 'No pending mobile change request.' });
+    }
+
+    const latestOtp = await prisma.otp.findFirst({
+      where: {
+        mobileNumber: company.pendingMobile,
+        purpose: 'mobile_change',
+        userId
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!latestOtp || latestOtp.expiresAt < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP expired or not found.' });
+    }
+
+    const isValid = await bcrypt.compare(otp, latestOtp.otpHash);
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP.' });
+    }
+
+    // Update User's mobileNumber
+    await prisma.user.update({
+      where: { id: userId },
+      data: { mobileNumber: company.pendingMobile }
+    });
+
+    // Clear pending mobile
+    await prisma.company.update({
+      where: { id: membership.companyId },
+      data: { pendingMobile: null }
+    });
+
+    // Delete used OTP
+    await prisma.otp.delete({ where: { id: latestOtp.id } });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Mobile number updated successfully.',
+      newMobileNumber: company.pendingMobile
+    });
+
+  } catch (error) {
+    console.error('verifyMobileChangeOtp error:', error);
+    return res.status(500).json({ success: false, message: 'Verification failed.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// EMAIL CHANGE: REQUEST OTP
+// ─────────────────────────────────────────────────────────────────────
+export const requestEmailChangeOtp = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const { newEmail } = req.body;
+
+    if (!newEmail || !/\S+@\S+\.\S+/.test(newEmail)) {
+      return res.status(400).json({ success: false, message: 'Valid email required.' });
+    }
+
+    const normalizedEmail = newEmail.trim().toLowerCase();
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: 'No company found.' });
+    }
+
+    const company = await prisma.company.findUnique({
+      where: { id: membership.companyId },
+      select: { email: true }
+    });
+
+    if (!company) {
+      return res.status(404).json({ success: false, message: 'Company not found.' });
+    }
+
+    if (company.email === normalizedEmail) {
+      return res.status(400).json({ success: false, message: 'New email same as current.' });
+    }
+
+    // Check if email already used by another company
+    const existingCompany = await prisma.company.findFirst({
+      where: { email: normalizedEmail, NOT: { id: membership.companyId } }
+    });
+
+    if (existingCompany) {
+      return res.status(409).json({ success: false, message: 'Email already in use by another company.' });
+    }
+
+    const otp = generateOTP();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+    // Store OTP (we'll use a temporary "purpose" string with the new email)
+    await prisma.otp.create({
+      data: {
+        mobileNumber: normalizedEmail, // Reusing mobileNumber field for email OTP
+        otpHash,
+        expiresAt,
+        purpose: `email_change:${membership.companyId}`,
+        userId
+      }
+    });
+
+    // Send OTP via email
+    try {
+      await sendVerificationEmail(normalizedEmail, `Your email verification OTP is: ${otp}`);
+    } catch (emailErr) {
+      console.error('Email send failed:', emailErr);
+    }
+
+    console.log(`🟢 EMAIL CHANGE OTP for ${normalizedEmail}: [ ${otp} ]`);
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent to new email address.'
+    });
+
+  } catch (error) {
+    console.error('requestEmailChangeOtp error:', error);
+    return res.status(500).json({ success: false, message: 'OTP request failed.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────
+// EMAIL CHANGE: VERIFY OTP & UPDATE
+// ─────────────────────────────────────────────────────────────────────
+export const verifyEmailChangeOtp = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const { newEmail, otp } = req.body;
+
+    if (!newEmail || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP required.' });
+    }
+
+    const normalizedEmail = newEmail.trim().toLowerCase();
+
+    const membership = await prisma.teamMember.findFirst({
+      where: { userId, status: 'active' },
+      select: { companyId: true }
+    });
+
+    if (!membership) {
+      return res.status(403).json({ success: false, message: 'No company found.' });
+    }
+
+    const latestOtp = await prisma.otp.findFirst({
+      where: {
+        mobileNumber: normalizedEmail,
+        purpose: `email_change:${membership.companyId}`,
+        userId
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!latestOtp || latestOtp.expiresAt < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP expired or not found.' });
+    }
+
+    const isValid = await bcrypt.compare(otp, latestOtp.otpHash);
+    if (!isValid) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP.' });
+    }
+
+    // Update Company email
+    await prisma.company.update({
+      where: { id: membership.companyId },
+      data: { email: normalizedEmail }
+    });
+
+    // Delete used OTP
+    await prisma.otp.delete({ where: { id: latestOtp.id } });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Email updated successfully.',
+      newEmail: normalizedEmail
+    });
+
+  } catch (error) {
+    console.error('verifyEmailChangeOtp error:', error);
+    return res.status(500).json({ success: false, message: 'Email update failed.' });
+  }
+};

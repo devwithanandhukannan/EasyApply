@@ -125,7 +125,8 @@ export const bulkMoveApplications = async (req: AuthRequest, res: Response) => {
 
 // ─── STAR/UNSTAR CANDIDATES ────────────────────────────────────────
 
-export const bulkStarApplications = async (req: AuthRequest, res: Response) => {
+
+export const bulkStarApplications = async (req: any, res: Response) => {
   try {
     const companyId = req.company?.companyId;
     const userId = req.user?.userId;
@@ -136,31 +137,55 @@ export const bulkStarApplications = async (req: AuthRequest, res: Response) => {
 
     const { applicationIds, starred } = req.body;
 
-    const count = await prisma.application.count({
+    if (!applicationIds || applicationIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'No applications provided' });
+    }
+
+    // 1. Fetch the applications to verify ownership AND extract their jobSeekerProfileId values
+    const apps = await prisma.application.findMany({
       where: {
         id: { in: applicationIds },
         jobPosting: { companyId }
+      },
+      select: {
+        id: true,
+        jobSeekerProfileId: true
       }
     });
 
-    if (count !== applicationIds.length) {
+    if (apps.length !== applicationIds.length) {
       return res.status(403).json({ success: false, message: 'Invalid applications' });
     }
 
+    const seekerProfileIds = apps.map(app => app.jobSeekerProfileId);
+
     await prisma.$transaction(async (tx) => {
+      // 2. Update the CRM data on the CORRECT model (CompanyCandidateProfile)
+      await tx.companyCandidateProfile.updateMany({
+        where: {
+          companyId,
+          jobSeekerProfileId: { in: seekerProfileIds }
+        },
+        data: {
+          isStarred: starred,
+          // note: if you need tracked tracking dates/users like starredBy, 
+          // ensure they exist on CompanyCandidateProfile or store them inside JSON meta
+          updatedAt: new Date() 
+        }
+      });
+
+      // 3. Update the last activity timestamp on the applications themselves
       await tx.application.updateMany({
         where: { id: { in: applicationIds } },
         data: {
-          isStarred: starred,
-          starredAt: starred ? new Date() : null,
-          starredBy: starred ? userId : null,
           lastActivityAt: new Date()
         }
       });
 
+      // 4. Create the activity logs
       const activities = applicationIds.map((appId: string) => ({
         applicationId: appId,
-        activityType: starred ? 'STARRED' : 'UNSTARRED' as ActivityType,
+        activityType: (starred ? 'STARRED' : 'UNSTARRED') as ActivityType,
         performedBy: userId,
         metadata: {
           timestamp: new Date().toISOString()
@@ -182,7 +207,6 @@ export const bulkStarApplications = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 // ─── SET PRIORITY ──────────────────────────────────────────────────
 
 export const bulkSetPriority = async (req: AuthRequest, res: Response) => {

@@ -217,4 +217,47 @@ export const requireJobSeekerOrCompanyAdmin = (req: Request, res: Response, next
   return res.status(403).json({ success: false, message: 'Access Denied: Job Seeker or Company Admin role required' });
 };
 
+export const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
+  console.log('reached optional auth middleware');
+  const token = req.cookies?.accessToken;
+
+  if (!token) {
+    req.user = undefined;
+    return next();
+  }
+
+  try {
+    const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as { userId: string; globalRoles: number };
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        mobileNumber: true,
+        globalRoles: true,
+        isVerified: true,
+        jobSeekerProfile: { select: { id: true, email: true, fullName: true } }
+      },
+    });
+
+    // If user exists and verified, attach to request
+    if (user && user.isVerified && user.jobSeekerProfile) {
+      req.user = {
+        userId: user.id,
+        globalRoles: user.globalRoles,
+        mobileNumber: user.mobileNumber,
+        email: user.jobSeekerProfile.email,
+        jobSeekerProfileId: user.jobSeekerProfile.id,
+        fullName: user.jobSeekerProfile.fullName
+      };
+    }
+  } catch (error) {
+    // Invalid token? Just ignore and proceed as guest
+    req.user = undefined;
+  }
+
+  return next();
+};
+
+
 export const requireAuth = authenticateCompany;

@@ -4,6 +4,7 @@ import { OfferLetterStatus } from '@prisma/client';
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
+import { aggregateSalaryBenchmarks } from '../services/groq.service.ts';
 import { sendOfferLetterEmail, sendOfferResponseNotification } from '../utils/email.ts';
 import { generateOfferLetterTemplate } from '../services/groq.service.ts';
 
@@ -14,6 +15,7 @@ interface AuthRequest extends Request {
 }
 
 // ─── TEMPLATE MANAGEMENT ───────────────────────────────────────────
+
 
 
 export const getCompanyTemplates = async (req: AuthRequest, res: Response) => {
@@ -1175,4 +1177,38 @@ export const respondToNegotiation = async (req: AuthRequest, res: Response) => {
         console.error('Respond to negotiation error:', error);
         return res.status(500).json({ success: false, message: error.message });
     }
+};
+
+
+export const getSalaryComparison = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { title, location, experience, offeredSalary } = req.query;
+
+    if (!title || !location) {
+      res.status(400).json({
+        success: false,
+        error: 'Bad Request: Missing title or location context query strings.'
+      });
+      return;
+    }
+
+    // Trigger Groq analytics aggregation loop
+    const trackingMetrics = await aggregateSalaryBenchmarks(
+      String(title),
+      String(location),
+      experience ? String(experience) : '1-3 Years',
+      offeredSalary ? String(offeredSalary) : undefined
+    );
+
+    res.status(200).json({
+      success: true,
+      data: trackingMetrics
+    });
+  } catch (error: any) {
+    console.error('Error generating benchmark data comparisons:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Internal Server Error processing market values.'
+    });
+  }
 };
