@@ -7,7 +7,8 @@ import {
   bulkAddTags,
   getFilteredApplications,
   getApplicationDetails,
-  getApplicationTimeline
+  getApplicationTimeline,
+  bulkUpdateApplicationStatus
 } from '../controllers/selection.controller.ts';
 import { requireCompanyRole } from '../middleware/auth.middleware.ts';
 import { ROLES } from '../constants/roles.ts';
@@ -60,6 +61,11 @@ router.get(
   '/applications/:applicationId', 
   requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), 
   getApplicationDetails
+);
+
+router.patch('/bulk/status',
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR),
+  bulkUpdateApplicationStatus
 );
 
 export default router;

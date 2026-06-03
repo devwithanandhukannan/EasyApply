@@ -41,7 +41,7 @@ import { ROLES } from '../constants/roles.ts';
 // Router mounts
 import offerRoutes from './offer.routes.ts';
 import selectionRoutes from './selection.routes.ts';
-import interviewRouter from './interview.routes.ts'; // Embedded support
+import interviewRouter from './interview.routes.ts';
 import crmRouter from './crm.routes.ts';
 import kanbanRouter from './kanban.routes.ts';
 

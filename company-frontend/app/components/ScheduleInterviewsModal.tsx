@@ -10,6 +10,7 @@ interface ScheduleInterviewsModalProps {
   onClose: () => void;
   jobId: string;
   selectedApplicationIds: string[];
+  initialTargetStatus?: string;
   onSuccess: () => void;
 }
 
@@ -25,14 +26,15 @@ export default function ScheduleInterviewsModal({
   onClose,
   jobId,
   selectedApplicationIds,
-  onSuccess
+  initialTargetStatus,
+  onSuccess,
 }: ScheduleInterviewsModalProps) {
   const [minDateString, setMinDateString] = useState('');
   const [customDate, setCustomDate] = useState('');
-  const [customTime, setCustomTime] = useState('10:00'); 
+  const [customTime, setCustomTime] = useState('10:00');
   const [slotDuration, setSlotDuration] = useState('30');
   const [interviewFormat, setInterviewFormat] = useState('video');
-  const [targetStatus, setTargetStatus] = useState('technical_round'); // 🎯 NEW STATE: Tracks chosen status column destination
+  const [targetStatus, setTargetStatus] = useState(initialTargetStatus ?? 'technical_round');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -44,14 +46,20 @@ export default function ScheduleInterviewsModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    if (initialTargetStatus) {
+      setTargetStatus(initialTargetStatus);
+    }
+
     const today = new Date();
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
-    
     const formattedDate = `${yyyy}-${mm}-${dd}`;
     setMinDateString(formattedDate);
-    setCustomDate(formattedDate); 
+    setCustomDate(formattedDate);
+    setError('');
+    setSelectedInterviewerIds([]);
+    setSearchQuery('');
 
     const fetchTeamData = async () => {
       try {
@@ -66,7 +74,7 @@ export default function ScheduleInterviewsModal({
     };
 
     fetchTeamData();
-  }, [isOpen]);
+  }, [isOpen, initialTargetStatus]);
 
   if (!isOpen) return null;
 
@@ -77,9 +85,10 @@ export default function ScheduleInterviewsModal({
     return 'Viewer';
   };
 
-  const filteredTeamMembers = teamMembers.filter((member) =>
-    member.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    member.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredTeamMembers = teamMembers.filter(
+    (member) =>
+      member.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      member.email?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleToggleInterviewer = (id: string) => {
@@ -89,13 +98,12 @@ export default function ScheduleInterviewsModal({
   };
 
   const handleSelectAllTeam = () => {
-    const filteredIds = filteredTeamMembers.map(m => m.id);
-    const allFilteredSelected = filteredIds.every(id => selectedInterviewerIds.includes(id));
-
+    const filteredIds = filteredTeamMembers.map((m) => m.id);
+    const allFilteredSelected = filteredIds.every((id) => selectedInterviewerIds.includes(id));
     if (allFilteredSelected) {
-      setSelectedInterviewerIds(prev => prev.filter(id => !filteredIds.includes(id)));
+      setSelectedInterviewerIds((prev) => prev.filter((id) => !filteredIds.includes(id)));
     } else {
-      setSelectedInterviewerIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+      setSelectedInterviewerIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
     }
   };
 
@@ -109,7 +117,7 @@ export default function ScheduleInterviewsModal({
     }
 
     setIsSubmitting(true);
-    
+
     try {
       const combinedDateTime = new Date(`${customDate}T${customTime}:00`);
 
@@ -124,9 +132,9 @@ export default function ScheduleInterviewsModal({
         startTime: combinedDateTime.toISOString(),
         slotDuration: parseInt(slotDuration, 10),
         interviewFormat: interviewFormat.toUpperCase(),
-        interviewerIds: selectedInterviewerIds, 
+        interviewerIds: selectedInterviewerIds,
         selectedApplicationIds,
-        targetStatus // 🎯 NEW PAYLOAD VALUE SENT TO BACKEND
+        targetStatus,
       };
 
       const response = await api.post('/company/interviews/bulk-schedule', payload);
@@ -136,29 +144,34 @@ export default function ScheduleInterviewsModal({
         setError(response.data.message || 'Failed to initialize booking session sequence.');
       }
     } catch (err: any) {
-      console.error("Error dispatching bulk scheduling payload:", err);
+      console.error('Error dispatching bulk scheduling payload:', err);
       setError(err.response?.data?.message || 'Failed to complete pipeline block execution routine.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const targetLabel = targetStatus === 'hr_round' ? 'HR Round' : 'Technical Round';
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
       <div className="bg-zinc-950 border border-zinc-900 w-full max-w-md rounded-xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 font-mono text-xs">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-900">
           <div>
             <h3 className="text-sm font-semibold text-white">Batch Interview Config</h3>
-            <p className="text-[11px] text-zinc-500 mt-0.5">Configuring options for {selectedApplicationIds.length} candidate profiles</p>
+            <p className="text-[11px] text-zinc-500 mt-0.5">
+              Configuring <span className="text-white font-medium">{targetLabel}</span> for{' '}
+              {selectedApplicationIds.length} candidate{selectedApplicationIds.length !== 1 ? 's' : ''}
+            </p>
           </div>
           <button onClick={onClose} className="p-1 text-zinc-500 hover:text-white rounded-lg transition-colors" type="button">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Configuration Setup Form */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
             <div className="p-3 bg-red-950/40 border border-red-900/50 rounded-lg text-xs text-red-400">
@@ -166,7 +179,7 @@ export default function ScheduleInterviewsModal({
             </div>
           )}
 
-          {/* Date & Time Fields */}
+          {/* Date & Time */}
           <div className="space-y-2">
             <label className="block text-[11px] font-medium text-zinc-400">Initial Batch Launch Window</label>
             <div className="grid grid-cols-2 gap-2">
@@ -181,7 +194,6 @@ export default function ScheduleInterviewsModal({
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-zinc-700 [color-scheme:dark] cursor-pointer"
                 />
               </div>
-
               <div className="relative">
                 <Clock className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500 pointer-events-none" />
                 <input
@@ -195,13 +207,13 @@ export default function ScheduleInterviewsModal({
             </div>
           </div>
 
-          {/* Duration and Format Options */}
+          {/* Duration & Format */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">Slot Duration</label>
               <div className="relative">
                 <Clock className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500 pointer-events-none" />
-                <select 
+                <select
                   value={slotDuration}
                   onChange={(e) => setSlotDuration(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-zinc-700 appearance-none cursor-pointer"
@@ -213,12 +225,11 @@ export default function ScheduleInterviewsModal({
                 </select>
               </div>
             </div>
-
             <div>
               <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">Channel Format</label>
               <div className="relative">
                 <Video className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500 pointer-events-none" />
-                <select 
+                <select
                   value={interviewFormat}
                   onChange={(e) => setInterviewFormat(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-zinc-700 appearance-none cursor-pointer"
@@ -231,12 +242,12 @@ export default function ScheduleInterviewsModal({
             </div>
           </div>
 
-          {/* 🎯 NEW SELECTION INTERFACE: Target Kanban Status Stage Dropdown */}
+          {/* Target Stage */}
           <div>
             <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">Target Pipeline Stage</label>
             <div className="relative">
               <Layers className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500 pointer-events-none" />
-              <select 
+              <select
                 value={targetStatus}
                 onChange={(e) => setTargetStatus(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-xs text-white focus:outline-none focus:border-zinc-700 appearance-none cursor-pointer"
@@ -247,7 +258,7 @@ export default function ScheduleInterviewsModal({
             </div>
           </div>
 
-          {/* Searchable Interviewer Assignment Area */}
+          {/* Interviewer Assignment */}
           <div className="space-y-2 pt-2">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-medium text-zinc-400 flex items-center gap-1">
@@ -260,8 +271,8 @@ export default function ScheduleInterviewsModal({
                   onClick={handleSelectAllTeam}
                   className="text-[10px] text-zinc-400 hover:text-white transition-colors border border-zinc-800 bg-zinc-900/60 px-2 py-0.5 rounded-md cursor-pointer"
                 >
-                  {filteredTeamMembers.map(m => m.id).every(id => selectedInterviewerIds.includes(id)) 
-                    ? 'Clear Filtered' 
+                  {filteredTeamMembers.map((m) => m.id).every((id) => selectedInterviewerIds.includes(id))
+                    ? 'Clear Filtered'
                     : 'Select Filtered'}
                 </button>
               )}
@@ -291,7 +302,6 @@ export default function ScheduleInterviewsModal({
                 {filteredTeamMembers.map((member) => {
                   const isChecked = selectedInterviewerIds.includes(member.id);
                   const roleLabel = getRoleLabel(member.rolesMask);
-                  
                   return (
                     <div
                       key={member.id}
@@ -311,7 +321,7 @@ export default function ScheduleInterviewsModal({
                         <div className="truncate space-y-0.5">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <p className="text-zinc-200 truncate font-medium">{member.name}</p>
-                            <span className={`px-1.5 py-0.2 text-[9px] uppercase font-semibold rounded tracking-wide border flex-shrink-0 ${
+                            <span className={`px-1.5 py-0.5 text-[9px] uppercase font-semibold rounded tracking-wide border flex-shrink-0 ${
                               roleLabel === 'Admin' ? 'bg-purple-950/30 text-purple-400 border-purple-900/50' :
                               roleLabel === 'HR' ? 'bg-blue-950/30 text-blue-400 border-blue-900/50' :
                               roleLabel === 'Interviewer' ? 'bg-emerald-950/30 text-emerald-400 border-emerald-900/50' :
@@ -323,7 +333,6 @@ export default function ScheduleInterviewsModal({
                           <p className="text-[10px] text-zinc-600 truncate">{member.email}</p>
                         </div>
                       </div>
-
                       <div className="pr-1 flex items-center">
                         {isChecked ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-white" />
@@ -338,30 +347,30 @@ export default function ScheduleInterviewsModal({
             )}
           </div>
 
-          {/* Form Actions */}
+          {/* Actions */}
           <div className="pt-4 border-t border-zinc-900 flex items-center justify-between">
             <span className="text-[10px] text-zinc-500 font-medium">
-              {selectedInterviewerIds.length} hosts allocated
+              {selectedInterviewerIds.length} host{selectedInterviewerIds.length !== 1 ? 's' : ''} allocated
             </span>
             <div className="flex gap-2">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={onClose}
                 className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-xs font-medium rounded-lg text-zinc-400 hover:text-white transition-colors"
               >
                 Back
               </button>
-              <button 
+              <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-white text-black hover:bg-zinc-200 disabled:opacity-50 text-xs font-semibold rounded-lg transition-colors"
+                className="px-4 py-2 bg-white text-black hover:bg-zinc-200 disabled:opacity-50 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
               >
+                {isSubmitting && <Loader2 className="w-3 h-3 animate-spin" />}
                 {isSubmitting ? 'Generating Slots...' : 'Confirm Pipeline Allocation'}
               </button>
             </div>
           </div>
         </form>
-
       </div>
     </div>
   );

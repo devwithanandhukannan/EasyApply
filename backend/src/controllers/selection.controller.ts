@@ -7,6 +7,80 @@ interface AuthRequest extends Request {
   company?: { companyId: string };
 }
 
+const DIRECT_STATUSES: ApplicationStatus[] = [
+  'applied',
+  'screened',
+  'offer_sent',
+  'hired',
+  'rejected',
+];
+
+export const bulkUpdateApplicationStatus = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { applicationIds, targetStatus } = req.body;
+
+    if (!applicationIds || applicationIds.length === 0) {
+      res.status(400).json({ success: false, message: 'No applications selected.' });
+      return;
+    }
+
+    if (!DIRECT_STATUSES.includes(targetStatus)) {
+      res.status(400).json({
+        success: false,
+        message: `targetStatus must be one of: ${DIRECT_STATUSES.join(', ')}. For technical_round or hr_round, use the bulk-schedule endpoint.`,
+      });
+      return;
+    }
+
+    const companyId = (req as any).company?.companyId;
+    const userId = (req as any).user?.userId ?? 'system';
+
+    // Verify all applications belong to this company
+    const applications = await prisma.application.findMany({
+      where: {
+        id: { in: applicationIds },
+        jobPosting: { companyId },
+      },
+      select: { id: true, status: true },
+    });
+
+    if (applications.length !== applicationIds.length) {
+      res.status(403).json({ success: false, message: 'One or more applications not found or not authorized.' });
+      return;
+    }
+
+    await prisma.$transaction([
+      prisma.application.updateMany({
+        where: { id: { in: applicationIds } },
+        data: {
+          status: targetStatus as ApplicationStatus,
+          lastActivityAt: new Date(),
+        },
+      }),
+      ...applications.map((app) =>
+        prisma.applicationHistory.create({
+          data: {
+            applicationId: app.id,
+            fromStatus: app.status,
+            toStatus: targetStatus as ApplicationStatus,
+            changedBy: userId,
+            changedByType: 'user',
+            notes: `Bulk status update to ${targetStatus}.`,
+          },
+        })
+      ),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: `${applications.length} applications updated to "${targetStatus}".`,
+    });
+  } catch (error: any) {
+    console.error('bulkUpdateApplicationStatus error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ─── BULK STATUS TRANSITION (Selection) ────────────────────────────
 
 export const bulkMoveApplications = async (req: AuthRequest, res: Response) => {
