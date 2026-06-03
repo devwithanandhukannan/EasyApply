@@ -11,8 +11,14 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
-  self.registration.showNotification(payload.notification.title, {
-    body: payload.notification.body,
-    icon: "/window.svg",
-  });
+  console.log('[firebase-messaging-sw.js] Received background message', payload);
+
+  // Fallback to payload.data if payload.notification is missing
+  const title = payload.notification?.title || payload.data?.title || 'Application Alert';
+  const options = {
+    body: payload.notification?.body || payload.data?.body || 'New update received.',
+    icon: "/window.svg", // Ensure this exists in your public/ directory
+  };
+
+  self.registration.showNotification(title, options);
 });

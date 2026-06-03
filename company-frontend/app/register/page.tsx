@@ -19,6 +19,7 @@ import dynamic from 'next/dynamic';
 import { AxiosError } from 'axios';
 import { useRouter } from 'next/navigation'; // Added for clean postwar routing
 import api from '../lib/axios';
+import { useGlassToast } from '../components/GlassToastContainer';
 
 type Step = 'company' | 'contact' | 'verify' | 'additional' | 'success';
 
@@ -55,6 +56,7 @@ const companySizes = [
 ];
 
 function RegisterPageComponent() {
+  const { showToast } = useGlassToast();
   const router = useRouter();
   const [step, setStep] = useState<Step>('company');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -98,7 +100,7 @@ function RegisterPageComponent() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        alert('File size exceeds the permitted corporate 5MB limit.');
+        showToast('failed', 'File size exceeds the permitted corporate 5MB limit.', 'danger');
         return;
       }
       updateFormData('logo', file);
@@ -231,7 +233,7 @@ function RegisterPageComponent() {
 
       if (response.data.success) {
         setOtp(['', '', '', '', '', '']);
-        alert('A replacement security token was logged via WhatsApp.');
+        showToast('success', 'A replacement security token was logged via WhatsApp.', 'success');
       }
     } catch (error) {
       const err = error as AxiosError<{ message?: string }>;

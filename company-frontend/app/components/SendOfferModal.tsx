@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Send, Mail, MessageSquare, Bell, CheckCircle } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from './GlassToastContainer';
 
 interface Props {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface Props {
 export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: Props) {
   const [selectedChannels, setSelectedChannels] = useState<string[]>(['email', 'inapp']);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { showToast } = useGlassToast();
 
   const channels = [
     { 
@@ -51,7 +53,7 @@ export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: 
     e.preventDefault();
 
     if (selectedChannels.length === 0) {
-      alert('Please select at least one delivery channel');
+      showToast('failed', 'Please select at least one delivery channel', 'danger');
       return;
     }
 
@@ -68,7 +70,7 @@ export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: 
       }
     } catch (error: any) {
       console.error('Send offer error:', error);
-      alert(error.response?.data?.message || 'Failed to send offer');
+      showToast('failed', error.response?.data?.message || 'Failed to send offer', 'danger');
     } finally {
       setIsSubmitting(false);
     }

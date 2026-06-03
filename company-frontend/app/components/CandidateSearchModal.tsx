@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import api from '@/app/lib/axios';
 import { X, Sparkles, Filter, ChevronRight } from 'lucide-react';
+import { useGlassToast } from './GlassToastContainer';
 
 interface Candidate {
   applicationId: string;
@@ -20,6 +21,7 @@ interface Candidate {
 }
 
 export default function CandidateSearchModal({ isOpen, onClose, onSelectCandidates }: any) {
+  const { showToast } = useGlassToast();  
   const [jobQuery, setJobQuery] = useState('');
   const [requiredSkills, setRequiredSkills] = useState('');
   const [filters, setFilters] = useState({
@@ -51,7 +53,7 @@ export default function CandidateSearchModal({ isOpen, onClose, onSelectCandidat
       setSelectedIds(new Set());
     } catch (err) {
       console.error(err);
-      alert('Search failed');
+      showToast('failed', err.response?.data?.message || 'Search failed. Please try again.', 'danger');
     } finally {
       setLoading(false);
     }

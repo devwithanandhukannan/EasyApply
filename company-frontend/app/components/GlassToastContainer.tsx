@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback } from "react";
+import { X } from "lucide-react";
 
 export type ToastType = "success" | "danger" | "info";
 
@@ -27,7 +28,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setTimeout(() => {
       setToasts((prev) => prev.filter((toast) => toast.id !== id));
-    }, 6000);
+    }, 4000);
   }, []);
 
   const removeToast = (id: string) => {
@@ -36,24 +37,15 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const clearAll = () => setToasts([]);
 
-  // ⚡ ഇവിടെയാണ് കളർ മാറ്റി ബാക്ക്ഗ്രൗണ്ട് ഫുൾ തീം കളർ ആക്കുന്നത് (ഗ്ലാസ്സ് മോർഫിസം ഒപ്പാസിറ്റിയോടെ)
-  const getTypeStyles = (type: ToastType) => {
+  const getBorderStyles = (type: ToastType) => {
     switch (type) {
       case "success":
-        return "bg-emerald-950/40 border-emerald-500/40 shadow-emerald-950/50 text-emerald-50";
+        return "border-l-[3px] border-l-emerald-500";
       case "danger":
-        return "bg-rose-950/40 border-rose-500/40 shadow-rose-950/50 text-rose-50";
+        return "border-l-[3px] border-l-rose-500";
       case "info":
       default:
-        return "bg-indigo-950/40 border-indigo-500/40 shadow-indigo-950/50 text-indigo-50";
-    }
-  };
-
-  const getDotColor = (type: ToastType) => {
-    switch (type) {
-      case "success": return "bg-emerald-400 shadow-emerald-400/80";
-      case "danger": return "bg-rose-400 shadow-rose-400/80";
-      case "info": return "bg-indigo-400 shadow-indigo-400/80";
+        return "border-l-[3px] border-l-blue-500";
     }
   };
 
@@ -61,46 +53,44 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <ToastContext.Provider value={{ showToast, clearAll }}>
       {children}
 
-      <div className="fixed top-5 right-5 z-[9999] flex flex-col gap-3 w-full max-w-sm pointer-events-none">
+      {/* Viewport container fixed to top right */}
+      <div className="fixed top-4 right-4 z-[9999] flex flex-col items-end gap-2 w-[280px] pointer-events-none">
         
+        {/* Tiny Clear All Action */}
         {toasts.length > 1 && (
           <button
             onClick={clearAll}
-            className="self-end pointer-events-auto text-xs font-semibold bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white border border-white/10 px-3 py-1.5 rounded-lg backdrop-blur-md transition-all duration-200 shadow-lg"
+            className="pointer-events-auto text-[10px] font-medium tracking-wide bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 px-2 py-0.5 rounded border border-zinc-800 transition-colors"
           >
-            Clear All ({toasts.length})
+            Clear ({toasts.length})
           </button>
         )}
 
-        {/* TOAST CARDS */}
+        {/* Micro-Notification Cards */}
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`pointer-events-auto flex w-full border backdrop-blur-xl rounded-xl p-4 shadow-2xl transition-all duration-300 animate-in slide-in-from-right-5 ${getTypeStyles(
+            className={`pointer-events-auto relative w-full bg-zinc-900 text-zinc-100 p-2.5 rounded shadow-lg border border-zinc-800/80 transition-all duration-200 animate-in slide-in-from-right-4 ${getBorderStyles(
               toast.type
             )}`}
           >
-            {/* Status Indicator Dot */}
-            <div className="flex-shrink-0 pt-1">
-              <span className={`flex h-2 w-2 rounded-full shadow-[0_0_12px_3px] ${getDotColor(toast.type)}`} />
-            </div>
+            {/* Unified Interior Container */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <h4 className="text-[11px] font-semibold tracking-wide text-zinc-200 leading-tight">
+                  {toast.title}
+                </h4>
+                <p className="text-[10px] text-zinc-400 font-normal leading-normal mt-0.5 break-words">
+                  {toast.body}
+                </p>
+              </div>
 
-            {/* Content Area */}
-            <div className="ml-3 flex-1">
-              <p className="text-sm font-bold text-white tracking-wide">{toast.title}</p>
-              <p className="mt-1 text-xs text-zinc-200/90 leading-relaxed font-medium">{toast.body}</p>
-            </div>
-
-            {/* Individual Close Button */}
-            <div className="ml-4 flex flex-shrink-0">
+              {/* Securely Bound Close Button */}
               <button
                 onClick={() => removeToast(toast.id)}
-                className="inline-flex rounded-md text-zinc-400 hover:text-white transition-colors focus:outline-none"
+                className="text-zinc-500 hover:text-zinc-300 transition-colors p-0.5 rounded hover:bg-zinc-800 flex-shrink-0 focus:outline-none"
               >
-                <span className="sr-only">Close</span>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-3 h-3 stroke-[2.5]" />
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import {useGlassToast} from '@/app/components/GlassToastContainer';
 import {
   getTalentPoolMembers,
   removeTalentPoolMember,
@@ -42,6 +43,7 @@ const availabilityLabels: Record<string, string> = {
 };
 
 export default function TalentPoolDetailPage() {
+  const { showToast } = useGlassToast();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -74,7 +76,7 @@ export default function TalentPoolDetailPage() {
       await removeTalentPoolMember(id, member.id);
       setMembers(prev => prev.filter(m => m.id !== member.id));
     } catch {
-      alert('Failed to remove member.');
+      showToast('failed', 'Failed to remove member.', 'danger');
     } finally {
       setRemovingId(null);
     }

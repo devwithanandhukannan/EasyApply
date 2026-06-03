@@ -350,10 +350,16 @@ export const rankCandidates = async (
     resumeContent: any;
   }>,
   topN: number,
+  customPrompt?: string,          // ─── ADDED: ACCEPT THE CUSTOM USER PROMPT ───
 ) => {
   const skillsList = Array.isArray(requiredSkills)
     ? requiredSkills.join(', ')
     : JSON.stringify(requiredSkills);
+
+  // Format custom constraints block if user entered custom filtering requirements
+  const userConstraintsBlock = customPrompt && customPrompt.trim()
+    ? `\nCRITICAL USER FILTERING CONSTRAINTS:\n"""\n${customPrompt.trim()}\n"""\nYou MUST heavily weigh and prioritize candidates based on the custom instruction above.\n`
+    : '';
 
   const prompt = `You are a senior technical recruiter and talent acquisition specialist.
 Evaluate the following job applicants against the job description and rank them.
@@ -364,14 +370,14 @@ ${jobDescription}
 """
 
 Required Skills: ${skillsList}
-
+${userConstraintsBlock}
 Applicants (${candidates.length} total):
 ${JSON.stringify(candidates, null, 2)}
 
 Instructions:
 - Rank ALL ${candidates.length} candidates by fit for this role
 - Return the TOP ${topN} candidates only in the "rankings" array
-- Score each candidate 0-100 based on skill match, experience relevance, and overall fit
+- Score each candidate 0-100 based on skill match, experience relevance, and overall fit ${customPrompt ? 'as well as the provided custom filtering constraints' : ''}
 - Be specific — reference actual skills, companies, and projects from their profiles
 
 Return ONLY valid JSON:

@@ -80,39 +80,39 @@ export default function CompleteCompanyProfile() {
   const [newLocation, setNewLocation] = useState({ city: '', address: '', isHub: false });
 
   // ─── FETCH PROFILE ───
-  const loadProfile = async (silent = false) => {
-    if (!silent) setFetching(true);
-    try {
-      const res = await axios.get('/company/me');
-      if (res.data?.success && res.data?.data) {
-        const comp = res.data.data;
-        setCompanyId(comp.id || '');
-        setCompanyName(comp.name || '');
-        setCompanyEmail(comp.email || '');
-        setMobileNumber(comp.mobileNumber || '');
-        setIndustry(comp.industry || '');
-        setSize(comp.size || '');
-        setRegistrationNumber(comp.registrationNumber || '');
-        setLogoUrl(comp.logoUrl || null);
-        setTagline(comp.tagline || '');
-        setYoutubeLink(comp.youtubeLink || '');
-        setCorporateLink(comp.corporateLink || '');
-        setServices(comp.services || []);
-        setSeoKeywords(comp.seoKeywords || []);
-        setCoreValues(comp.coreValues || []);
-        setGallery(comp.gallery || []);
-        setProducts(comp.products || []);
-        setOfficeLocations(comp.officeLocations || []);
-        setSocialMedia(comp.socialMedia || {});
-        setEmployees(comp.teamMembers || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch profile:', err);
-      showToast('Error', 'Could not load profile', 'danger');
-    } finally {
-      if (!silent) setFetching(false);
+const loadProfile = async (silent = false) => {
+  if (!silent) setFetching(true);
+  try {
+    const res = await axios.get('/company/me');
+    if (res.data?.success && res.data?.data) {
+      const comp = res.data.data;
+      setCompanyId(comp.id || '');
+      setCompanyName(comp.name || '');
+      setCompanyEmail(comp.email || '');
+      setMobileNumber(comp.mobileNumber || '');
+      setIndustry(comp.industry || '');
+      setSize(comp.size || '');
+      setRegistrationNumber(comp.registrationNumber || '');
+      setLogoUrl(comp.logoUrl || null);
+      setTagline(comp.tagline || '');
+      setYoutubeLink(comp.youtubeLink || '');
+      setCorporateLink(comp.corporateLink || '');
+      setServices(Array.isArray(comp.services) ? comp.services : []);
+      setSeoKeywords(Array.isArray(comp.seoKeywords) ? comp.seoKeywords : []);
+      setCoreValues(Array.isArray(comp.coreValues) ? comp.coreValues : []);
+      setGallery(Array.isArray(comp.gallery) ? comp.gallery : []);
+      setProducts(Array.isArray(comp.products) ? comp.products : []); // ✅ FIX
+      setOfficeLocations(Array.isArray(comp.officeLocations) ? comp.officeLocations : []);
+      setSocialMedia(comp.socialMedia || {});
+      setEmployees(Array.isArray(comp.teamMembers) ? comp.teamMembers : []);
     }
-  };
+  } catch (err) {
+    console.error('Failed to fetch profile:', err);
+    showToast('Error', 'Could not load profile', 'danger');
+  } finally {
+    if (!silent) setFetching(false);
+  }
+};
 
   useEffect(() => {
     loadProfile();

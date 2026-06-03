@@ -33,7 +33,7 @@ import api from '@/app/lib/axios';
 import OfferResponseModal from '@/app/components/OfferResponseModal';
 import RescheduleInterviewModal from '@/app/components/RescheduleInterviewModal';
 import SalaryBenchmarkingModal from '@/app/components/SalaryBenchmarkingModal';
-
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 interface TimelineEvent {
   stage: string;
@@ -98,6 +98,7 @@ interface ApplicationTrackItem {
 }
 
 export default function ApplicationsPage() {
+  const { showToast } = useGlassToast();
   const [salaryModalOpen, setSalaryModalOpen] = useState(false);
   const router = useRouter();
   const [applications, setApplications] = useState<ApplicationTrackItem[]>([]);
@@ -195,7 +196,7 @@ export default function ApplicationsPage() {
         setSelectedApp(prev => prev ? { ...prev, candidateNotes: editingNotes } : null);
       }
     } catch (err) {
-      alert('Failed to save notes');
+      showToast('failed', 'Failed to save notes', 'danger');
     } finally {
       setSavingNotes(false);
     }
@@ -208,11 +209,11 @@ export default function ApplicationsPage() {
       setProcessingWithdrawal(id);
       const response = await api.post(`/jobseeker/applications/${id}/withdraw`);
       if (response.data.success) {
-        alert('Application withdrawn successfully');
+        showToast('withdrawn', 'Application withdrawn successfully', 'success');
         await fetchApplications();
       }
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to withdraw application');
+      showToast('failed', error.response?.data?.error || 'Failed to withdraw application', 'danger');
     } finally {
       setProcessingWithdrawal(null);
     }
@@ -232,7 +233,7 @@ export default function ApplicationsPage() {
       link.remove();
     } catch (error) {
       console.error('Download failed:', error);
-      alert('Failed to download resume');
+      showToast('failed', 'Failed to download resume', 'danger');
     }
   };
 
@@ -259,7 +260,7 @@ export default function ApplicationsPage() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Offer download failed:', error);
-      alert('Failed to download offer letter documentation.');
+      showToast('failed', 'Failed to download offer letter documentation.', 'danger');
     } finally {
       setDownloadingOffer(false);
     }

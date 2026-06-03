@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { X, Sparkles, Plus, Wand2 } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from './GlassToastContainer';
 
 interface JobPostingModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface JobPostingModalProps {
 }
 
 export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = null }: JobPostingModalProps) {
+  const { showToast } = useGlassToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [skillInput, setSkillInput] = useState('');
@@ -93,7 +95,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
 
   const handleGenerateDescription = async () => {
     if (!formData.description.trim()) {
-      alert('Please enter a description first');
+      showToast('failed', 'Please enter a description first', 'danger');
       return;
     }
 
@@ -118,7 +120,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
       }
     } catch (error) {
       console.error('Error generating description:', error);
-      alert('Failed to rewrite description using AI. Please try again.');
+      showToast('failed', 'Failed to rewrite description using AI. Please try again.', 'danger');
     } finally {
       setIsGenerating(false);
     }
@@ -128,7 +130,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
     e.preventDefault();
     
     if (!formData.title || !formData.department || !formData.description) {
-      alert('Please fill in all required fields');
+      showToast('failed', 'Please fill in all required fields', 'danger');
       return;
     }
 
@@ -145,7 +147,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
       onClose();
     } catch (error) {
       console.error('Error saving job:', error);
-      alert(`Failed to ${editJob ? 'update' : 'create'} job posting. Please try again.`);
+      showToast('failed', `Failed to ${editJob ? 'update' : 'create'} job posting. Please try again.`+ error, 'danger');
     } finally {
       setIsLoading(false);
     }

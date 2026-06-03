@@ -12,6 +12,7 @@ import api from '@/app/lib/axios';
 import JobPostingModal from '@/app/components/JobPostingModal';
 import AIFilterModal from '@/app/components/AIFilterModal';
 import ScheduleInterviewsModal from '@/app/components/ScheduleInterviewsModal';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 const STATUS_STYLES: Record<string, string> = {
   active:      'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
@@ -37,6 +38,7 @@ const STAGE_COLUMNS = [
 ];
 
 export default function JobDetailsPage() {
+  const { showToast } = useGlassToast();
   const params = useParams();
   const router = useRouter();
 
@@ -106,7 +108,7 @@ export default function JobDetailsPage() {
       setIsDeleting(true);
       await api.delete(`/company/jobs/${params.id}`);
       router.push('/dashboard/jobs');
-    } catch { alert('Failed to delete job.'); }
+    } catch { showToast('failed', 'Failed to delete job.', 'danger'); }
     finally { setIsDeleting(false); }
   };
 

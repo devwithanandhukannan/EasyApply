@@ -32,7 +32,8 @@ export default function CompanySidebar({
   setIsMobileOpen 
 }: SidebarProps) {
   const pathname = usePathname();
-  const { isAdmin, isHR, isInterviewer, loading } = useAuth();
+  // Ensure your AuthContext extracts isViewer alongside the others
+  const { isAdmin, isHR, isInterviewer, isViewer, loading } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
 
   // Sync mount phase to prevent hydration layout flashes
@@ -40,48 +41,70 @@ export default function CompanySidebar({
     setIsMounted(true);
   }, []);
 
-  // Moving this INSIDE the component so it dynamically reacts to state adjustments
-// Inside CompanySidebar.tsx -> filteredNav useMemo block
-const filteredNav = useMemo(() => {
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, visible: true },
-    { name: 'Offers', href: '/dashboard/offers', icon: FileText, visible: true },
-    { name: 'Templates', href: '/dashboard/offer-templates', icon: Layers, visible: true },
-    { 
-      name: 'Job Postings', 
-      href: '/dashboard/jobs', 
-      icon: Briefcase, 
-      visible: isMounted && !loading && (isAdmin || isHR) 
-    },
-    { 
-      name: 'Company Talent Pool', 
-      href: '/dashboard/talent-pool', 
-      icon: Briefcase, 
-      visible: isMounted && !loading && (isAdmin || isHR) 
-    },
-    { 
-      name: 'Live Interviews', 
-      href: '/dashboard/interviews', 
-      icon: Video, 
-      visible: isMounted && !loading && (isAdmin || isHR || isInterviewer) 
-    },
-    { 
-      name: 'Team Workspace', 
-      href: '/dashboard/team', 
-      icon: Users, 
-      visible: isMounted && !loading && (isAdmin || isHR) 
-    },
-    // ─── APPEND NEW CONFIGURE PROFILE ROUTE ───
-    { 
-      name: 'Company Profile', 
-      href: '/dashboard/profile', 
-      icon: Building2, 
-      visible: isMounted && !loading && (isAdmin || isHR) 
-    }
-  ];
+  // Filtered navigation layout mapped directly to role authorizations
+  const filteredNav = useMemo(() => {
+    const hasAccess = isMounted && !loading;
 
-  return navigation.filter(item => item.visible);
-}, [isMounted, loading, isAdmin, isHR, isInterviewer]);
+    const navigation = [
+      { 
+        name: 'Dashboard', 
+        href: '/dashboard', 
+        icon: LayoutDashboard, 
+        visible: hasAccess // Accessible by all company profiles
+      },
+      { 
+        name: 'Offers', 
+        href: '/dashboard/offers', 
+        icon: FileText, 
+        visible: hasAccess && (isAdmin || isHR || isViewer) // Hidden from Interviewers
+      },
+      { 
+        name: 'Templates', 
+        href: '/dashboard/offer-templates', 
+        icon: Layers, 
+        visible: hasAccess && (isAdmin || isHR) // HR & Admin Only
+      },
+      { 
+        name: 'Spot Jobs', 
+        href: '/dashboard/spot-jobs', 
+        icon: Layers, 
+        visible: hasAccess && (isAdmin || isHR) // HR & Admin Only
+      },
+      { 
+        name: 'Job Postings', 
+        href: '/dashboard/jobs', 
+        icon: Briefcase, 
+        visible: hasAccess && (isAdmin || isHR || isViewer) // Read access broad, mutations protected inside
+      },
+      { 
+        name: 'Company Talent Pool', 
+        href: '/dashboard/talent-pool', 
+        icon: Briefcase, 
+        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) // Accessible to evaluate candidate cards
+      },
+      { 
+        name: 'Live Interviews', 
+        href: '/dashboard/interviews', 
+        icon: Video, 
+        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) // Shared interview portal
+      },
+      { 
+        name: 'Team Workspace', 
+        href: '/dashboard/team', 
+        icon: Users, 
+        visible: hasAccess && (isAdmin || isHR ) // List viewing permitted for all team members
+      },
+      { 
+        name: 'Company Profile', 
+        href: '/dashboard/profile', 
+        icon: Building2, 
+        visible: hasAccess && (isAdmin || isHR || isViewer) // Profiles layout hidden from pure dynamic Interviewer streams
+      }
+    ];
+
+    return navigation.filter(item => item.visible);
+  }, [isMounted, loading, isAdmin, isHR, isInterviewer, isViewer]);
+
   const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
     <>
       {filteredNav.map((item) => {

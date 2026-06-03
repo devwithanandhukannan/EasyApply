@@ -4,8 +4,10 @@ import { Smartphone, MessageCircle, ArrowRight, Shield, User, Mail } from 'lucid
 import { useAuth } from '@/app/contexts/AuthContext';
 import api from '@/app/lib/axios';
 import dynamic from 'next/dynamic';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 function LoginPageComponent() {
+  const { showToast } = useGlassToast();
   const [step, setStep] = useState<'phone' | 'otp' | 'profile_setup'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
@@ -23,9 +25,10 @@ function LoginPageComponent() {
       setIsSubmitting(true);
       await api.post('/auth/send-otp', { mobileNumber: phoneNumber });
       setStep('otp');
+      showToast('Success', 'OTP sent to your WhatsApp', 'success');
     } catch (error) {
       console.log(error);
-      alert('Failed to send OTP');
+      showToast('Failed', 'Failed to send OTP', 'danger');
     } finally {
       setIsSubmitting(false);
     }
@@ -62,17 +65,26 @@ function LoginPageComponent() {
         localStorage.setItem('token', token);
       }
 
-      // Query verification against the precise profile routing architecture
+      // ✅ FIXED: Handle new response format { success: true, data: {...} }
       try {
         const profileRes = await api.get('/jobseeker/profile');
-        const profile = profileRes.data;
+        
+        // Extract actual profile data from wrapped response
+        const profile = profileRes.data.success ? profileRes.data.data : profileRes.data;
 
-        if (!profile.fullName || !profile.email) {
+        console.log('📊 Profile Check:', profile); // Debug log
+
+        // Check if profile needs completion
+        if (!profile.fullName || !profile.email || profile.fullName === 'Candidate') {
+          console.log('⚠️ Profile incomplete, redirecting to setup');
           setStep('profile_setup');
         } else {
-          login(user);
+          console.log('✅ Profile complete, logging in');
+          // Pass the correct user object to login
+          login({ ...user, profile });
         }
       } catch (profileErr: any) {
+        console.log('❌ Profile fetch error:', profileErr);
         // If profile is missing completely (404), switch onto setup stream
         if (profileErr.response?.status === 404) {
           setStep('profile_setup');
@@ -80,9 +92,9 @@ function LoginPageComponent() {
           throw profileErr;
         }
       }
-    } catch (error) {
-      console.log(error);
-      alert('Invalid OTP');
+    } catch (error: any) {
+      console.log('❌ OTP verification error:', error);
+      showToast('Failed', error.response?.data?.message || 'Invalid OTP', 'danger');
     } finally {
       setIsSubmitting(false);
     }
@@ -119,16 +131,29 @@ function LoginPageComponent() {
       const formData = new FormData();
       formData.append('profileData', JSON.stringify(payload));
 
-      await api.put('/jobseeker/profile', formData, {
+      const updateResponse = await api.put('/jobseeker/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      // Synchronize context tracking state vectors on complete
+      console.log('✅ Profile update response:', updateResponse.data);
+
+      // ✅ FIXED: Handle new response format when fetching profile
       const finalProfileCheck = await api.get('/jobseeker/profile');
-      login(finalProfileCheck.data);
-    } catch (error) {
-      console.log(error);
-      alert('Failed to update registration profile details.');
+      
+      // Extract actual profile data from wrapped response
+      const profileData = finalProfileCheck.data.success 
+        ? finalProfileCheck.data.data 
+        : finalProfileCheck.data;
+
+      console.log('✅ Final profile data:', profileData);
+
+      // Synchronize context tracking state vectors on complete
+      login(profileData);
+      
+      showToast('Success', 'Profile created successfully!', 'success');
+    } catch (error: any) {
+      console.log('❌ Profile submission error:', error);
+      showToast('Failed', error.response?.data?.error || 'Failed to update registration profile details.', 'danger');
     } finally {
       setIsSubmitting(false);
     }
@@ -139,10 +164,10 @@ function LoginPageComponent() {
       setIsSubmitting(true);
       await api.post('/auth/send-otp', { mobileNumber: phoneNumber });
       setOtp(['', '', '', '', '', '']);
-      alert('OTP resent via WhatsApp');
+      showToast('Success', 'OTP resent via WhatsApp', 'success');
     } catch (error) {
       console.log(error);
-      alert('Failed to resend OTP');
+      showToast('Failed', 'Failed to resend OTP', 'danger');
     } finally {
       setIsSubmitting(false);
     }

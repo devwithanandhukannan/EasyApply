@@ -42,6 +42,7 @@ import offerRoutes from './offer.routes.ts';
 import { getJobSeekerDashboard, getApplicationInsights } from '../controllers/jobseekerDashboard.controller.ts';
 import {getSalaryComparison} from '../controllers/offer.controller.ts';
 import { saveNotificationToken } from '../controllers/notification.controller.ts';
+import { SpotJobController } from '../controllers/spotJob.controller.ts';
 
 const router = express.Router();
 
@@ -129,4 +130,9 @@ router.get('/salary-compare', getSalaryComparison);
 
 
 router.post('/notification/token', saveNotificationToken);
+
+//spot job seeker routes
+router.get('/spot-jobs/invitations', authenticateToken, requireJobSeeker, SpotJobController.getJobSeekerInvitations);
+router.patch('/spot-jobs/respond/:bookingId', authenticateToken, requireJobSeeker, SpotJobController.respondToBooking);
+
 export default router;

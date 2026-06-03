@@ -1,55 +1,68 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { messaging } from "../lib/firebase"; // നിങ്ങളുടെ ഫയർബേസ് ക്ലയന്റ് പാത്ത്
+import { messaging, requestNotificationPermission } from "../lib/firebase"; 
 import { onMessage } from "firebase/messaging";
-import { toast, Toaster } from "react-hot-toast";
+import api from "../lib/axios";
+import { useGlassToast } from "../components/GlassToastContainer";
 
-const FcmContext = createContext<any>(null);
+const FcmContext = createContext<{
+  fcmToken: string | null;
+  permissionStatus: NotificationPermission | null;
+}>({
+  fcmToken: null,
+  permissionStatus: null,
+});
 
 export const FcmProvider = ({ children }: { children: React.ReactNode }) => {
   const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission | null>(null);
+  const { showToast } = useGlassToast(); // ⚡ Access your native workspace toast pipeline
+
+  useEffect(() => {
+    const initializeFcm = async () => {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      
+      setPermissionStatus(Notification.permission);
+
+      const token = await requestNotificationPermission();
+      if (token) {
+        console.log("FCM Token Successfully Registered:", token);
+        setFcmToken(token);
+        setPermissionStatus(Notification.permission);
+        
+        try {
+          await api.post("/jobseeker/notification/token", {
+            token
+          });
+          console.log("FCM Token successfully synced to your database record ✅");
+        } catch (error) {
+          console.error("Failed to send FCM token to backend database context:", error);
+        }
+      }
+    };
+
+    initializeFcm();
+  }, []);
 
   useEffect(() => {
     if (!messaging) return;
 
-    // ⚡ ഫ്രണ്ട് എൻഡ് ആപ്പ് ഓപ്പൺ ആയിരിക്കുമ്പോൾ (Foreground) മെസ്സേജ് വരുന്നത് ലിസൺ ചെയ്യുന്നു
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log("Live Push Message Received in Frontend! 📩", payload);
+      
+      const notificationTitle = payload.notification?.title || payload.data?.title || "Application Alert";
+      const notificationBody = payload.notification?.body || payload.data?.body || "New update received.";
 
-      // ബാക്കെൻഡ് അയക്കുന്ന ടൈറ്റിലും ബോഡിയും വെച്ച് സ്ക്രീനിൽ പോപ്പ് അപ്പ് കാണിക്കുന്നു
-      toast.custom((t) => (
-        <div
-          className={`${
-            t.visible ? "animate-in fade-in" : "animate-out fade-out"
-          } max-w-md w-full bg-slate-900 border border-slate-800 text-slate-100 shadow-2xl rounded-2xl pointer-events-auto flex p-4 transition-all duration-300`}
-        >
-          <div className="flex-1 w-0">
-            <p className="text-sm font-bold text-indigo-400">
-              {payload.notification?.title || "Application Alert"}
-            </p>
-            <p className="mt-1 text-xs text-slate-300">
-              {payload.notification?.body}
-            </p>
-          </div>
-          <div className="flex border-l border-slate-800 pl-3 ml-3 items-center">
-            <button
-              onClick={() => toast.dismiss(t.id)}
-              className="text-xs font-semibold text-slate-400 hover:text-white transition-colors"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      ), { duration: 6000, position: "top-right" });
+      // ⚡ Fire off your consistent design system toast
+      showToast(notificationTitle, notificationBody, "info");
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [fcmToken, showToast]);
 
   return (
-    <FcmContext.Provider value={{ fcmToken, setFcmToken }}>
-      <Toaster /> {/* ടോസ്റ്റുകൾ കാണിക്കാൻ ഇത് ഇവിടെ ഉണ്ടായിരിക്കണം */}
+    <FcmContext.Provider value={{ fcmToken, permissionStatus }}>
       {children}
     </FcmContext.Provider>
   );

@@ -38,6 +38,7 @@ export default function Sidebar({ user }: SidebarProps) {
     { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
     { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
     { icon: User, label: 'Profile Workspace', href: '/dashboard/profile' },
+    { icon: User, label: 'Spot Jobs', href: '/dashboard/spot-jobs' },
   ];
 
   const handleLogout = () => {

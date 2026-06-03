@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import {useGlassToast} from '@/app/components/GlassToastContainer';
 import {
   getTalentPools,
   deleteTalentPool,
@@ -18,6 +19,7 @@ interface Pool {
 
 export default function TalentPoolPage() {
   const router = useRouter();
+  const { showToast } = useGlassToast();
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -46,7 +48,7 @@ export default function TalentPoolPage() {
       await deleteTalentPool(pool.id);
       setPools(prev => prev.filter(p => p.id !== pool.id));
     } catch {
-      alert('Failed to delete pool.');
+      showToast('failed', 'Failed to delete pool.', 'danger');
     } finally {
       setDeletingId(null);
     }

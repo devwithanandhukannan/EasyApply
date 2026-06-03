@@ -12,19 +12,18 @@ import {
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation'; // 🚀 Added router import
+import { useRouter } from 'next/navigation'; 
 
 interface LiveKitMeetingRoomProps {
   token: string;
   serverUrl: string;
-  interviewId: string; // 🚀 Pass structural target interview identification parameter here
+  interviewId: string; 
   onDisconnected?: () => void;
 }
 
 export default function LiveKitMeetingRoom({ token, serverUrl, interviewId, onDisconnected }: LiveKitMeetingRoomProps) {
   const [connectionError, setConnectionError] = useState<Error | null>(null);
-  const router = useRouter(); // 🚀 Hook activation
-
+  const router = useRouter(); 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-white flex flex-col overflow-hidden select-none" data-lk-theme="default">
       <LiveKitRoom
@@ -36,7 +35,6 @@ export default function LiveKitMeetingRoom({ token, serverUrl, interviewId, onDi
           console.log('🔌 LiveKit onDisconnected callback triggered');
           if (onDisconnected) onDisconnected();
           
-          // 🚀 Route company node automatically down to targeted evaluation protocol framework
           router.push(`/dashboard/interviews/${interviewId}/review`);
         }}
         onConnected={() => {

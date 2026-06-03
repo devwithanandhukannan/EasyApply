@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { MoveRight, Star, Flag, Tag, X, ChevronDown, Trash2 } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from './GlassToastContainer';
 
 interface Props {
   selectedIds: string[];
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function BulkSelectionToolbar({ selectedIds, onClear, onSuccess }: Props) {
+  const { showToast } = useGlassToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [showPriorityMenu, setShowPriorityMenu] = useState(false);
@@ -29,7 +31,7 @@ export default function BulkSelectionToolbar({ selectedIds, onClear, onSuccess }
       }
     } catch (error: any) {
       console.error('Bulk move error:', error);
-      alert(error.response?.data?.message || 'Failed to move applications');
+      showToast('failed', error.response?.data?.message || 'Failed to move applications', 'danger');
     } finally {
       setIsProcessing(false);
       setShowMoveMenu(false);

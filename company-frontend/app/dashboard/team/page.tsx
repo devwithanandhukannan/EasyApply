@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { teamApi, TeamMember } from '@/app/lib/api/team';
 import { MoreHorizontal, UserPlus, Trash2, Shield, Mail, Calendar, X, ChevronDown } from 'lucide-react';
-
+import {useGlassToast} from '@/app/components/GlassToastContainer';
 // ─── BITWISE SYSTEM ROLE CONSTANTS ───────────────────────────────────────────
 const ROLES = {
   COMPANY_ADMIN: 2,
@@ -51,7 +51,7 @@ interface CustomSelectProps {
 const CustomSelect = ({ value, onValueChange, options }: CustomSelectProps) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
+  
   useEffect(() => {
     if (!open) return;
     const handleOutsideClick = (e: MouseEvent) => {
@@ -214,7 +214,8 @@ export default function TeamPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('hr'); // String matches backend: 'hr' | 'interviewer' | 'viewer'
   const [submitting, setSubmitting] = useState(false);
-
+  const { showToast } = useGlassToast();
+  
   const fetchTeam = async () => {
     try {
       const res = await teamApi.list();
@@ -232,18 +233,18 @@ export default function TeamPage() {
 
   const handleInvite = async () => {
     if (!inviteEmail) {
-      alert('Email is required');
+      showToast('failed', 'Email is required', 'danger');
       return;
     }
     setSubmitting(true);
     try {
       await teamApi.invite({ email: inviteEmail, roleType: inviteRole });
-      alert(`Invitation successfully sent to ${inviteEmail}`);
+      showToast('success', `Invitation successfully sent to ${inviteEmail}`, 'success');
       setInviteOpen(false);
       setInviteEmail('');
       setInviteRole('hr');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Invitation routing transaction execution failed.');
+      showToast('failed', error.response?.data?.message || 'Invitation routing transaction execution failed.', 'danger');
     } finally {
       setSubmitting(false);
     }
@@ -252,10 +253,10 @@ export default function TeamPage() {
   const handleRoleChange = async (memberId: string, newRolesMask: number) => {
     try {
       await teamApi.updateRole(memberId, newRolesMask);
-      alert('Workspace permissions updated successfully.');
+      showToast('success', 'Workspace permissions updated successfully.', 'success');
       fetchTeam();
     } catch (error) {
-      alert('Failed to update team member role');
+      showToast('failed', 'Failed to update team member role.', 'danger');
     }
   };
 
@@ -263,10 +264,10 @@ export default function TeamPage() {
     if (!confirm(`Revoke workspace privileges for ${name}?`)) return;
     try {
       await teamApi.remove(memberId);
-      alert('Member removed from team');
+      showToast('success', 'Member removed from team.', 'success');
       fetchTeam();
     } catch (error) {
-      alert('Failed to remove member');
+      showToast('failed', 'Failed to remove member.', 'danger');
     }
   };
 

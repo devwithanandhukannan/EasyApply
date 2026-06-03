@@ -66,7 +66,6 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    // 1. ഫെച്ച് ചെയ്യുമ്പോൾ യൂസർ റിലേഷനും കാൻഡിഡേറ്റ് പ്രൊഫൈൽ റിലേഷനും ഒരുമിച്ച് എടുക്കുന്നു
     const currentApp = await prisma.application.findUnique({
       where: { id: applicationId },
       select: { 
@@ -77,7 +76,6 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
             fullName: true,
             user: {
               select: {
-                // പുതിയ മൈഗ്രേഷൻ അനുസരിച്ച് യൂസർ ടേബിളിൽ ഉണ്ടെങ്കിൽ അതും ബാക്കപ്പ് ആയി എടുക്കുന്നു
                 mobileNumber: true
               }
             }
@@ -102,7 +100,6 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
         }
       });
 
-      // ഹിസ്റ്ററി ലോഗ് ട്രാക്ക് ചെയ്യുന്നു
       await tx.applicationHistory.create({
         data: {
           applicationId,
@@ -119,8 +116,6 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
           }
         }
       });
-
-      // ആക്റ്റിവിറ്റി ലോഗ് ക്രിയേറ്റ് ചെയ്യുന്നു
       try {
         await tx.applicationActivity.create({
           data: {
@@ -142,28 +137,22 @@ export const movePipelineCard = async (req: Request, res: Response): Promise<voi
       return updated;
     });
 
-    // 2. ⚡ FCM Push Notification Dispatcher
     const targetUserId = currentApp?.jobSeekerProfile?.userId;
     if (targetUserId && currentApp.status !== destinationStatus) {
-      // അണ്ടർസ്കോറുകൾ മാറ്റി ക്ലീൻ ഫോർമാറ്റിലേക്ക് മാറ്റുന്നു (e.g., technical_round -> Technical Round)
       const stageName = destinationStatus.replace(/_/g, ' ').replace(/\b\w/g, (char: string) => char.toUpperCase());
       const jobTitle = currentApp.jobPosting?.title || "your applied position";
-      
-      // പുതിയ മൈഗ്രേഷൻ പ്രകാരം യൂസറുടെ പേര് കണ്ടെത്തുന്നു
       const candidateName = currentApp.jobSeekerProfile?.fullName || "Candidate";
 
-      const notificationTitle = `Application Update! 🚀`;
+      const notificationTitle = `Application Update!`;
       const notificationBody = `Hi ${candidateName}, your application for "${jobTitle}" has progressed to: ${stageName}.`;
       const dashboardLink = `http://localhost:3000/dashboard/applications`;
 
-      // നോട്ടിഫിക്കേഷൻ ബാക്ക്ഗ്രൗണ്ടിൽ എക്സിക്യൂട്ട് ചെയ്യുന്നു
       NotificationService.sendToUser(
         targetUserId,
         notificationTitle,
         notificationBody,
         dashboardLink
       ).catch((fcmError) => {
-        // ഡാറ്റാബേസിൽ ടോക്കൺ ഇല്ലാത്ത അവസ്ഥയോ ഫയർബേസ് നെറ്റ്‌വർക്ക് ഇഷ്യൂവോ വന്നാൽ ഇവിടെ ലോഗ് ചെയ്യും
         console.log(`[FCM Bypass] Device messaging suspended for ${targetUserId}: ${fcmError.message}`);
       });
     }

@@ -1,6 +1,6 @@
 // app/layout.tsx
 import { AuthProvider } from '@/app/contexts/AuthContext';
-import { PublicAuthProvider } from '@/app/contexts/PublicAuthContext';
+import { ToastProvider } from '@/app/components/GlassToastContainer'; 
 import '@/app/globals.css';
 
 export const metadata = {
@@ -13,9 +13,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className="dark">
       <body className="bg-black text-white antialiased">
         <AuthProvider>
-          <PublicAuthProvider>
+          <ToastProvider>
             {children}
-          </PublicAuthProvider>
+          </ToastProvider>
         </AuthProvider>
       </body>
     </html>

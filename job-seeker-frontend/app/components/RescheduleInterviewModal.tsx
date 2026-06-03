@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, Calendar, Loader2 } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from './GlassToastContainer';
 
 interface RescheduleInterviewModalProps {
   isOpen: boolean;
@@ -22,12 +23,12 @@ export default function RescheduleInterviewModal({
   const [proposedTime, setProposedTime] = useState('');
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
+  const { showToast } = useGlassToast();
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!proposedTime) {
-      alert('Please select a proposed time');
+      showToast('failed', 'Please select a proposed time', 'danger');
       return;
     }
 
@@ -42,11 +43,11 @@ export default function RescheduleInterviewModal({
       if (res.data.success) {
         onSuccess();
         onClose();
-        alert('✅ Reschedule request sent to the company!');
+        showToast('success', 'Reschedule request sent to the company', 'success');
       }
     } catch (error: any) {
       console.error('Reschedule error:', error);
-      alert(error.response?.data?.message || 'Failed to submit reschedule request');
+      showToast('failed', error.response?.data?.message || 'Failed to submit reschedule request', 'danger');
     } finally {
       setIsSubmitting(false);
     }

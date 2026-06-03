@@ -23,6 +23,10 @@ enum ActivityType {
   FEEDBACK_SUBMITTED
   OFFER_SENT
   OFFER_RESPONDED
+  SPOT_JOB_POSTED
+  SPOT_JOB_MATCHED
+  SPOT_JOB_CONFIRMED
+  SPOT_JOB_COMPLETED
 }
 
 enum RequestStatus {
@@ -110,21 +114,39 @@ enum AvailabilityStatus {
   spot_available
 }
 
+enum SpotJobStatus {
+  POSTED
+  SEARCHING
+  MATCHED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum SpotBookingStatus {
+  PENDING_RESPONSE
+  ACCEPTED
+  DECLINED
+  TIMED_OUT
+}
+
 // ─── IDENTITY MODULES ───────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(uuid())
-  mobileNumber String   @unique
-  globalRoles  Int      @default(1)
-  isVerified   Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String              @id @default(uuid())
+  mobileNumber       String              @unique
+  globalRoles        Int                 @default(1)
+  isVerified         Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
-  otps             Otp[]
-  jobSeekerProfile JobSeekerProfile?
-  teamMemberships  TeamMember[]
-  feedbacksGiven   InterviewFeedback[]
+  otps               Otp[]
+  jobSeekerProfile   JobSeekerProfile?
+  teamMemberships    TeamMember[]
+  feedbacksGiven     InterviewFeedback[]
   notificationTokens NotificationToken[]
+
   @@index([mobileNumber])
 }
 
@@ -183,6 +205,7 @@ model JobSeekerProfile {
   applications          Application[]
   companyCrmProfiles    CompanyCandidateProfile[]
   talentPoolMemberships TalentPoolMember[]
+  spotJobBookings       SpotJobBooking[]
 
   @@index([email])
   @@index([userId])
@@ -323,47 +346,41 @@ model Company {
   registrationNumber String?
   isVerified         Boolean                   @default(false)
   verificationBadge  String                    @default("none")
-  
-  // Extended fields
   tagline            String?
-  services           String[]                  @default([]) 
-  products           Json?                     
-  seoKeywords        String[]                  @default([]) 
-  coreValues         String[]                  @default([]) 
-  gallery            String[]                  @default([]) 
+  services           String[]                  @default([])
+  products           Json?
+  seoKeywords        String[]                  @default([])
+  coreValues         String[]                  @default([])
+  gallery            String[]                  @default([])
   youtubeLink        String?
-  officeLocations    Json?                     
-  socialMedia        Json?                    
+  officeLocations    Json?
+  socialMedia        Json?
   corporateLink      String?
-
-  // NEW: For mobile verification during profile update
   pendingMobile      String?
-  
   createdAt          DateTime                  @default(now())
   updatedAt          DateTime                  @updatedAt
 
-  // Relations...
   teamMembers        TeamMember[]
   jobPostings        JobPosting[]
   interviewBatches   InterviewBatch[]
   offerTemplates     OfferTemplate[]
   crmProfiles        CompanyCandidateProfile[]
   talentPools        TalentPool[]
+  spotJobs           SpotJob[]
 
   @@index([name])
   @@index([email])
 }
 
 model TeamMember {
-  id        String  @id @default(uuid())
+  id        String   @id @default(uuid())
   companyId String
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  roles     Int     @default(8)
-  status    String  @default("active")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles     Int      @default(8)
+  status    String   @default("active")
   password  String?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -622,7 +639,7 @@ model RescheduleRequest {
 }
 
 model InterviewFeedback {
-  id                   String    @id @default(uuid())
+  id                   String   @id @default(uuid())
   interviewId          String
   interview            Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
   interviewerId        String
@@ -688,4 +705,47 @@ model OfferTemplate {
 
   @@index([companyId])
   @@index([isDefault])
+}
+
+// ─── SPOT JOB MODULES ────────────────────────────────────────────────
+
+model SpotJob {
+  id             String        @id @default(uuid())
+  companyId      String
+  company        Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title          String
+  description    String        @db.Text
+  requiredSkills String[]
+  rate           Decimal       @db.Decimal(10, 2)
+  rateType       String
+  currency       String        @default("INR")
+  startTime      DateTime
+  endTime        DateTime
+  location       String
+  coordinates    Json?
+  status         SpotJobStatus @default(POSTED)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  bookings       SpotJobBooking[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([startTime])
+}
+
+model SpotJobBooking {
+  id                 String            @id @default(uuid())
+  spotJobId          String
+  spotJob            SpotJob           @relation(fields: [spotJobId], references: [id], onDelete: Cascade)
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile  @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  status             SpotBookingStatus @default(PENDING_RESPONSE)
+  notifiedAt         DateTime          @default(now())
+  respondedAt        DateTime?
+  createdAt          DateTime          @default(now())
+
+  @@unique([spotJobId, jobSeekerProfileId])
+  @@index([spotJobId])
+  @@index([jobSeekerProfileId])
 }

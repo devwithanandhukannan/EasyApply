@@ -1,6 +1,8 @@
+// app/dashboard/jobs/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Search, 
   MapPin, 
@@ -14,14 +16,15 @@ import {
   FileText,
   X,
   AlertCircle,
-  Globe
+  Globe,
+  Lock
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 export default function JobsPage() {
-  // Initialize toast hook
+  const router = useRouter();
   const { showToast } = useGlassToast();
 
   const [jobs, setJobs] = useState<any[]>([]);
@@ -38,15 +41,33 @@ export default function JobsPage() {
   const [appliedJobs, setAppliedJobs] = useState<Set<string>>(new Set());
   const [showApplicationModal, setShowApplicationModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    fetchJobs();
-    fetchMyApplications();
-  }, [page, filters]);
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchJobs();
+      fetchMyApplications();
+    }
+  }, [page, filters, isAuthenticated]);
 
   useEffect(() => {
     handleSearch();
   }, [searchQuery, jobs]);
+
+  const checkAuth = async () => {
+    try {
+      const response = await api.get('/auth/me');
+      setIsAuthenticated(response.data.success);
+    } catch (error) {
+      setIsAuthenticated(false);
+      showToast('Session Expired', 'Please sign in to continue', 'info');
+      router.push('/login?redirect=/dashboard/jobs');
+    }
+  };
 
   const fetchJobs = async () => {
     try {
@@ -59,15 +80,19 @@ export default function JobsPage() {
         ...(filters.location && { location: filters.location }),
       });
 
-      const response = await api.get(`/jobs?${params}`);
+      const response = await api.get(`/public/search?${params}`);
       
       if (response.data.success) {
         setJobs(response.data.data);
         setFilteredJobs(response.data.data);
-        setTotalPages(response.data.pagination.totalPages);
+        setTotalPages(response.data.pagination?.totalPages || 1);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching positions:', error);
+      if (error.response?.status === 401) {
+        showToast('Authentication Required', 'Please sign in to view jobs', 'info');
+        router.push('/login?redirect=/dashboard/jobs');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -80,8 +105,11 @@ export default function JobsPage() {
         const jobIds = new Set(response.data.data.map((app: any) => app.jobPostingId));
         setAppliedJobs(jobIds);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching applications:', error);
+      if (error.response?.status === 401) {
+        setIsAuthenticated(false);
+      }
     }
   };
 
@@ -102,6 +130,13 @@ export default function JobsPage() {
   const handleApplyClick = (job: any, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    if (!isAuthenticated) {
+      showToast('Sign In Required', 'Please sign in to apply for this position', 'info');
+      router.push(`/login?redirect=/dashboard/jobs`);
+      return;
+    }
+    
     setSelectedJob(job);
     setShowApplicationModal(true);
   };
@@ -110,6 +145,7 @@ export default function JobsPage() {
     setShowApplicationModal(false);
     setAppliedJobs(prev => new Set([...prev, selectedJob.id]));
     setSelectedJob(null);
+    fetchMyApplications(); // Refresh applications
   };
 
   const calculateDaysAgo = (date: string) => {
@@ -119,6 +155,24 @@ export default function JobsPage() {
     if (days === 1) return 'Yesterday';
     return `${days} days ago`;
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="text-center">
+          <Lock className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Authentication Required</h2>
+          <p className="text-zinc-500 mb-6">Please sign in to view and apply for jobs</p>
+          <button
+            onClick={() => router.push('/login?redirect=/dashboard/jobs')}
+            className="px-6 py-3 bg-white text-black rounded-lg font-semibold hover:bg-zinc-200 transition"
+          >
+            Sign In
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 text-zinc-300 max-w-7xl mx-auto p-2 md:p-0 font-sans antialiased">
@@ -375,10 +429,10 @@ export default function JobsPage() {
   );
 }
 
-// ─── LOCAL APPLICATION DIALOG COMPONENT ────────────────────
+// ─── APPLICATION MODAL COMPONENT ────────────────────
 function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () => void; onSuccess: () => void; }) {
-  // Initialize context hook inside dialog
   const { showToast } = useGlassToast();
+  const router = useRouter();
 
   const [resumes, setResumes] = useState<any[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState('');
@@ -401,8 +455,12 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
           setSelectedResumeId(response.data.data[0].id);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading documents:', error);
+      if (error.response?.status === 401) {
+        showToast('Session Expired', 'Please sign in again', 'info');
+        router.push('/login?redirect=/dashboard/jobs');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -451,7 +509,6 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
       });
 
       if (response.data.success) {
-        // Professional Success Notification without emoji
         showToast(
           'Application Submitted',
           `Successfully applied for ${job.title} at ${job.company.name}.`,
@@ -461,12 +518,16 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
       }
     } catch (error: any) {
       console.error('Submission error:', error);
-      // Professional Failure Notification without emoji
-      showToast(
-        'Submission Failed',
-        error.response?.data?.message || 'Failed to file application.',
-        'danger'
-      );
+      if (error.response?.status === 401) {
+        showToast('Session Expired', 'Please sign in again', 'info');
+        router.push('/login?redirect=/dashboard/jobs');
+      } else {
+        showToast(
+          'Submission Failed',
+          error.response?.data?.message || 'Failed to file application.',
+          'danger'
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }

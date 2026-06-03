@@ -117,13 +117,22 @@ export const getJobApplications = async (req: Request, res: Response) => {
 export const aiFilterCandidates = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
-    if (!companyId) return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    if (!companyId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
 
     const { jobId } = req.params;
+    
+    // Extract custom constraints from request body
+    const { customPrompt } = req.body;
     const topN = Math.max(1, parseInt(req.body.topN ?? '5', 10));
 
-    const job = await prisma.jobPosting.findFirst({ where: { id: jobId, companyId } });
-    if (!job) return res.status(404).json({ success: false, message: 'Job posting not found.' });
+    const job = await prisma.jobPosting.findFirst({ 
+      where: { id: jobId, companyId } 
+    });
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job posting not found.' });
+    }
 
     const applications = await prisma.application.findMany({
       where: { jobPostingId: jobId },
@@ -141,36 +150,58 @@ export const aiFilterCandidates = async (req: Request, res: Response) => {
       },
     });
 
-    if (applications.length === 0)
+    if (applications.length === 0) {
       return res.status(200).json({ success: true, message: 'No applications found.', rankedCandidates: [] });
+    }
 
     const candidateSnapshots = applications.map((app) => ({
       applicationId: app.id,
       candidateName: app.jobSeekerProfile.fullName,
       skills: app.jobSeekerProfile.skills.map((s) => s.name),
       experience: app.jobSeekerProfile.experience.map((e) => ({
-        company: e.company, role: e.role, startYear: e.startYear, endYear: e.endYear,
-        current: e.current, description: e.description,
+        company: e.company, 
+        role: e.role, 
+        startYear: e.startYear, 
+        endYear: e.endYear,
+        current: e.current, 
+        description: e.description,
       })),
       education: app.jobSeekerProfile.education.map((ed) => ({
-        institution: ed.institution, degree: ed.degree, field: ed.field, endYear: ed.endYear, cgpa: ed.cgpa,
+        institution: ed.institution, 
+        degree: ed.degree, 
+        field: ed.field, 
+        endYear: ed.endYear, 
+        cgpa: ed.cgpa,
       })),
       projects: app.jobSeekerProfile.projects.map((p) => ({
-        name: p.name, technologies: p.technologies, description: p.description,
+        name: p.name, 
+        technologies: p.technologies, 
+        description: p.description,
       })),
       certifications: app.jobSeekerProfile.certifications.map((c) => c.name),
       atsScore: app.resume?.atsScore ?? null,
       resumeContent: app.resume?.content ?? null,
     }));
 
-    const aiResult = await rankCandidates(job.description, job.requiredSkills, candidateSnapshots, topN);
+    // Passing customPrompt along to the AI evaluator tool
+    const aiResult = await rankCandidates(
+      job.description, 
+      job.requiredSkills, 
+      candidateSnapshots, 
+      topN,
+      customPrompt
+    );
 
     const enrichedRankings = (aiResult.rankings ?? []).map((ranked: any) => {
       const original = applications.find((a) => a.id === ranked.applicationId);
       if (!original) return ranked;
       return {
-        rank: ranked.rank, score: ranked.score, applicationId: ranked.applicationId,
-        matchReason: ranked.matchReason, strengths: ranked.strengths, gaps: ranked.gaps,
+        rank: ranked.rank, 
+        score: ranked.score, 
+        applicationId: ranked.applicationId,
+        matchReason: ranked.matchReason, 
+        strengths: ranked.strengths, 
+        gaps: ranked.gaps,
         recommendation: ranked.recommendation,
         candidate: {
           profileId: original.jobSeekerProfile.id,
@@ -183,7 +214,11 @@ export const aiFilterCandidates = async (req: Request, res: Response) => {
           availabilityStatus: original.jobSeekerProfile.availabilityStatus,
           skills: original.jobSeekerProfile.skills.map((s) => s.name),
         },
-        resume: { id: original.resume?.id, name: original.resume?.name, atsScore: original.resume?.atsScore },
+        resume: { 
+          id: original.resume?.id, 
+          name: original.resume?.name, 
+          atsScore: original.resume?.atsScore 
+        },
         appliedAt: original.appliedAt,
         currentStatus: original.status,
       };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Check, ChevronDown, Search, Loader2, Sparkles } from 'lucide-react';
 import api from '../lib/axios'; // Adjust based on your actual api utility import path
+import { useGlassToast } from './GlassToastContainer'; // Assuming you have a toast system in place for user feedback
 
 interface CreateOfferModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface CreateOfferModalProps {
 
 export default function CreateOfferModal({ isOpen, onClose, onSuccess }: CreateOfferModalProps) {
   // ─── STATE MANAGEMENT ──────────────────────────────────────────────────
+  const { showToast } = useGlassToast();
   const [loadingPipelines, setLoadingPipelines] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -116,7 +118,7 @@ export default function CreateOfferModal({ isOpen, onClose, onSuccess }: CreateO
 
     if (!validId) {
       console.error("Critical: Selected candidate object is missing a valid identifier tracking ID", app);
-      alert("Cannot select candidate: Record has an invalid ID payload mapping.");
+      showToast('failed', "Cannot select candidate: Record has an invalid ID payload mapping.", 'danger');
       return;
     }
 
@@ -135,7 +137,7 @@ export default function CreateOfferModal({ isOpen, onClose, onSuccess }: CreateO
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.applicationId) {
-      alert('Please select a valid candidate from the pipeline first.');
+      showToast('failed', 'Please select a valid candidate from the pipeline first.', 'danger');
       return;
     }
     setIsSubmitting(true);
@@ -148,7 +150,7 @@ export default function CreateOfferModal({ isOpen, onClose, onSuccess }: CreateO
       }
     } catch (error: any) {
       console.error('Create offer letter generation error:', error);
-      alert(error.response?.data?.message || 'Failed to generate offer letter.');
+      showToast('failed', error.response?.data?.message || 'Failed to generate offer letter.', 'danger');
     } finally {
       setIsSubmitting(false);
     }

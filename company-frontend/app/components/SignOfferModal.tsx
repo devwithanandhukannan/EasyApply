@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { X, Signature, Check, Upload } from 'lucide-react';
 import api from '@/app/lib/axios';
 import SignatureCanvas from 'react-signature-canvas';
+import { useGlassToast } from './GlassToastContainer';
 
 interface Props {
   isOpen: boolean;
@@ -35,12 +36,12 @@ export default function SignOfferModal({
   const handleClear = () => {
     signatureRef.current?.clear();
   };
-
+  const { showToast } = useGlassToast();
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        alert('Please upload a valid image file');
+        showToast('failed', 'Please upload a valid image file', 'danger');
         return;
       }
       
@@ -59,13 +60,15 @@ export default function SignOfferModal({
 
     if (signatureMethod === 'draw') {
       if (signatureRef.current?.isEmpty()) {
-        alert('Please provide your signature');
+        showToast('failed', 'Please provide your signature', 'danger'
+
+        );
         return;
       }
       signatureData = signatureRef.current.toDataURL('image/png');
     } else {
       if (!uploadedSignature) {
-        alert('Please upload a signature image');
+        showToast('failed', 'Please upload a signature image', 'danger');
         return;
       }
       signatureData = uploadedSignature;
@@ -93,13 +96,13 @@ export default function SignOfferModal({
       }
 
       if (response.data.success) {
-        alert(response.data.message || 'Offer successfully processed and signed.');
+        showToast('success', response.data.message || 'Offer successfully processed and signed.', 'success');
         onSuccess();
         onClose();
       }
     } catch (error: any) {
       console.error('Sign offer pipeline execution error:', error);
-      alert(error.response?.data?.message || 'Failed to submit authorization payload');
+      showToast('failed', error.response?.data?.message || 'Failed to submit authorization payload', 'danger');
     } finally {
       setIsSubmitting(false);
     }

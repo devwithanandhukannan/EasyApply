@@ -16,8 +16,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 export default function JobDetailsPage() {
+  const { showToast } = useGlassToast();
   const { id } = useParams();
   const router = useRouter();
   const [job, setJob] = useState<any>(null);
@@ -35,7 +37,7 @@ export default function JobDetailsPage() {
   const fetchJobDetails = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get(`/jobs/${id}`);
+      const response = await api.get(`/public/${id}`);
       if (response.data.success) {
         setJob(response.data.data);
       }
@@ -63,7 +65,7 @@ export default function JobDetailsPage() {
       setIsSubmitting(true);
       const resumeRes = await api.get('/jobseeker/resumes');
       if (!resumeRes.data.success || resumeRes.data.data.length === 0) {
-        alert('Please upload or generate a primary resume on your profile menu before submitting.');
+        showToast('failed', 'Please upload or generate a primary resume on your profile menu before submitting.', 'danger');
         return;
       }
 
@@ -78,12 +80,12 @@ export default function JobDetailsPage() {
       });
 
       if (response.data.success) {
-        alert('Application profile submitted successfully.');
+        showToast('applied', 'Application submitted successfully.', 'success');
         setHasApplied(true);
       }
     } catch (error: any) {
       console.error('Application transmission error:', error);
-      alert(error.response?.data?.message || 'Failed to file your profile records.');
+      showToast('failed', error.response?.data?.message || 'Failed to submit application.', 'danger');
     } finally {
       setIsSubmitting(false);
     }

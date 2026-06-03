@@ -64,7 +64,7 @@ export default function UnifiedLiveKitMeetPage() {
     
     // 🎯 REDIRECT LOGIC: Interviewers are routed to the feedback submission screen
     if (roleType === 'company' && interviewId) {
-      console.log(`🚀 Redirecting host node to evaluation matrix: /dashboard/interviews/${interviewId}/review`);
+      console.log(`Redirecting host node to evaluation matrix: /dashboard/interviews/${interviewId}/review`);
       router.replace(`/dashboard/interviews/${interviewId}/review`);
     } else {
       // Candidates return safely back to their standard layout registry stream

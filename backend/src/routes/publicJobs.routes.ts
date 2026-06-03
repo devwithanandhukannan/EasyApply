@@ -16,23 +16,25 @@ import {
 
 const router = express.Router();
 
-// ─── PUBLIC ROUTES (No authentication required, but user info attached if logged in) ───
-router.use(optionalAuth); // Apply optional auth to all routes
+// ─── LEGACY PUBLIC ROUTES ───
+router.get('/public', optionalAuth, getPublicJobs);
+router.get('/public/:id', optionalAuth, getPublicJobDetails);
 
-// Company routes
-router.get('/companies', getAllPublicCompanies);
-router.get('/companies/:identifier', getPublicCompanyProfile);
-router.get('/companies/:identifier/jobs', getPublicCompanyJobs);
+// ─── PUBLIC ROUTES (No authentication required) ───
+router.get('/companies', optionalAuth, getAllPublicCompanies);
+router.get('/companies/:identifier', optionalAuth, getPublicCompanyProfile);
+router.get('/companies/:identifier/jobs', optionalAuth, getPublicCompanyJobs);
+router.get('/companies/:identifier/jobs/:jobId', optionalAuth, getPublicCompanyJobDetails);
 
-// Job routes
-router.get('/jobs', searchAllJobs);
-router.get('/jobs/:jobId', getPublicCompanyJobDetails);
+// Search all jobs (public with optional auth for personalization)
+router.get('/search', optionalAuth, searchAllJobs);
 
-// User session
-router.get('/auth/me', getCurrentUser);
+// Get single job details by ID
+router.get('/:jobId', optionalAuth, getPublicJobDetails);
 
-// Legacy routes (keeping for backward compatibility)
-router.get('/public', getPublicJobs);
-router.get('/public/:id', getPublicJobDetails);
+// User session check
+router.get('/auth/me', optionalAuth, getCurrentUser);
+
+
 
 export default router;

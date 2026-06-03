@@ -9,7 +9,7 @@ import companyAuthRoutes from './routes/companyAuth.routes.ts';
 import companyJobRoutes from './routes/company.routes.ts';
 import publicJobRoutes from './routes/publicJobs.routes.ts'; 
 import interviewRouter from './routes/interview.routes.ts';
-import kanbanRouter from './routes/kanban.routes.ts'
+import kanbanRouter from './routes/kanban.routes.ts';
 import crmRoutes from './routes/crm.routes.ts';
 
 const app = express();
@@ -17,7 +17,7 @@ app.use(cookieParser());
 
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',')
-  : ['http://localhost:3000', 'http://localhost:5173']; // Included default Vite client development ports
+  : ['http://localhost:3000', 'http://localhost:5173'];
 
 app.use(
   cors({
@@ -37,19 +37,19 @@ app.use(
 
 app.use(express.json({ limit: '10mb' }));
 
-// ─── API ROUTER REGISTER ──────────────────────────────────────────────────
+// ─── API ROUTER REGISTER (ORDER MATTERS!) ───
+// Auth routes first
 app.use('/api/auth', authRoutes);
-app.use('/api/jobseeker', jobseekerRoutes);
 app.use('/api/company/auth', companyAuthRoutes);
 
-
+// Protected routes
+app.use('/api/jobseeker', jobseekerRoutes);
 app.use('/api/company', companyJobRoutes);
-
-app.use('/api/jobs', publicJobRoutes); 
 app.use('/api/interviews', interviewRouter);
 app.use('/api/kanban', kanbanRouter);
 app.use('/api/crm', crmRoutes);
 
+// Public routes last (to avoid conflicts)
 app.use('/api/public', publicJobRoutes);
 
 app.get('/', (_req, res) => res.send('Backend Running'));

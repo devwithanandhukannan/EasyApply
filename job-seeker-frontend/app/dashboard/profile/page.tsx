@@ -15,14 +15,18 @@ import {
   Link as LinkIcon,
   GraduationCap,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 export default function ProfilePage() {
+  const { showToast } = useGlassToast();
   const [activeTab, setActiveTab] = useState('basic');
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Form States
   const [basicInfo, setBasicInfo] = useState({
@@ -150,53 +154,55 @@ export default function ProfilePage() {
 
   // Fetch profile on mount
   useEffect(() => {
-  const fetchProfile = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get('/jobseeker/profile');
-      const data = response.data;
-      
-      setBasicInfo({
-        fullName: data.fullName || '',
-        email: data.email || '',
-        phone: data.phone || '',
-        location: data.location || '',
-        linkedin: data.linkedin || '',
-        github: data.github || '',
-        portfolio: data.portfolio || '',
-        bio: data.bio || '',
-      });
-      
-      setProfileImage(data.profilePic || null);
-      
-      setPreferences({
-        roles: data.preferences?.roles || [],
-        industries: data.preferences?.industries || [],
-        jobType: data.preferences?.jobType || '',
-        experience: data.preferences?.experience || '',
-        expectedSalary: data.preferences?.expectedSalary || '',
-        workLocationPreference: data.preferences?.workLocationPreference || '',
-      });
-      
-      setSkills(data.skills || []);
-      
-      // Only set if data exists, otherwise keep initial state
-      if (data.education?.length) setEducation(data.education);
-      if (data.experience?.length) setExperience(data.experience);
-      if (data.projects?.length) setProjects(data.projects);
-      if (data.certifications?.length) setCertifications(data.certifications);
-      if (data.languages?.length) setLanguages(data.languages);
-      if (data.achievements?.length) setAchievements(data.achievements);
-      
-    } catch (error) {
-      console.error('Failed to load profile:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  fetchProfile();
-}, []); // Empty array is correct now - no state dependencies
+    const fetchProfile = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get('/jobseeker/profile');
+        
+        // ✅ Handle new response format: { success: true, data: {...} }
+        const profileData = response.data.success ? response.data.data : response.data;
+        
+        setBasicInfo({
+          fullName: profileData.fullName || '',
+          email: profileData.email || '',
+          phone: profileData.phone || '',
+          location: profileData.location || '',
+          linkedin: profileData.linkedin || '',
+          github: profileData.github || '',
+          portfolio: profileData.portfolio || '',
+          bio: profileData.bio || '',
+        });
+        
+        setProfileImage(profileData.profilePic || null);
+        
+        setPreferences({
+          roles: profileData.preferences?.roles || [],
+          industries: profileData.preferences?.industries || [],
+          jobType: profileData.preferences?.jobType || '',
+          experience: profileData.preferences?.experience || '',
+          expectedSalary: profileData.preferences?.expectedSalary || '',
+          workLocationPreference: profileData.preferences?.workLocationPreference || '',
+        });
+        
+        setSkills(profileData.skills || []);
+        
+        if (profileData.education?.length > 0) setEducation(profileData.education);
+        if (profileData.experience?.length > 0) setExperience(profileData.experience);
+        if (profileData.projects?.length > 0) setProjects(profileData.projects);
+        if (profileData.certifications?.length > 0) setCertifications(profileData.certifications);
+        if (profileData.languages?.length > 0) setLanguages(profileData.languages);
+        if (profileData.achievements?.length > 0) setAchievements(profileData.achievements);
+        
+      } catch (error: any) {
+        console.error('Failed to load profile:', error);
+        showToast('Error', error.response?.data?.error || 'Failed to load profile', 'danger');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchProfile();
+  }, []);
 
   // Image handling
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,7 +250,7 @@ export default function ProfilePage() {
 
   // Save all
   const handleSaveAll = async () => {
-    setLoading(true);
+    setSaving(true);
     try {
       const profileData = {
         fullName: basicInfo.fullName,
@@ -279,15 +285,18 @@ export default function ProfilePage() {
         formData.append('profileImage', profileImageFile);
       }
 
-      await api.put('/jobseeker/profile', formData, {
+      const response = await api.put('/jobseeker/profile', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      alert('Profile saved successfully!');
-    } catch (error) {
+      
+      if (response.data?.success) {
+        showToast('Success', 'Profile saved successfully!', 'success');
+      }
+    } catch (error: any) {
       console.error('Save failed:', error);
-      alert('Failed to save profile');
+      showToast('Error', error.response?.data?.error || 'Failed to save profile. Please try again.', 'danger');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -299,383 +308,397 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-white">Loading profile...</div>
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
+        <Loader2 className="w-6 h-6 text-zinc-400 animate-spin" />
+        <div className="text-zinc-400 text-xs font-medium tracking-wide">Loading your workspace...</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="max-w-6xl mx-auto space-y-6 px-4">
+      
+      {/* Structural Clean Header Workspace */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
         <div>
-          <h1 className="text-2xl font-semibold text-white mb-1">Profile</h1>
-          <p className="text-gray-500 text-sm">Manage your professional information</p>
+          <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Professional Workspace</h1>
+          <p className="text-zinc-500 text-xs mt-0.5">Configure your dynamic profile summary and application rules.</p>
         </div>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={handleSaveAll} 
+            disabled={saving} 
+            className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 disabled:opacity-50 text-zinc-950 px-3 py-1.5 rounded-lg transition-colors shadow-sm text-xs font-semibold"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+            <span>{saving ? 'Syncing...' : 'Save Workspace'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Modern 2-Column Split Console Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
         
-      </div>
-
-      {/* Tabs */}
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-2">
-        <div className="flex items-center space-x-1 overflow-x-auto scrollbar-hide">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl transition-all whitespace-nowrap text-xs font-medium ${
-                  activeTab === tab.id
-                    ? 'bg-white text-black'
-                    : 'text-gray-400 hover:text-white hover:bg-[#2c2c2e]'
-                }`}
-              >
-                <Icon size={14} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
+        {/* Left Sticky Tab Column */}
+        <div className="md:col-span-1 bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-1.5 md:sticky md:top-4">
+          <nav className="flex flex-row md:flex-col gap-0.5 overflow-x-auto md:overflow-x-visible scrollbar-none">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isSelected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all text-left whitespace-nowrap text-xs font-medium w-full ${
+                    isSelected
+                      ? 'bg-zinc-100 text-zinc-950 font-semibold shadow-sm'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+                  }`}
+                >
+                  <Icon size={14} className={isSelected ? 'text-zinc-950' : 'text-zinc-500'} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-        {/* Basic Info Tab */}
-        {activeTab === 'basic' && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Basic Information</h2>
-
-            {/* Profile Photo */}
-            <div className="flex items-center space-x-6">
-              <div className="relative">
-                <div className="w-24 h-24 rounded-full bg-[#2c2c2e] flex items-center justify-center overflow-hidden">
-                  {profileImage ? (
-                    <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
-                  ) : (
-                    <User size={32} className="text-gray-600" />
+        {/* Right Active Information Node Panel */}
+        <div className="md:col-span-3 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-5 backdrop-blur-sm min-h-[480px]">
+          
+          {/* Basic Info Tab */}
+          {activeTab === 'basic' && (
+            <div className="space-y-6 animate-in fade-in-40 duration-200">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 pb-4 border-b border-zinc-800/60">
+                <div className="relative group">
+                  <div className="w-16 h-16 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-center overflow-hidden">
+                    {profileImage ? (
+                      <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={24} className="text-zinc-600" />
+                    )}
+                  </div>
+                  <label className="absolute -bottom-1.5 -right-1.5 bg-zinc-100 text-zinc-950 p-1 rounded-md cursor-pointer hover:bg-zinc-200 transition-colors shadow">
+                    <Upload size={12} />
+                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  </label>
+                </div>
+                <div>
+                  <h3 className="text-zinc-200 text-xs font-semibold">Avatar Presentation</h3>
+                  <p className="text-zinc-500 text-[11px] mt-0.5">Square or circular canvas formats up to 4MB.</p>
+                  {profileImage && (
+                    <button onClick={removePhoto} className="text-rose-400 text-[11px] font-medium hover:underline mt-1 block">
+                      Purge Image
+                    </button>
                   )}
                 </div>
-                <label className="absolute bottom-0 right-0 bg-white text-black p-2 rounded-full cursor-pointer hover:bg-gray-100 transition-colors">
-                  <Upload size={14} />
-                  <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
-                </label>
               </div>
-              <div>
-                <h3 className="text-white text-sm font-medium mb-1">Profile Photo</h3>
-                <p className="text-gray-500 text-xs mb-2">Upload a professional photo (optional)</p>
-                {profileImage && (
-                  <button onClick={removePhoto} className="text-red-500 text-xs hover:underline">
-                    Remove Photo
-                  </button>
-                )}
-              </div>
-            </div>
 
-            {/* Form Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Full Name *</label>
-                <input type="text" value={basicInfo.fullName} onChange={(e) => setBasicInfo({ ...basicInfo, fullName: e.target.value })} placeholder="John Doe" className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Email *</label>
-                <input type="email" value={basicInfo.email} onChange={(e) => setBasicInfo({ ...basicInfo, email: e.target.value })} placeholder="john@example.com" className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Phone Number</label>
-                <input type="tel" value={basicInfo.phone} onChange={(e) => setBasicInfo({ ...basicInfo, phone: e.target.value })} placeholder="+1 (555) 000-0000" className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Current Location *</label>
-                <div className="relative">
-                  <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-                  <input type="text" value={basicInfo.location} onChange={(e) => setBasicInfo({ ...basicInfo, location: e.target.value })} placeholder="San Francisco, CA" className="w-full pl-10 pr-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Full Name *</label>
+                  <input type="text" value={basicInfo.fullName} onChange={(e) => setBasicInfo({ ...basicInfo, fullName: e.target.value })} placeholder="John Doe" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
                 </div>
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">LinkedIn Profile</label>
-                <div className="relative">
-                  <LinkIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-                  <input type="url" value={basicInfo.linkedin} onChange={(e) => setBasicInfo({ ...basicInfo, linkedin: e.target.value })} placeholder="linkedin.com/in/username" className="w-full pl-10 pr-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Email Address *</label>
+                  <input type="email" value={basicInfo.email} onChange={(e) => setBasicInfo({ ...basicInfo, email: e.target.value })} placeholder="john@example.com" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
                 </div>
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">GitHub Profile</label>
-                <div className="relative">
-                  <Code size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-                  <input type="url" value={basicInfo.github} onChange={(e) => setBasicInfo({ ...basicInfo, github: e.target.value })} placeholder="github.com/username" className="w-full pl-10 pr-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Phone Network</label>
+                  <input type="tel" value={basicInfo.phone} onChange={(e) => setBasicInfo({ ...basicInfo, phone: e.target.value })} placeholder="+1 (555) 000-0000" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
                 </div>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-gray-400 text-xs font-medium mb-2">Portfolio Website</label>
-                <div className="relative">
-                  <LinkIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-                  <input type="url" value={basicInfo.portfolio} onChange={(e) => setBasicInfo({ ...basicInfo, portfolio: e.target.value })} placeholder="yourportfolio.com" className="w-full pl-10 pr-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Geographic Location *</label>
+                  <div className="relative">
+                    <MapPin size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                    <input type="text" value={basicInfo.location} onChange={(e) => setBasicInfo({ ...basicInfo, location: e.target.value })} placeholder="San Francisco, CA" className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  </div>
                 </div>
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-gray-400 text-xs font-medium mb-2">Professional Summary</label>
-                <textarea value={basicInfo.bio} onChange={(e) => setBasicInfo({ ...basicInfo, bio: e.target.value })} placeholder="Brief description about yourself, your expertise, and career goals..." rows={4} className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600 resize-none" />
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">LinkedIn Endpoint</label>
+                  <div className="relative">
+                    <LinkIcon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                    <input type="url" value={basicInfo.linkedin} onChange={(e) => setBasicInfo({ ...basicInfo, linkedin: e.target.value })} placeholder="linkedin.com/in/username" className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">GitHub Repository</label>
+                  <div className="relative">
+                    <Code size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                    <input type="url" value={basicInfo.github} onChange={(e) => setBasicInfo({ ...basicInfo, github: e.target.value })} placeholder="github.com/username" className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Personal Portfolio</label>
+                  <div className="relative">
+                    <LinkIcon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" />
+                    <input type="url" value={basicInfo.portfolio} onChange={(e) => setBasicInfo({ ...basicInfo, portfolio: e.target.value })} placeholder="yourportfolio.com" className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Executive Summary</label>
+                  <textarea value={basicInfo.bio} onChange={(e) => setBasicInfo({ ...basicInfo, bio: e.target.value })} placeholder="Brief outline detailing technical focus vectors and project records..." rows={3} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700 resize-none leading-relaxed" />
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Job Preferences Tab */}
-        {activeTab === 'preferences' && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Job Preferences</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Preferred Roles</label>
-                <input type="text" placeholder="e.g., Software Engineer, Product Manager" value={preferences.roles.join(', ')} onChange={(e) => setPreferences({ ...preferences, roles: e.target.value.split(',').map(s => s.trim()).filter(s => s) })} className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-                <p className="text-gray-600 text-xs mt-1">Comma separated</p>
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Preferred Industries</label>
-                <input type="text" placeholder="e.g., Technology, Healthcare, Finance" value={preferences.industries.join(', ')} onChange={(e) => setPreferences({ ...preferences, industries: e.target.value.split(',').map(s => s.trim()).filter(s => s) })} className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Job Type</label>
-                <select value={preferences.jobType} onChange={(e) => setPreferences({ ...preferences, jobType: e.target.value })} className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm">
-                  <option value="">Select job type</option>
-                  <option value="full-time">Full-time</option>
-                  <option value="part-time">Part-time</option>
-                  <option value="contract">Contract</option>
-                  <option value="freelance">Freelance</option>
-                  <option value="internship">Internship</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Experience Level</label>
-                <select value={preferences.experience} onChange={(e) => setPreferences({ ...preferences, experience: e.target.value })} className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm">
-                  <option value="">Select experience level</option>
-                  <option value="entry">Entry Level (0-2 years)</option>
-                  <option value="mid">Mid Level (2-5 years)</option>
-                  <option value="senior">Senior Level (5-10 years)</option>
-                  <option value="lead">Lead/Principal (10+ years)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Expected Salary (Annual)</label>
-                <input type="text" placeholder="e.g., $100,000 - $150,000" value={preferences.expectedSalary} onChange={(e) => setPreferences({ ...preferences, expectedSalary: e.target.value })} className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-              </div>
-              <div>
-                <label className="block text-gray-400 text-xs font-medium mb-2">Work Location Preference</label>
-                <select value={preferences.workLocationPreference} onChange={(e) => setPreferences({ ...preferences, workLocationPreference: e.target.value })} className="w-full px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm">
-                  <option value="">Select preference</option>
-                  <option value="remote">Remote</option>
-                  <option value="onsite">On-site</option>
-                  <option value="hybrid">Hybrid</option>
-                </select>
+          {/* Job Preferences Tab */}
+          {activeTab === 'preferences' && (
+            <div className="space-y-4 animate-in fade-in-40 duration-200">
+              <h2 className="text-sm font-semibold text-zinc-200 mb-3">Job Preference Settings</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Target Roles</label>
+                  <input type="text" placeholder="Software Engineer, Product Manager" value={preferences.roles.join(', ')} onChange={(e) => setPreferences({ ...preferences, roles: e.target.value.split(',').map(s => s.trim()).filter(s => s) })} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  <p className="text-zinc-600 text-[10px] mt-1">Split items via comma separations.</p>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Preferred Markets / Industries</label>
+                  <input type="text" placeholder="Technology, Healthcare, Finance" value={preferences.industries.join(', ')} onChange={(e) => setPreferences({ ...preferences, industries: e.target.value.split(',').map(s => s.trim()).filter(s => s) })} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Contract Architecture</label>
+                  <select value={preferences.jobType} onChange={(e) => setPreferences({ ...preferences, jobType: e.target.value })} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs">
+                    <option value="">Select allocation layout</option>
+                    <option value="full-time">Full-time Layout</option>
+                    <option value="part-time">Part-time Layout</option>
+                    <option value="contract">Third-Party Contract</option>
+                    <option value="freelance">Freelance Retainer</option>
+                    <option value="internship">Educational Internship</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Seniority Context</label>
+                  <select value={preferences.experience} onChange={(e) => setPreferences({ ...preferences, experience: e.target.value })} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs">
+                    <option value="">Select track range</option>
+                    <option value="entry">Associate Level (0-2 YOE)</option>
+                    <option value="mid">Mid Level Track (2-5 YOE)</option>
+                    <option value="senior">Senior Track (5-10 YOE)</option>
+                    <option value="lead">Principal Framework (10+ YOE)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Expected Compensation Base</label>
+                  <input type="text" placeholder="e.g., $100,000 - $150,000" value={preferences.expectedSalary} onChange={(e) => setPreferences({ ...preferences, expectedSalary: e.target.value })} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                </div>
+                <div>
+                  <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Location Matrix Rule</label>
+                  <select value={preferences.workLocationPreference} onChange={(e) => setPreferences({ ...preferences, workLocationPreference: e.target.value })} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs">
+                    <option value="">Select operational policy</option>
+                    <option value="remote">Fully Remote Distributed</option>
+                    <option value="onsite">On-Site Office Boundary</option>
+                    <option value="hybrid">Hybrid Split Routine</option>
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Skills Tab */}
-        {activeTab === 'skills' && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold text-white mb-4">Skills</h2>
-            <div>
-              <label className="block text-gray-400 text-xs font-medium mb-2">Add Skills</label>
-              <div className="flex space-x-2">
-                <input type="text" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addSkill()} placeholder="Type a skill and press Enter" className="flex-1 px-4 py-2.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-                <button onClick={addSkill} className="px-4 py-2.5 bg-white text-black rounded-xl hover:bg-gray-100 transition-colors text-sm font-medium">Add</button>
+          {/* Skills Tab */}
+          {activeTab === 'skills' && (
+            <div className="space-y-5 animate-in fade-in-40 duration-200">
+              <h2 className="text-sm font-semibold text-zinc-200">Skill Inventory Engine</h2>
+              <div className="bg-zinc-950/40 p-3 rounded-xl border border-zinc-800/60">
+                <label className="block text-zinc-400 text-[10px] font-medium uppercase tracking-wider mb-1.5">Append Core Competency</label>
+                <div className="flex gap-2">
+                  <input type="text" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addSkill()} placeholder="Type skill term (e.g. TypeScript)..." className="flex-1 px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  <button onClick={addSkill} className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-950 rounded-lg transition-colors text-xs font-semibold">Append</button>
+                </div>
               </div>
+              
+              {skills.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-zinc-400 text-[11px] font-semibold tracking-wide uppercase">Active Registers ({skills.length})</h3>
+                  <div className="flex flex-wrap gap-1.5">
+                    {skills.map((skill, index) => (
+                      <div key={index} className="bg-zinc-950 border border-zinc-850 pl-2.5 pr-1.5 py-1 rounded-md flex items-center gap-1.5 text-xs text-zinc-300">
+                        <span>{skill}</span>
+                        <button onClick={() => removeSkill(index)} className="text-zinc-500 hover:text-rose-400 transition-colors p-0.5 rounded"><X size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            {skills.length > 0 && (
-              <div>
-                <h3 className="text-white text-sm font-medium mb-3">Your Skills ({skills.length})</h3>
-                <div className="flex flex-wrap gap-2">
-                  {skills.map((skill, index) => (
-                    <div key={index} className="bg-[#000000] border border-[#2c2c2e] px-3 py-1.5 rounded-lg flex items-center space-x-2 text-sm">
-                      <span className="text-white">{skill}</span>
-                      <button onClick={() => removeSkill(index)} className="text-gray-500 hover:text-red-500 transition-colors"><X size={14} /></button>
+          )}
+
+          {/* Experience Tab */}
+          {activeTab === 'experience' && (
+            <div className="space-y-4 animate-in fade-in-40 duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+                <h2 className="text-sm font-semibold text-zinc-200">Work Experience Registers</h2>
+                <button onClick={addExperience} className="flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium"><Plus size={12} /><span>Add Block</span></button>
+              </div>
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                {experience.map((exp, index) => (
+                  <div key={exp.id} className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-5 space-y-4 relative group">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 border border-zinc-800 text-zinc-400 font-mono rounded">POSITION #{index + 1}</span>
+                      {experience.length > 1 && <button onClick={() => removeExperience(exp.id)} className="text-zinc-600 hover:text-rose-400 transition-colors"><Trash2 size={14} /></button>}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Experience Tab */}
-        {activeTab === 'experience' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Work Experience</h2>
-              <button onClick={addExperience} className="flex items-center space-x-2 bg-white text-black px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors text-xs font-medium"><Plus size={14} /><span>Add Experience</span></button>
-            </div>
-            {experience.map((exp, index) => (
-              <div key={exp.id} className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white text-sm font-medium">Experience {index + 1}</h3>
-                  {experience.length > 1 && <button onClick={() => removeExperience(exp.id)} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Company Name *</label><input type="text" value={exp.company} onChange={(e) => updateExperience(exp.id, 'company', e.target.value)} placeholder="Company Name" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Job Title *</label><input type="text" value={exp.role} onChange={(e) => updateExperience(exp.id, 'role', e.target.value)} placeholder="e.g., Senior Developer" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Location</label><input type="text" value={exp.location} onChange={(e) => updateExperience(exp.id, 'location', e.target.value)} placeholder="City, Country" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div className="flex items-center space-x-2 pt-6"><input type="checkbox" id={`current-${exp.id}`} checked={exp.current} onChange={(e) => updateExperience(exp.id, 'current', e.target.checked)} className="w-4 h-4 rounded border border-[#2c2c2e]" /><label htmlFor={`current-${exp.id}`} className="text-white text-xs">I currently work here</label></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Start Date *</label><div className="grid grid-cols-2 gap-2"><select value={exp.startMonth} onChange={(e) => updateExperience(exp.id, 'startMonth', e.target.value)} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={exp.startYear} onChange={(e) => updateExperience(exp.id, 'startYear', e.target.value)} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">End Date</label><div className="grid grid-cols-2 gap-2"><select value={exp.endMonth} onChange={(e) => updateExperience(exp.id, 'endMonth', e.target.value)} disabled={exp.current} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm disabled:opacity-50"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={exp.endYear} onChange={(e) => updateExperience(exp.id, 'endYear', e.target.value)} disabled={exp.current} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm disabled:opacity-50"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
-                  <div className="md:col-span-2"><label className="block text-gray-400 text-xs font-medium mb-2">Description & Achievements</label><textarea value={exp.description} onChange={(e) => updateExperience(exp.id, 'description', e.target.value)} placeholder="Describe your responsibilities and key achievements..." rows={3} className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600 resize-none" /></div>
-                  <div className="md:col-span-2"><label className="block text-gray-400 text-xs font-medium mb-2">Skills Used</label><input type="text" value={exp.skills.join(', ')} onChange={(e) => updateExperience(exp.id, 'skills', e.target.value.split(',').map(s => s.trim()).filter(s => s))} placeholder="React, Node.js, MongoDB (comma separated)" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Projects Tab */}
-        {activeTab === 'projects' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Projects</h2>
-              <button onClick={addProject} className="flex items-center space-x-2 bg-white text-black px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors text-xs font-medium"><Plus size={14} /><span>Add Project</span></button>
-            </div>
-            {projects.map((proj, index) => (
-              <div key={proj.id} className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white text-sm font-medium">Project {index + 1}</h3>
-                  {projects.length > 1 && <button onClick={() => removeProject(proj.id)} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="md:col-span-2"><label className="block text-gray-400 text-xs font-medium mb-2">Project Name *</label><input type="text" value={proj.name} onChange={(e) => updateProject(proj.id, 'name', e.target.value)} placeholder="e.g., E-commerce Platform" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div className="md:col-span-2"><label className="block text-gray-400 text-xs font-medium mb-2">Project Description *</label><textarea value={proj.description} onChange={(e) => updateProject(proj.id, 'description', e.target.value)} placeholder="Describe the project, your role, and impact..." rows={3} className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600 resize-none" /></div>
-                  <div className="md:col-span-2"><label className="block text-gray-400 text-xs font-medium mb-2">Technologies Used</label><input type="text" value={proj.technologies.join(', ')} onChange={(e) => updateProject(proj.id, 'technologies', e.target.value.split(',').map(s => s.trim()).filter(s => s))} placeholder="React, Node.js, MongoDB, etc. (comma separated)" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">GitHub Link</label><div className="relative"><Code size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" /><input type="url" value={proj.githubLink} onChange={(e) => updateProject(proj.id, 'githubLink', e.target.value)} placeholder="https://github.com/username/project" className="w-full pl-10 pr-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Live/Hosted Link</label><div className="relative"><LinkIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" /><input type="url" value={proj.liveLink} onChange={(e) => updateProject(proj.id, 'liveLink', e.target.value)} placeholder="https://yourproject.com" className="w-full pl-10 pr-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Education Tab */}
-        {activeTab === 'education' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-semibold text-white">Education</h2><button onClick={addEducation} className="flex items-center space-x-2 bg-white text-black px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors text-xs font-medium"><Plus size={14} /><span>Add Education</span></button></div>
-            {education.map((edu, index) => (
-              <div key={edu.id} className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between"><h3 className="text-white text-sm font-medium">Education {index + 1}</h3>{education.length > 1 && <button onClick={() => removeEducation(edu.id)} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>}</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Institution Name *</label><input type="text" value={edu.institution} onChange={(e) => updateEducation(edu.id, 'institution', e.target.value)} placeholder="University/College Name" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Degree *</label><input type="text" value={edu.degree} onChange={(e) => updateEducation(edu.id, 'degree', e.target.value)} placeholder="Bachelor's, Master's, etc." className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Field of Study *</label><input type="text" value={edu.field} onChange={(e) => updateEducation(edu.id, 'field', e.target.value)} placeholder="Computer Science, Engineering, etc." className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Location</label><input type="text" value={edu.location} onChange={(e) => updateEducation(edu.id, 'location', e.target.value)} placeholder="City, Country" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Start Date *</label><div className="grid grid-cols-2 gap-2"><select value={edu.startMonth} onChange={(e) => updateEducation(edu.id, 'startMonth', e.target.value)} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={edu.startYear} onChange={(e) => updateEducation(edu.id, 'startYear', e.target.value)} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">End Date *</label><div className="grid grid-cols-2 gap-2"><select value={edu.endMonth} onChange={(e) => updateEducation(edu.id, 'endMonth', e.target.value)} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={edu.endYear} onChange={(e) => updateEducation(edu.id, 'endYear', e.target.value)} className="px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">CGPA/Percentage</label><input type="text" value={edu.cgpa} onChange={(e) => updateEducation(edu.id, 'cgpa', e.target.value)} placeholder="e.g., 3.8/4.0 or 85%" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div className="md:col-span-2"><label className="block text-gray-400 text-xs font-medium mb-2">Additional Details</label><textarea value={edu.description} onChange={(e) => updateEducation(edu.id, 'description', e.target.value)} placeholder="Awards, honors, relevant coursework, activities..." rows={2} className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600 resize-none" /></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Certifications Tab */}
-        {activeTab === 'certifications' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Certifications</h2>
-              <button onClick={addCertification} className="flex items-center space-x-2 bg-white text-black px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors text-xs font-medium"><Plus size={14} /><span>Add Certification</span></button>
-            </div>
-            {certifications.map((cert, index) => (
-              <div key={cert.id} className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white text-sm font-medium">Certification {index + 1}</h3>
-                  {certifications.length > 1 && <button onClick={() => removeCertification(cert.id)} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Certificate Name *</label><input type="text" value={cert.name} onChange={(e) => updateCertification(cert.id, 'name', e.target.value)} placeholder="AWS Certified Solutions Architect" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Issuing Organization *</label><input type="text" value={cert.organization} onChange={(e) => updateCertification(cert.id, 'organization', e.target.value)} placeholder="Amazon Web Services, Google, Coursera, etc." className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Issue Date</label><input type="month" value={cert.issueDate} onChange={(e) => updateCertification(cert.id, 'issueDate', e.target.value)} className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm" /></div>
-                  <div><label className="block text-gray-400 text-xs font-medium mb-2">Credential URL</label><div className="relative"><LinkIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" /><input type="url" value={cert.credentialUrl} onChange={(e) => updateCertification(cert.id, 'credentialUrl', e.target.value)} placeholder="https://credentials.example.com" className="w-full pl-10 pr-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" /></div></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Languages Tab */}
-        {activeTab === 'languages' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Languages</h2>
-              <button onClick={addLanguage} className="flex items-center space-x-2 bg-white text-black px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors text-xs font-medium"><Plus size={14} /><span>Add Language</span></button>
-            </div>
-            {languages.map((lang, index) => (
-              <div key={lang.id} className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-white text-sm font-medium">Language {index + 1}</h3>
-                  {languages.length > 1 && <button onClick={() => removeLanguage(lang.id)} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-gray-400 text-xs font-medium mb-2">Language *</label>
-                    <input type="text" value={lang.language} onChange={(e) => updateLanguage(lang.id, 'language', e.target.value)} placeholder="English, Spanish, French, Mandarin, etc." className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Corporate Entity *</label><input type="text" value={exp.company} onChange={(e) => updateExperience(exp.id, 'company', e.target.value)} placeholder="Company Name" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Functional Assignment Title *</label><input type="text" value={exp.role} onChange={(e) => updateExperience(exp.id, 'role', e.target.value)} placeholder="e.g. Senior Developer" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Geographic Bounds</label><input type="text" value={exp.location} onChange={(e) => updateExperience(exp.id, 'location', e.target.value)} placeholder="City, Country" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div className="flex items-center gap-2 pt-5"><input type="checkbox" id={`current-${exp.id}`} checked={exp.current} onChange={(e) => updateExperience(exp.id, 'current', e.target.checked)} className="w-4 h-4 rounded bg-zinc-950 border-zinc-800 text-zinc-100 focus:ring-0" /><label htmlFor={`current-${exp.id}`} className="text-zinc-400 text-xs select-none">Active Operational Tenancy</label></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Commencement *</label><div className="grid grid-cols-2 gap-2"><select value={exp.startMonth} onChange={(e) => updateExperience(exp.id, 'startMonth', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={exp.startYear} onChange={(e) => updateExperience(exp.id, 'startYear', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Termination Sequence</label><div className="grid grid-cols-2 gap-2"><select value={exp.endMonth} onChange={(e) => updateExperience(exp.id, 'endMonth', e.target.value)} disabled={exp.current} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 disabled:opacity-35"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={exp.endYear} onChange={(e) => updateExperience(exp.id, 'endYear', e.target.value)} disabled={exp.current} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 disabled:opacity-35"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Scope Manifest & Performance Metrics</label><textarea value={exp.description} onChange={(e) => updateExperience(exp.id, 'description', e.target.value)} placeholder="Describe core execution metrics..." rows={3} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 resize-none leading-relaxed" /></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Applied Tech Vector Array</label><input type="text" value={exp.skills.join(', ')} onChange={(e) => updateExperience(exp.id, 'skills', e.target.value.split(',').map(s => s.trim()).filter(s => s))} placeholder="React, Node.js (comma separated)" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-gray-400 text-xs font-medium mb-2">Proficiency Level *</label>
-                    <select value={lang.proficiency} onChange={(e) => updateLanguage(lang.id, 'proficiency', e.target.value)} className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm">
-                      <option value="Beginner">Beginner</option>
-                      <option value="Intermediate">Intermediate</option>
-                      <option value="Advanced">Advanced</option>
-                      <option value="Fluent">Fluent</option>
-                      <option value="Native">Native Speaker</option>
-                    </select>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Achievements Tab */}
-        {activeTab === 'achievements' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Achievements & Awards</h2>
-              <button onClick={addAchievement} className="flex items-center space-x-2 bg-white text-black px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors text-xs font-medium"><Plus size={14} /><span>Add Achievement</span></button>
             </div>
-            {achievements.map((ach, index) => (
-              <div key={ach.id} className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-white text-sm font-medium">Achievement {index + 1}</h3>
-                  {achievements.length > 1 && <button onClick={() => removeAchievement(ach.id)} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="md:col-span-2">
-                    <label className="block text-gray-400 text-xs font-medium mb-2">Achievement Title *</label>
-                    <input type="text" value={ach.title} onChange={(e) => updateAchievement(ach.id, 'title', e.target.value)} placeholder="e.g., Hackathon Winner, Employee of the Month, Published Research" className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-gray-400 text-xs font-medium mb-2">Description</label>
-                    <textarea value={ach.description} onChange={(e) => updateAchievement(ach.id, 'description', e.target.value)} placeholder="Describe the achievement, its significance, and impact..." rows={3} className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm placeholder-gray-600 resize-none" />
-                  </div>
-                  <div>
-                    <label className="block text-gray-400 text-xs font-medium mb-2">Year *</label>
-                    <select value={ach.year} onChange={(e) => updateAchievement(ach.id, 'year', e.target.value)} className="w-full px-3 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-lg focus:outline-none focus:border-white transition-colors text-white text-sm">
-                      <option value="">Select year</option>
-                      {years.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* Fixed Save Button */}
-      <div className="fixed bottom-8 right-8">
-        <button onClick={handleSaveAll} disabled={loading} className="flex items-center space-x-2 bg-white text-black px-6 py-3 rounded-xl hover:bg-gray-100 transition-colors shadow-lg text-sm font-medium disabled:opacity-50">
-          <Save size={18} />
-          <span>Save All Changes</span>
-        </button>
+          {/* Projects Tab */}
+          {activeTab === 'projects' && (
+            <div className="space-y-4 animate-in fade-in-40 duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+                <h2 className="text-sm font-semibold text-zinc-200">Project Registries</h2>
+                <button onClick={addProject} className="flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium"><Plus size={12} /><span>Add Index</span></button>
+              </div>
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                {projects.map((proj, index) => (
+                  <div key={proj.id} className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 border border-zinc-800 text-zinc-400 font-mono rounded">PROJECT #{index + 1}</span>
+                      {projects.length > 1 && <button onClick={() => removeProject(proj.id)} className="text-zinc-600 hover:text-rose-400 transition-colors"><Trash2 size={14} /></button>}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Project Identifier *</label><input type="text" value={proj.name} onChange={(e) => updateProject(proj.id, 'name', e.target.value)} placeholder="e.g. Distributed Ledger Platform" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Architecture Summary *</label><textarea value={proj.description} onChange={(e) => updateProject(proj.id, 'description', e.target.value)} placeholder="Explain project runtime patterns..." rows={3} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 resize-none leading-relaxed" /></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Engine & Platform Context</label><input type="text" value={proj.technologies.join(', ')} onChange={(e) => updateProject(proj.id, 'technologies', e.target.value.split(',').map(s => s.trim()).filter(s => s))} placeholder="Next.js, Go, Redis (comma separated)" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Source Repository URI</label><div className="relative"><Code size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" /><input type="url" value={proj.githubLink} onChange={(e) => updateProject(proj.id, 'githubLink', e.target.value)} placeholder="https://github.com/..." className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Production Endpoint Link</label><div className="relative"><LinkIcon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" /><input type="url" value={proj.liveLink} onChange={(e) => updateProject(proj.id, 'liveLink', e.target.value)} placeholder="https://..." className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Education Tab */}
+          {activeTab === 'education' && (
+            <div className="space-y-4 animate-in fade-in-40 duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+                <h2 className="text-sm font-semibold text-zinc-200">Academic Background Matrix</h2>
+                <button onClick={addEducation} className="flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium"><Plus size={12} /><span>Add Node</span></button>
+              </div>
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                {education.map((edu, index) => (
+                  <div key={edu.id} className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 border border-zinc-800 text-zinc-400 font-mono rounded">ACADEMIC #{index + 1}</span>
+                      {education.length > 1 && <button onClick={() => removeEducation(edu.id)} className="text-zinc-600 hover:text-rose-400 transition-colors"><Trash2 size={14} /></button>}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Institution Body *</label><input type="text" value={edu.institution} onChange={(e) => updateEducation(edu.id, 'institution', e.target.value)} placeholder="University Name" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Degree Class *</label><input type="text" value={edu.degree} onChange={(e) => updateEducation(edu.id, 'degree', e.target.value)} placeholder="B.S. / M.S. / Ph.D." className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Department Specialization *</label><input type="text" value={edu.field} onChange={(e) => updateEducation(edu.id, 'field', e.target.value)} placeholder="Computer Science" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Campus Boundaries</label><input type="text" value={edu.location} onChange={(e) => updateEducation(edu.id, 'location', e.target.value)} placeholder="City, Country" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Inception *</label><div className="grid grid-cols-2 gap-2"><select value={edu.startMonth} onChange={(e) => updateEducation(edu.id, 'startMonth', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={edu.startYear} onChange={(e) => updateEducation(edu.id, 'startYear', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Concurrence Conclusion *</label><div className="grid grid-cols-2 gap-2"><select value={edu.endMonth} onChange={(e) => updateEducation(edu.id, 'endMonth', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={edu.endYear} onChange={(e) => updateEducation(edu.id, 'endYear', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Performance Scale / CGPA</label><input type="text" value={edu.cgpa} onChange={(e) => updateEducation(edu.id, 'cgpa', e.target.value)} placeholder="e.g. 3.8/4.0" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Coursework Focus Elements</label><textarea value={edu.description} onChange={(e) => updateEducation(edu.id, 'description', e.target.value)} placeholder="Research tracks, thesis definitions..." rows={3} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 resize-none leading-relaxed" /></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Certifications Tab */}
+          {activeTab === 'certifications' && (
+            <div className="space-y-4 animate-in fade-in-40 duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+                <h2 className="text-sm font-semibold text-zinc-200">Authority Endorsement Logs</h2>
+                <button onClick={addCertification} className="flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium"><Plus size={12} /><span>Add Token</span></button>
+              </div>
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                {certifications.map((cert, index) => (
+                  <div key={cert.id} className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 border border-zinc-800 text-zinc-400 font-mono rounded">TOKEN #{index + 1}</span>
+                      {certifications.length > 1 && <button onClick={() => removeCertification(cert.id)} className="text-zinc-600 hover:text-rose-400 transition-colors"><Trash2 size={14} /></button>}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Credential Name *</label><input type="text" value={cert.name} onChange={(e) => updateCertification(cert.id, 'name', e.target.value)} placeholder="AWS Certified Architect" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Issuing Body *</label><input type="text" value={cert.organization} onChange={(e) => updateCertification(cert.id, 'organization', e.target.value)} placeholder="Amazon Web Services" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Validation Issue Date</label><input type="month" value={cert.issueDate} onChange={(e) => updateCertification(cert.id, 'issueDate', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-300 text-xs focus:outline-none focus:border-zinc-500" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Verification URL Anchor</label><div className="relative"><LinkIcon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" /><input type="url" value={cert.credentialUrl} onChange={(e) => updateCertification(cert.id, 'credentialUrl', e.target.value)} placeholder="https://..." className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Languages Tab */}
+          {activeTab === 'languages' && (
+            <div className="space-y-4 animate-in fade-in-40 duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+                <h2 className="text-sm font-semibold text-zinc-200">Linguistic Framework</h2>
+                <button onClick={addLanguage} className="flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium"><Plus size={12} /><span>Add Language</span></button>
+              </div>
+              <div className="space-y-3">
+                {languages.map((lang, index) => (
+                  <div key={lang.id} className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-4 relative">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Language Identity *</label>
+                        <input type="text" value={lang.language} onChange={(e) => updateLanguage(lang.id, 'language', e.target.value)} placeholder="English, Spanish..." className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" />
+                      </div>
+                      <div>
+                        <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Speech / Writing Fluency *</label>
+                        <select value={lang.proficiency} onChange={(e) => updateLanguage(lang.id, 'proficiency', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500">
+                          <option value="Beginner">Elementary Break</option>
+                          <option value="Intermediate">Working Context</option>
+                          <option value="Advanced">Advanced Architecture</option>
+                          <option value="Fluent">Full Fluency</option>
+                          <option value="Native">Native Scale</option>
+                        </select>
+                      </div>
+                    </div>
+                    {languages.length > 1 && (
+                      <div className="flex items-center justify-end pt-4 sm:pt-5">
+                        <button onClick={() => removeLanguage(lang.id)} className="text-zinc-600 hover:text-rose-400 transition-colors p-2 bg-zinc-950/50 border border-zinc-800 rounded-lg"><Trash2 size={14} /></button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Achievements Tab */}
+          {activeTab === 'achievements' && (
+            <div className="space-y-4 animate-in fade-in-40 duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800/60 pb-3">
+                <h2 className="text-sm font-semibold text-zinc-200">Performance Distinctions & Awards</h2>
+                <button onClick={addAchievement} className="flex items-center gap-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1 rounded-lg transition-colors text-xs font-medium"><Plus size={12} /><span>Add Flag</span></button>
+              </div>
+              <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+                {achievements.map((ach, index) => (
+                  <div key={ach.id} className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] bg-zinc-900 px-2 py-0.5 border border-zinc-800 text-zinc-400 font-mono rounded">AWARD #{index + 1}</span>
+                      {achievements.length > 1 && <button onClick={() => removeAchievement(ach.id)} className="text-zinc-600 hover:text-rose-400 transition-colors"><Trash2 size={14} /></button>}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Honor Presentation Title *</label><input type="text" value={ach.title} onChange={(e) => updateAchievement(ach.id, 'title', e.target.value)} placeholder="e.g. Hackathon First Place" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Context Manifest</label><textarea value={ach.description} onChange={(e) => updateAchievement(ach.id, 'description', e.target.value)} placeholder="Describe criteria parameters..." rows={3} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 resize-none leading-relaxed" /></div>
+                      <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Presentation Calendar Year *</label><select value={ach.year} onChange={(e) => updateAchievement(ach.id, 'year', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Select year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   );

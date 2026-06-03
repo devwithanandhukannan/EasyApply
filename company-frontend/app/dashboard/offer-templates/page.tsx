@@ -14,6 +14,7 @@ import {
   Code 
 } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 interface OfferTemplate {
   id: string;
@@ -25,6 +26,7 @@ interface OfferTemplate {
 }
 
 export default function OfferTemplatesPage() {
+  const { showToast } = useGlassToast();
   const [templates, setTemplates] = useState<OfferTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,7 +62,7 @@ export default function OfferTemplatesPage() {
 
   const handleGenerateAI = async () => {
     if (!formData.name.trim()) {
-      alert('Please enter a template name first');
+      showToast('failed', 'Please enter a template name first', 'danger');
       return;
     }
 
@@ -80,7 +82,7 @@ export default function OfferTemplatesPage() {
       }
     } catch (error: any) {
       console.error('AI generation error:', error);
-      alert(error.response?.data?.message || 'Failed to generate template');
+      showToast('failed', error.response?.data?.message || 'Failed to generate template', 'danger');
     } finally {
       setIsGenerating(false);
     }
@@ -112,7 +114,7 @@ export default function OfferTemplatesPage() {
       }
     } catch (error: any) {
       console.error('Template save error:', error);
-      alert(error.response?.data?.message || 'Failed to save template');
+      showToast('failed', error.response?.data?.message || 'Failed to save template', 'danger');
     }
   };
 
@@ -124,6 +126,7 @@ export default function OfferTemplatesPage() {
       fetchTemplates();
     } catch (error) {
       console.error('Delete error:', error);
+      showToast('failed', 'Failed to delete template.', 'danger');
     }
   };
 

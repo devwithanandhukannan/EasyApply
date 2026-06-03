@@ -85,12 +85,16 @@ export const getPublicJobs = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch jobs' });
   }
 };
+
 export const getPublicJobDetails = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-
+    // 1. Destructure jobId instead of id
+    const { jobId } = req.params; 
+    console.log('Fetching job details for ID:', jobId);
+    
     const job = await prisma.jobPosting.findUnique({
-      where: { id },
+      // 2. Map jobId to your Prisma where condition block
+      where: { id: jobId }, 
       include: {
         company: {
           select: {

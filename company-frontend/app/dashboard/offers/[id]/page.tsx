@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 import { 
   ArrowLeft, 
   FileText, 
@@ -57,6 +58,7 @@ interface OfferDetails {
 }
 
 export default function OfferDetailsPage() {
+  const { showToast } = useGlassToast();
   const params = useParams();
   const router = useRouter();
   const [offer, setOffer] = useState<OfferDetails | null>(null);
@@ -102,13 +104,13 @@ export default function OfferDetailsPage() {
       });
 
       if (response.data.success) {
-        alert(response.data.message);
+        showToast('success', response.data.message, 'success');
         setShowNegotiationResponse(false);
         fetchOfferDetails();
       }
     } catch (error: any) {
       console.error('Negotiation response error:', error);
-      alert(error.response?.data?.message || 'Failed to respond to negotiation');
+      showToast('failed', error.response?.data?.message || 'Failed to respond to negotiation', 'danger');
     } finally {
       setIsSubmitting(false);
     }
@@ -129,6 +131,7 @@ export default function OfferDetailsPage() {
       link.remove();
     } catch (error) {
       console.error('Download failed:', error);
+      showToast('failed', 'Failed to download offer letter.', 'danger');
     }
   };
 

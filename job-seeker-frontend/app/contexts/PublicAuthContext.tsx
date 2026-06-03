@@ -1,8 +1,8 @@
-// app/contexts/PublicAuthContext.tsx
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { publicAPI } from '@/app/lib/api/public';
+// Explicitly import your default service wrapper object from the correct file path
+import publicAPIService from '@/app/lib/public'; 
 
 interface PublicUser {
   userId: string;
@@ -28,8 +28,10 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
 
   const refresh = async () => {
     try {
-      const res = await publicAPI.getCurrentUser();
-      if (res.success && res.isAuthenticated) {
+      // Use publicAPIService containing the clean getCurrentUser mapping method
+      const res: any = await publicAPIService.getCurrentUser();
+      
+      if (res && res.success && res.isAuthenticated) {
         setIsAuthenticated(true);
         setUser(res.user);
       } else {
@@ -37,6 +39,7 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       }
     } catch (error) {
+      console.error('Context initialization auth check error:', error);
       setIsAuthenticated(false);
       setUser(null);
     } finally {

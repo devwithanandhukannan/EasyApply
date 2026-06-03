@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { X, Save } from 'lucide-react';
 import api from '@/app/lib/axios';
-
+import { useGlassToast } from './GlassToastContainer';
 interface EditOfferModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -21,6 +21,7 @@ export default function EditOfferModal({ isOpen, onClose, offerId, onSuccess }: 
     location: '',
     employmentType: 'full-time'
   });
+  const { showToast } = useGlassToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingOffer, setIsLoadingOffer] = useState(true);
 
@@ -65,7 +66,7 @@ export default function EditOfferModal({ isOpen, onClose, offerId, onSuccess }: 
       }
     } catch (error: any) {
       console.error('Update offer error:', error);
-      alert(error.response?.data?.message || 'Failed to update offer');
+      showToast('failed', error.response?.data?.message || 'Failed to update offer', 'danger');
     } finally {
       setIsLoading(false);
     }

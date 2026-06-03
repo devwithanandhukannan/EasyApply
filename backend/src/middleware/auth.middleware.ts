@@ -64,8 +64,6 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
 export const authenticateCompany = async (req: Request, res: Response, next: NextFunction) => {
   const token = req.cookies?.accessToken;
-  console.log('reached middleware');
-  
   if (!token) {
     return res.status(401).json({ success: false, message: 'Company session unauthorized or expired' });
   }

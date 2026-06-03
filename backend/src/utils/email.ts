@@ -60,7 +60,7 @@ export const sendMail = sendEmail;
  */
 export const sendVerificationEmail = async (email: string, token: string): Promise<void> => {
   // Update this domain link with your actual Frontend client endpoint structure
-  const clientAppUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const clientAppUrl = process.env.COMPANY_URL || 'http://localhost:3001';
   const completeVerificationUrl = `${clientAppUrl}/verify-email?token=${token}`;
 
   const htmlTemplate = `

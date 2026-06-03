@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getMessaging, getToken, Messaging } from "firebase/messaging";
+import { getMessaging, getToken } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDV_sTRvzW2niB-pFH7SQSGFQK32OgVVzk",
@@ -19,15 +19,41 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
 
   try {
     const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      const currentToken = await getToken(messaging, {
-        vapidKey: "BA3Ue91cqFkFrfPUJ_QlVp653Dj8k5JgJrqwysusX3eEhSIR4xK2OMWsPdBxxO8SpW8F3r25v2op19DGp2vp4u8" 
+    if (permission !== "granted") return null;
+
+    // 1. Register the Service Worker
+    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+      scope: "/",
+    });
+
+    // 2. WAIT for the Service Worker to be active
+    // This resolves the 'no active Service Worker' race condition
+    if (registration.active) {
+      // Worker is already active
+    } else {
+      await new Promise<void>((resolve) => {
+        const checkActive = () => {
+          if (registration.active) {
+            resolve();
+          } else {
+            registration.addEventListener('activate', resolve, { once: true });
+          }
+        };
+        checkActive();
       });
-      return currentToken;
     }
-    return null;
+
+    // 3. Now that we are certain the SW is active, get the token
+    const currentToken = await getToken(messaging, {
+      vapidKey: "BA3Ue91cqFkFrfPUJ_QlVp653Dj8k5JgJrqwysusX3eEhSIR4xK2OMWsPdBxxO8SpW8F3r25v2op19DGp2vp4u8",
+      serviceWorkerRegistration: registration,
+    });
+    
+    return currentToken;
   } catch (error) {
     console.error("FCM Token generation error:", error);
     return null;
   }
 };
+
+

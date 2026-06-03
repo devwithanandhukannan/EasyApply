@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { X, CheckCircle, XCircle, MessageSquare, Loader2 } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from './GlassToastContainer';
 
 interface OfferResponseModalProps {
   isOpen: boolean;
@@ -25,17 +26,17 @@ export default function OfferResponseModal({
   const [negotiationNote, setNegotiationNote] = useState('');
   const [signature, setSignature] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
+  const { showToast } = useGlassToast();
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (response === 'accept' && !signature) {
-      alert('Please enter your full name as digital signature');
+      showToast('failed', 'Please enter your full name as digital signature', 'danger');
       return;
     }
 
     if (response === 'negotiate' && !negotiationNote.trim()) {
-      alert('Please provide negotiation details');
+      showToast('failed', 'Please provide negotiation details', 'danger');
       return;
     }
 
@@ -55,17 +56,19 @@ export default function OfferResponseModal({
       if (res.data.success) {
         onSuccess();
         onClose();
-        alert(
-          response === 'accept' 
-            ? '🎉 Offer accepted! The company has been notified.' 
+        showToast(
+          'success',
+          response === 'accept'
+            ? 'Offer accepted! The company has been notified.'
             : response === 'decline'
             ? 'Offer declined. Thank you for your consideration.'
-            : 'Negotiation request sent to the company.'
+            : 'Negotiation request sent to the company.',
+          'success'
         );
       }
     } catch (error: any) {
       console.error('Offer response error:', error);
-      alert(error.response?.data?.message || 'Failed to submit response');
+      showToast('failed', error.response?.data?.message || 'Failed to submit response', 'danger');
     } finally {
       setIsSubmitting(false);
     }
