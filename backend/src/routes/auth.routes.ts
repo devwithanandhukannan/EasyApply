@@ -7,6 +7,7 @@ import {
   logoutUser 
 } from '../controllers/auth.controller.ts';
 import { authenticateToken } from '../middleware/auth.middleware.ts';
+import { refreshSessionToken } from '../controllers/refreshtoken.controller.ts';
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const router = express.Router();
 router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtp);
 router.post('/logout', logoutUser);
-
+router.post('/refresh', refreshSessionToken);
 // Protected routes
 router.get('/me', authenticateToken, checkMe);
 

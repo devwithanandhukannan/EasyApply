@@ -27,7 +27,7 @@ interface UserProfile {
   rolesMask: number;
   globalRolesMask: number;
   status: string;
-  allWorkspaces: WorkspaceSummary[]; 
+  allWorkspaces: WorkspaceSummary[];
 }
 
 interface AuthContextType {
@@ -67,19 +67,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const response = await api.get('/company/auth/session');
         if (response.data.success) {
           setIsAuthenticated(true);
-          
+
           // Construct explicit profile properties mapping safely from team member payload structures
           setUser({
-  id: response.data.user.id,
-  userId: response.data.user.id,
-  name: response.data.user.name || response.data.company.name.split(' ')[0] + ' Team',
-  email: response.data.company.email,
-  avatar: null,
-  rolesMask: response.data.user.companyRoles,
-  globalRolesMask: response.data.user.globalRoles,
-  status: 'active',
-  allWorkspaces: response.data.user.allWorkspaces || [] // <-- Hydrate the array here
-});
+            id: response.data.user.id,
+            userId: response.data.user.id,
+            name: response.data.user.name || response.data.company.name.split(' ')[0] + ' Team',
+            email: response.data.company.email,
+            avatar: null,
+            rolesMask: response.data.user.companyRoles,
+            globalRolesMask: response.data.user.globalRoles,
+            status: 'active',
+            allWorkspaces: response.data.user.allWorkspaces || [] // <-- Hydrate the array here
+          });
 
           setCompany(response.data.company);
         }
@@ -133,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await api.post('/company/auth/logout');
+      await api.post('/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
@@ -145,17 +145,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      isAuthenticated, 
-      isLoading, 
-      user, 
+    <AuthContext.Provider value={{
+      isAuthenticated,
+      isLoading,
+      user,
       company,
       isAdmin,
       isHR,
       isInterviewer,
       isViewer,
-      login, 
-      logout 
+      login,
+      logout
     }}>
       {children}
     </AuthContext.Provider>

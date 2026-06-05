@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { teamApi, TeamMember } from '@/app/lib/api/team';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { MoreHorizontal, UserPlus, Trash2, Shield, Mail, Calendar, X, ChevronDown } from 'lucide-react';
-import {useGlassToast} from '@/app/components/GlassToastContainer';
+
 // ─── BITWISE SYSTEM ROLE CONSTANTS ───────────────────────────────────────────
 const ROLES = {
+  BASE_USER: 1,
   COMPANY_ADMIN: 2,
   COMPANY_HR: 4,
   COMPANY_INTERVIEWER: 8,
@@ -35,13 +37,17 @@ const CustomButton = ({ variant = 'default', size = 'default', className = '', c
   };
 
   return (
-    <button type="button" className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`} {...props}>
+    <button
+      type="button"
+      className={`${baseStyles} ${variants[variant]} ${sizes[size]} ${className}`}
+      {...props}
+    >
       {children}
     </button>
   );
 };
 
-// ─── INLINE MONOSPACE SELECT DROPDOWN ────────────────────────────────────────
+// ─── INLINE MONOSPACE SELECT DROPDOWN (BYPASSES SHADCN PRIMITIVE) ────────────
 interface CustomSelectProps {
   value: string;
   onValueChange: (val: string) => void;
@@ -51,7 +57,7 @@ interface CustomSelectProps {
 const CustomSelect = ({ value, onValueChange, options }: CustomSelectProps) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  
+
   useEffect(() => {
     if (!open) return;
     const handleOutsideClick = (e: MouseEvent) => {
@@ -99,16 +105,21 @@ const CustomSelect = ({ value, onValueChange, options }: CustomSelectProps) => {
   );
 };
 
-// ─── INLINE TEAM ROW MODULE ──────────────────────────────────────────────────
+// ─── INLINE TEAM ROW MODULE (CROP PROOF / EXPANDABLE DESIGN) ─────────────────
 interface TeamRowProps {
-  member: TeamMember;
-  getRoleBadge: (mask: number) => React.ReactNode;
-  handleRoleChange: (id: string, newMask: number) => void;
+  member: any; // Using any to flexibly match rolesMask or globalRolesMask fields from your real API response
+  getRoleBadge: (role: number | string) => React.ReactNode;
+  handleRoleChange: (id: string, mask: number) => void;
   handleRemove: (id: string, name: string) => void;
 }
 
 const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamRowProps) => {
   const [panelOpen, setPanelOpen] = useState(false);
+
+  // Read raw rolesMask from your response payload, default to Viewer (16) if undefined
+  const currentRoleValue = typeof member.rolesMask === 'number' 
+    ? member.rolesMask 
+    : (typeof member.roleMask === 'number' ? member.roleMask : ROLES.COMPANY_VIEWER);
 
   return (
     <>
@@ -124,19 +135,24 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
             )}
           </div>
           <div className="space-y-0.5">
-            <div className="text-xs font-semibold text-white">{member.name}</div>
+            <div className="text-xs font-semibold text-white">{member.name || 'Pending Member'}</div>
             <div className="text-[11px] text-zinc-500 font-mono tracking-tight">{member.email}</div>
           </div>
         </td>
         
         <td className="px-4 py-3.5 align-middle">
-          {getRoleBadge(member.rolesMask)}
+          {getRoleBadge(currentRoleValue)}
         </td>
         
         <td className="px-4 py-3.5 font-mono text-xs text-zinc-400 align-middle">
           <div className="flex items-center gap-1.5">
             <Calendar className="h-3.5 w-3.5 text-zinc-600" />
-            <span>{new Date(member.joinedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+            <span>
+              {member.joinedAt || member.createdAt
+                ? new Date(member.joinedAt || member.createdAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                : 'Pending Link'
+              }
+            </span>
           </div>
         </td>
         
@@ -145,12 +161,14 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
             variant={panelOpen ? 'default' : 'outline'} 
             size="icon" 
             onClick={() => setPanelOpen(!panelOpen)}
+            className="transition-transform duration-150"
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </CustomButton>
         </td>
       </tr>
 
+      {/* ─── INLINE SUBMENU DRAW PANEL ─── */}
       {panelOpen && (
         <tr>
           <td colSpan={4} className="bg-zinc-950/80 border-b border-zinc-900 px-4 py-2.5">
@@ -160,26 +178,26 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
               </div>
               
               <div className="flex items-center gap-2">
-                {(member.rolesMask & ROLES.COMPANY_ADMIN) !== ROLES.COMPANY_ADMIN && (
+                {(currentRoleValue & ROLES.COMPANY_ADMIN) !== ROLES.COMPANY_ADMIN && (
                   <>
                     <button
                       type="button"
-                      onClick={() => { handleRoleChange(member.id, ROLES.COMPANY_HR); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors cursor-pointer"
+                      onClick={() => { handleRoleChange(member.id, ROLES.BASE_USER + ROLES.COMPANY_HR); setPanelOpen(false); }}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       Make HR
                     </button>
                     <button
                       type="button"
-                      onClick={() => { handleRoleChange(member.id, ROLES.COMPANY_INTERVIEWER); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors cursor-pointer"
+                      onClick={() => { handleRoleChange(member.id, ROLES.BASE_USER + ROLES.COMPANY_INTERVIEWER); setPanelOpen(false); }}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       Make Interviewer
                     </button>
                     <button
                       type="button"
-                      onClick={() => { handleRoleChange(member.id, ROLES.COMPANY_VIEWER); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors cursor-pointer"
+                      onClick={() => { handleRoleChange(member.id, ROLES.BASE_USER + ROLES.COMPANY_VIEWER); setPanelOpen(false); }}
+                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       Make Viewer
                     </button>
@@ -188,13 +206,17 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
                 
                 <button
                   type="button"
-                  onClick={() => { handleRemove(member.id, member.name); setPanelOpen(false); }}
+                  onClick={() => { handleRemove(member.id, member.name || 'this member'); setPanelOpen(false); }}
                   className="px-2.5 py-1 rounded-lg border border-red-950/60 bg-red-950/20 hover:bg-red-950/40 text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
                   <Trash2 className="h-3 w-3" /> Revoke Access
                 </button>
                 
-                <button type="button" onClick={() => setPanelOpen(false)} className="p-1 text-zinc-500 hover:text-white rounded ml-1">
+                <button
+                  type="button"
+                  onClick={() => setPanelOpen(false)}
+                  className="p-1 text-zinc-500 hover:text-white rounded transition-colors ml-1"
+                >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -208,14 +230,14 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
 
 // ─── MAIN TEAM PAGE CONFIGURATION ────────────────────────────────────────────
 export default function TeamPage() {
-  const [members, setMembers] = useState<TeamMember[]>([]);
+  const { user } = useAuth();
+  const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('hr'); // String matches backend: 'hr' | 'interviewer' | 'viewer'
+  const [inviteRole, setInviteRole] = useState('hr');
   const [submitting, setSubmitting] = useState(false);
-  const { showToast } = useGlassToast();
-  
+
   const fetchTeam = async () => {
     try {
       const res = await teamApi.list();
@@ -233,30 +255,31 @@ export default function TeamPage() {
 
   const handleInvite = async () => {
     if (!inviteEmail) {
-      showToast('failed', 'Email is required', 'danger');
+      alert('Email is required');
       return;
     }
     setSubmitting(true);
     try {
       await teamApi.invite({ email: inviteEmail, roleType: inviteRole });
-      showToast('success', `Invitation successfully sent to ${inviteEmail}`, 'success');
+      alert(`Invitation successfully sent to ${inviteEmail}`);
       setInviteOpen(false);
       setInviteEmail('');
       setInviteRole('hr');
+      fetchTeam();
     } catch (error: any) {
-      showToast('failed', error.response?.data?.message || 'Invitation routing transaction execution failed.', 'danger');
+      alert(error.response?.data?.message || 'Invitation failed');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleRoleChange = async (memberId: string, newRolesMask: number) => {
+  const handleRoleChange = async (memberId: string, calculatedMask: number) => {
     try {
-      await teamApi.updateRole(memberId, newRolesMask);
-      showToast('success', 'Workspace permissions updated successfully.', 'success');
+      await teamApi.updateRole(memberId, calculatedMask);
+      alert('Workspace permissions updated successfully');
       fetchTeam();
     } catch (error) {
-      showToast('failed', 'Failed to update team member role.', 'danger');
+      alert('Failed to update team member role');
     }
   };
 
@@ -264,14 +287,26 @@ export default function TeamPage() {
     if (!confirm(`Revoke workspace privileges for ${name}?`)) return;
     try {
       await teamApi.remove(memberId);
-      showToast('success', 'Member removed from team.', 'success');
+      alert('Member removed from team');
       fetchTeam();
     } catch (error) {
-      showToast('failed', 'Failed to remove member.', 'danger');
+      alert('Failed to remove member');
     }
   };
 
-  const getRoleBadge = (mask: number) => {
+  const getRoleBadge = (roleValue: number | string) => {
+    let mask = ROLES.COMPANY_VIEWER;
+    
+    if (typeof roleValue === 'number') {
+      mask = roleValue;
+    } else if (typeof roleValue === 'string') {
+      const clean = roleValue.toLowerCase();
+      if (clean.includes('admin')) mask = ROLES.COMPANY_ADMIN;
+      else if (clean.includes('hr')) mask = ROLES.COMPANY_HR;
+      else if (clean.includes('interviewer')) mask = ROLES.COMPANY_INTERVIEWER;
+    }
+
+    // 🟢 Priority checking layout via bitwise logic safely handles 4, 5, 8, 9, etc.
     if ((mask & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN) {
       return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-purple-950/40 border-purple-900 text-purple-400">Admin</span>;
     }
@@ -281,6 +316,7 @@ export default function TeamPage() {
     if ((mask & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER) {
       return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-emerald-950/40 border-emerald-900 text-emerald-400">Interviewer</span>;
     }
+    
     return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-zinc-900 border-zinc-800 text-zinc-400">Viewer</span>;
   };
 
@@ -294,18 +330,23 @@ export default function TeamPage() {
 
   return (
     <div className="p-8 min-h-screen bg-[#0a0a0a] text-white space-y-6 max-w-7xl mx-auto w-full relative">
+      {/* Header Panel */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-white">Team Management</h1>
           <p className="text-xs text-zinc-400 mt-1">Provision corporate user access controls, manage department roles, and track invitation links.</p>
         </div>
         
-        <CustomButton onClick={() => setInviteOpen(true)} className="flex items-center gap-1.5 self-start sm:self-auto">
+        <CustomButton 
+          onClick={() => setInviteOpen(true)}
+          className="flex items-center gap-1.5 self-start sm:self-auto"
+        >
           <UserPlus className="w-3.5 h-3.5" />
           Invite Member
         </CustomButton>
       </div>
 
+      {/* Corporate Table Architecture */}
       {members.length === 0 ? (
         <div className="border border-dashed border-zinc-900 bg-zinc-950/20 p-12 rounded-2xl text-center">
           <p className="text-xs text-zinc-500 font-mono">No registered team members linked to this corporate workspace identifier.</p>
@@ -338,12 +379,20 @@ export default function TeamPage() {
         </div>
       )}
 
+      {/* ─── NATIVE MINIMALIST MODAL OVERLAY ─────────────────────────────────── */}
       {inviteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setInviteOpen(false)} />
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" 
+            onClick={() => setInviteOpen(false)}
+          />
           
           <div className="relative bg-zinc-950 border border-zinc-900 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-            <button type="button" onClick={() => setInviteOpen(false)} className="absolute right-4 top-4 text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-900">
+            <button 
+              type="button"
+              onClick={() => setInviteOpen(false)}
+              className="absolute right-4 top-4 text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-900 focus:outline-none"
+            >
               <X className="h-4 w-4" />
             </button>
 
@@ -378,13 +427,16 @@ export default function TeamPage() {
                     { value: 'viewer', label: 'Viewer (Read-only)' }
                   ]}
                 />
+                <p className="text-[11px] text-zinc-500 leading-normal pt-1">
+                  HR Managers can post jobs and manage candidate streams. Interviewers can execute assigned evaluations. Viewers have absolute read-only metrics access.
+                </p>
               </div>
               
               <button 
                 type="button"
                 onClick={handleInvite} 
                 disabled={submitting || !inviteEmail} 
-                className="w-full bg-zinc-100 text-black hover:bg-white text-xs font-bold rounded-xl h-9 transition-all mt-2 disabled:pointer-events-none disabled:opacity-50"
+                className="w-full bg-zinc-100 text-black hover:bg-white text-xs font-bold rounded-xl h-9 transition-all mt-2 disabled:pointer-events-none disabled:opacity-50 focus:outline-none"
               >
                 {submitting ? 'Processing Transaction...' : 'Send Corporate Invitation'}
               </button>

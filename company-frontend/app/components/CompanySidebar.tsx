@@ -7,13 +7,16 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { 
   LayoutDashboard, 
   FileText, 
-  Layers, 
+  ScrollText, 
+  Zap, 
   Briefcase, 
+  UserCheck, 
   Video, 
   Users, 
+  Building2, 
   ChevronLeft, 
   X,
-  Building2 
+  LogOut 
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -32,77 +35,72 @@ export default function CompanySidebar({
   setIsMobileOpen 
 }: SidebarProps) {
   const pathname = usePathname();
-  // Ensure your AuthContext extracts isViewer alongside the others
-  const { isAdmin, isHR, isInterviewer, isViewer, loading } = useAuth();
+  const { isAdmin, isHR, isInterviewer, isViewer, loading, logout } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
 
-  // Sync mount phase to prevent hydration layout flashes
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Filtered navigation layout mapped directly to role authorizations
   const filteredNav = useMemo(() => {
     const hasAccess = isMounted && !loading;
 
-    const navigation = [
+    return [
       { 
         name: 'Dashboard', 
         href: '/dashboard', 
         icon: LayoutDashboard, 
-        visible: hasAccess // Accessible by all company profiles
+        visible: hasAccess 
       },
       { 
         name: 'Offers', 
         href: '/dashboard/offers', 
         icon: FileText, 
-        visible: hasAccess && (isAdmin || isHR || isViewer) // Hidden from Interviewers
+        visible: hasAccess && (isAdmin || isHR || isViewer) 
       },
       { 
         name: 'Templates', 
         href: '/dashboard/offer-templates', 
-        icon: Layers, 
-        visible: hasAccess && (isAdmin || isHR) // HR & Admin Only
+        icon: ScrollText, // Unique icon for templates
+        visible: hasAccess && (isAdmin || isHR) 
       },
       { 
         name: 'Spot Jobs', 
         href: '/dashboard/spot-jobs', 
-        icon: Layers, 
-        visible: hasAccess && (isAdmin || isHR) // HR & Admin Only
+        icon: Zap,
+        visible: hasAccess && (isAdmin || isHR) 
       },
       { 
         name: 'Job Postings', 
         href: '/dashboard/jobs', 
         icon: Briefcase, 
-        visible: hasAccess && (isAdmin || isHR || isViewer) // Read access broad, mutations protected inside
+        visible: hasAccess && (isAdmin || isHR || isViewer) 
       },
       { 
         name: 'Company Talent Pool', 
         href: '/dashboard/talent-pool', 
-        icon: Briefcase, 
-        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) // Accessible to evaluate candidate cards
+        icon: UserCheck, // Distinct validation profile icon for evaluated candidates
+        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) 
       },
       { 
         name: 'Live Interviews', 
         href: '/dashboard/interviews', 
         icon: Video, 
-        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) // Shared interview portal
+        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) 
       },
       { 
         name: 'Team Workspace', 
         href: '/dashboard/team', 
         icon: Users, 
-        visible: hasAccess && (isAdmin || isHR ) // List viewing permitted for all team members
+        visible: hasAccess && (isAdmin) 
       },
       { 
         name: 'Company Profile', 
         href: '/dashboard/profile', 
         icon: Building2, 
-        visible: hasAccess && (isAdmin || isHR || isViewer) // Profiles layout hidden from pure dynamic Interviewer streams
+        visible: hasAccess && (isAdmin || isHR || isViewer) 
       }
-    ];
-
-    return navigation.filter(item => item.visible);
+    ].filter(item => item.visible);
   }, [isMounted, loading, isAdmin, isHR, isInterviewer, isViewer]);
 
   const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
@@ -172,6 +170,19 @@ export default function CompanySidebar({
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar mt-2">
           <NavLinks />
         </nav>
+
+        {/* Desktop Logout Button */}
+        <div className="p-3 border-t border-zinc-900">
+          <button
+            onClick={() => logout()}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/20 border border-transparent transition-all duration-200 group"
+          >
+            <LogOut className="h-4 w-4 shrink-0 text-red-500/70 group-hover:text-red-400" />
+            <span className={`transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
+              Logout
+            </span>
+          </button>
+        </div>
       </aside>
 
       {/* ─── MOBILE DRAWER SHEET ───────────────────────────── */}
@@ -202,9 +213,24 @@ export default function CompanySidebar({
             <X className="w-4 h-4" />
           </button>
         </div>
+        
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <NavLinks onClickItem={() => setIsMobileOpen(false)} />
         </nav>
+
+        {/* Mobile Logout Button */}
+        <div className="p-4 border-t border-zinc-900">
+          <button
+            onClick={() => {
+              setIsMobileOpen(false);
+              logout();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/20 transition-all duration-200"
+          >
+            <LogOut className="h-4 w-4 shrink-0 text-red-500/70" />
+            <span>Logout</span>
+          </button>
+        </div>
       </aside>
     </>
   );
