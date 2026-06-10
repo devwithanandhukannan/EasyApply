@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { prisma } from '../utils/prisma.ts';
 import { ApplicationStatus } from '@prisma/client';
+import { log } from 'node:console';
 
 interface AuthRequest extends Request {
   user?: { userId: string; mobileNumber: string; globalRoles: number; email?: string };
@@ -246,5 +247,174 @@ export const withdrawApplicationTracker = async (req: AuthRequest, res: Response
   } catch (error) {
     console.error('Transaction execution processing fail on withdrawal routine:', error);
     return res.status(500).json({ success: false, error: 'Transactional state tracking update rollback occurred' });
+  }
+};
+
+export const getSingleApplicationDetails = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const { applicationId } = req.params;
+    
+    console.log('Received request for application tracker details with params:', { userId, applicationId });
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized session' });
+    }
+
+    if (!applicationId) {
+      return res.status(400).json({ success: false, error: 'Missing target application parameters' });
+    }
+
+    // 1. Locate current candidate workspace registration matching auth token identity
+    const profile = await prisma.jobSeekerProfile.findUnique({
+      where: { userId },
+      select: { id: true }
+    });
+
+    if (!profile) {
+      return res.status(403).json({ success: false, error: 'Candidate profile identity workspace not found' });
+    }
+
+    // 2. Locate application payload and strictly isolate search scope via candidate key constraints
+    const application = await prisma.application.findFirst({
+      where: { 
+        id: applicationId,
+        jobSeekerProfileId: profile.id 
+      },
+      include: {
+        jobPosting: {
+          include: {
+            company: {
+              select: { name: true, logoUrl: true, industry: true }
+            }
+          }
+        },
+        resume: {
+          select: { id: true, name: true, filePath: true }
+        },
+        statusHistory: { 
+          orderBy: { createdAt: 'asc' }
+        },
+        interviews: {
+          include: {
+            feedbacks: {
+              select: {
+                id: true,
+                verdict: true,
+                notes: true,
+                createdAt: true
+              }
+            }
+          },
+          orderBy: { scheduledTime: 'desc' }
+        },
+        offerLetters: {
+          orderBy: { sentAt: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    // If application doesn't exist or profile mismatch occurs, safely refuse access
+    if (!application) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Application records not located or unauthorized tracking permission requested.' 
+      });
+    }
+
+    // 3. Transform raw records exactly like your list tracker mapper
+    let liveStatusBadge = application.status.toLowerCase();
+    if (application.isWithdrawn) {
+      liveStatusBadge = 'withdrawn';
+    }
+
+    const interviewHistory = application.interviews.map(interview => ({
+      interviewId: interview.id,
+      scheduledTime: interview.scheduledTime,
+      durationMinutes: interview.durationMinutes,
+      format: interview.format,
+      status: interview.status,
+      livekitRoomName: interview.livekitRoomName,
+      // Fixed potential string type safety arrays evaluation
+      joinLink: ['scheduled', 'confirmed', 'in_progress'].includes(interview.status) ? interview.joinLink : null,
+      companyFeedback: interview.feedbacks.map(f => ({
+        verdict: f.verdict,
+        notes: f.notes || 'No notes shared by interviewer.',
+        createdAt: f.createdAt
+      }))
+    }));
+
+    const visualTimeline = application.statusHistory.map(log => ({
+      stage: log.toStatus,
+      date: log.createdAt,
+      notes: log.notes || `Moved to stage: ${log.toStatus.replace(/_/g, ' ')}`
+    }));
+
+    const hasInterviewsStarted = application.interviews.some(i => 
+      ['confirmed', 'in_progress', 'completed'].includes(i.status)
+    );
+    
+    const canWithdraw = !application.isWithdrawn && 
+                        !['hired', 'rejected', 'offer_sent'].includes(application.status) && 
+                        !hasInterviewsStarted;
+
+    const activeOfferRecord = application.offerLetters[0];
+
+    const mappedPayload = {
+      applicationId: application.id,
+      liveStatusBadge,
+      isWithdrawn: application.isWithdrawn,
+      currentStage: application.status,
+      pipelineIndex: application.pipelineIndex,
+      candidateNotes: application.candidateNotes || '',
+      appliedAt: application.appliedAt,
+      updatedAt: application.updatedAt,
+      jobDetails: {
+        id: application.jobPostingId,
+        title: activeOfferRecord?.position || application.jobPosting.title,
+        department: activeOfferRecord?.department || application.jobPosting.department || '',
+        jobType: application.jobPosting.jobType,
+        locationType: application.jobPosting.locationType || 'Onsite',
+        location: activeOfferRecord?.location || application.jobPosting.location || 'Remote',
+        experienceRequired: application.jobPosting.experienceRequired || 'Not specified',
+        // Fixed: Added safety parsing fallbacks around Decimal type coming from postgres via Prisma
+        compensationContext: activeOfferRecord 
+          ? `${activeOfferRecord.currency} ${Number(activeOfferRecord.salary).toLocaleString()}`
+          : application.jobPosting.salaryRange || 'Disclosed upon screening'
+      },
+      companyDetails: {
+        name: application.jobPosting.company.name,
+        logoUrl: application.jobPosting.company.logoUrl,
+        industry: application.jobPosting.company.industry
+      },
+      resumeUsed: {
+        id: application.resume.id,
+        name: application.resume.name,
+        downloadPath: application.resume.filePath || ''
+      },
+      timelineView: visualTimeline,
+      interviewHistory,
+      activeOffer: activeOfferRecord 
+        ? {
+            id: activeOfferRecord.id,
+            status: activeOfferRecord.status,
+            filePath: activeOfferRecord.filePath,
+            sentAt: activeOfferRecord.sentAt,
+            finalPosition: activeOfferRecord.position,
+            finalSalary: Number(activeOfferRecord.salary), // Cast Decimal down cleanly to safe JS number
+            currency: activeOfferRecord.currency,
+            startDate: activeOfferRecord.startDate,
+            employmentType: activeOfferRecord.employmentType
+          } 
+        : null,
+      canWithdraw
+    };
+
+    return res.status(200).json({ success: true, data: mappedPayload });
+
+  } catch (error) {
+    console.error('Single target entity data runtime access exception crash:', error);
+    return res.status(500).json({ success: false, error: 'Internal system tracking service failure' });
   }
 };

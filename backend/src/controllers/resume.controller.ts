@@ -320,13 +320,21 @@ export const getAllResumes = async (req: Request, res: Response) => {
       where: { jobSeekerProfileId: profileId },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, name: true, source: true, atsScore: true, isPrimary: true,
-        aiSuggestions: true, content: true, createdAt: true, updatedAt: true,
+        id: true,
+        name: true,
+        source: true,
+        atsScore: true,
+        isPrimary: true,
+        createdAt: true,
+        updatedAt: true,
+        aiSuggestions: true,
       },
     });
+    
     return res.json({ success: true, data: resumes });
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'Failed to fetch' });
+    console.error('getAllResumes error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch resume index metrics.' });
   }
 };
 

@@ -26,7 +26,6 @@ declare global {
 
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
   const token = req.cookies?.accessToken;
-
   if (!token) {
     return res.status(401).json({ success: false, message: 'Session unauthorized or expired' });
   }

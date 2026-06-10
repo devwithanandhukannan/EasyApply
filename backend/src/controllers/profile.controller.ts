@@ -38,6 +38,7 @@ const bufferToBase64 = (buffer: Buffer, mimeType: string): string => {
 
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
+    console.log('Received getProfile request for userId:', req.user?.userId);
     const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });

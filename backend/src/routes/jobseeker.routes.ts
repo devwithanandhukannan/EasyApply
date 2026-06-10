@@ -37,7 +37,7 @@ import {
   confirmInterviewPresence,
   requestInterviewReschedule,
 } from '../controllers/interview.controller.ts';
-import { getApplicationsTracker, updateApplicationNotes, withdrawApplicationTracker } from '../controllers/applicationTracker.controller.ts';
+import { getApplicationsTracker, getSingleApplicationDetails, updateApplicationNotes, withdrawApplicationTracker } from '../controllers/applicationTracker.controller.ts';
 import offerRoutes from './offer.routes.ts';
 import { getJobSeekerDashboard, getApplicationInsights } from '../controllers/jobseekerDashboard.controller.ts';
 import {getSalaryComparison} from '../controllers/offer.controller.ts';
@@ -118,6 +118,7 @@ router.post('/interviews/:id/reschedule', requestInterviewReschedule);
 
 // ─── APPLICATION TRACKER ─────────────────────────────────────────────────
 router.get('/applications/tracker/timeline', getApplicationsTracker);
+router.get('/tracker/:applicationId', authenticateToken, getSingleApplicationDetails);
 router.patch('/applications/:id/notes', updateApplicationNotes);
 router.post('/applications/:id/withdraw', withdrawApplicationTracker);
 

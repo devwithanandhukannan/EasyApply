@@ -363,7 +363,7 @@ export const searchAllJobs = async (req: Request, res: Response) => {
       limit = '20'
     } = req.query;
 
-    const jobSeekerProfileId = req.user?.jobSeekerProfileId;
+    const jobSeekerProfileId = (req as any).user?.jobSeekerProfileId;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -422,15 +422,25 @@ export const searchAllJobs = async (req: Request, res: Response) => {
       prisma.jobPosting.count({ where })
     ]);
 
-    const jobsWithStatus = jobs.map(job => ({
-      ...job,
-      applicationsCount: job._count.applications,
-      hasApplied: jobSeekerProfileId ? (job.applications?.length || 0) > 0 : false,
-      applicationStatus: jobSeekerProfileId && job.applications?.[0] 
-        ? job.applications[0].status 
-        : null,
-      applications: undefined // Remove from response
-    }));
+    const jobsWithStatus = jobs.map(job => {
+      let appliedStatus: string | false = false;
+      const hasApplied = jobSeekerProfileId ? (job.applications?.length || 0) > 0 : false;
+
+      if (hasApplied && job.applications?.[0]) {
+        appliedStatus = job.applications[0].id; // 👈 Set to the application ID string
+      }
+
+      return {
+        ...job,
+        applicationsCount: job._count.applications,
+        hasApplied,
+        appliedStatus, // 👈 Returns application UUID string, or false if not applied
+        applicationStatus: jobSeekerProfileId && job.applications?.[0] 
+          ? job.applications[0].status 
+          : null,
+        applications: undefined // Remove raw relation array from response
+      };
+    });
 
     return res.status(200).json({
       success: true,

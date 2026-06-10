@@ -16,7 +16,7 @@ export const getPublicJobs = async (req: Request, res: Response) => {
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
     const take = parseInt(limit as string);
 
-    // FIX: Normalize today's date to midnight so jobs expiring "today" remain active
+    // Normalize today's date to midnight so jobs expiring "today" remain active
     const todayMidnight = new Date();
     todayMidnight.setHours(0, 0, 0, 0);
 
@@ -25,7 +25,7 @@ export const getPublicJobs = async (req: Request, res: Response) => {
       {
         OR: [
           { deadline: null },
-          { deadline: { gte: todayMidnight } }, // Compares cleanly against the start of the day
+          { deadline: { gte: todayMidnight } }, 
         ],
       },
     ];
@@ -47,6 +47,10 @@ export const getPublicJobs = async (req: Request, res: Response) => {
 
     const where = { AND: andConditions };
 
+    // Extract logged-in candidate profile details if they exist
+    const loggedInProfileId = (req as any).user?.jobSeekerProfileId;
+    const hasSession = !!(req as any).user?.userId; // Evaluates true if user has an active session
+
     const [jobs, total] = await Promise.all([
       prisma.jobPosting.findMany({
         where,
@@ -62,6 +66,13 @@ export const getPublicJobs = async (req: Request, res: Response) => {
             },
           },
           _count: { select: { applications: true } },
+          // Conditionally fetch applications only for the logged-in user
+          ...(loggedInProfileId && {
+            applications: {
+              where: { jobSeekerProfileId: loggedInProfileId },
+              select: { id: true, status: true, isWithdrawn: true },
+            },
+          }),
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -70,9 +81,29 @@ export const getPublicJobs = async (req: Request, res: Response) => {
       prisma.jobPosting.count({ where }),
     ]);
 
+    // Format the response data payload
+    const formattedJobs = jobs.map((job) => {
+      // Deconstruct applications context if it was fetched
+      const { applications, ...jobDetails } = job as any;
+      
+      let userApplicationStatus: string | false = false;
+
+      if (loggedInProfileId && applications && applications.length > 0) {
+        const app = applications[0];
+        // If they haven't withdrawn, return the application's primary key ID, otherwise false
+        userApplicationStatus = app.isWithdrawn ? false : app.id;
+      }
+
+      return {
+        ...jobDetails,
+        appliedStatus: userApplicationStatus, // 👈 Returns the application ID string, or false
+      };
+    });
+
     return res.json({
       success: true,
-      data: jobs,
+      isLoggedIn: hasSession,
+      data: formattedJobs,
       pagination: {
         total,
         page: parseInt(page as string),
@@ -88,12 +119,13 @@ export const getPublicJobs = async (req: Request, res: Response) => {
 
 export const getPublicJobDetails = async (req: Request, res: Response) => {
   try {
-    // 1. Destructure jobId instead of id
     const { jobId } = req.params; 
     console.log('Fetching job details for ID:', jobId);
+
+    // Extract logged-in candidate profile details from optionalAuth middleware
+    const loggedInProfileId = (req as any).user?.jobSeekerProfileId;
     
     const job = await prisma.jobPosting.findUnique({
-      // 2. Map jobId to your Prisma where condition block
       where: { id: jobId }, 
       include: {
         company: {
@@ -107,12 +139,37 @@ export const getPublicJobDetails = async (req: Request, res: Response) => {
           },
         },
         _count: { select: { applications: true } },
+        // 1. Conditionally fetch application record only for the logged-in user
+        ...(loggedInProfileId && {
+          applications: {
+            where: { jobSeekerProfileId: loggedInProfileId },
+            select: { id: true, isWithdrawn: true },
+          },
+        }),
       },
     });
 
     if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
-    return res.json({ success: true, data: job });
+    // 2. Destructure applications array away and determine applied state mapping
+    const { applications, ...jobDetails } = job as any;
+    
+    let userApplicationStatus: string | false = false;
+
+    if (loggedInProfileId && applications && applications.length > 0) {
+      const app = applications[0];
+      // If they haven't withdrawn, return the application's primary key ID string
+      userApplicationStatus = app.isWithdrawn ? false : app.id;
+    }
+
+    // 3. Flatten out the payload exactly how the Flutter application layout expects it
+    return res.json({ 
+      success: true, 
+      data: {
+        ...jobDetails,
+        appliedStatus: userApplicationStatus // 👈 Sends Application UUID String or false
+      } 
+    });
   } catch (error) {
     console.error('Get job details error:', error);
     return res.status(500).json({ success: false, message: 'Failed to fetch job details' });

@@ -24,17 +24,6 @@ publicAPI.interceptors.response.use(
 
 // Export API service methods
 export const publicAPIService = {
-  // Add this method inside your publicAPIService object
-  getCurrentUser: async () => {
-    try {
-      const response = await publicAPI.get('/public/auth/me');
-      return response; // This interceptor automatically maps payload to response.data
-    } catch (error) {
-      console.error('Error fetching current user:', error);
-      throw error;
-    }
-  },
-  
   getCompanyProfile: async (identifier: string) => {
     try {
       const response = await publicAPI.get(`/public/companies/${identifier}`);
@@ -77,24 +66,13 @@ export const publicAPIService = {
     }
   },
   
-  // Search jobs
+  // Search jobs (This handles the /public/public endpoint parsing)
   searchJobs: async (params?: any) => {
     try {
-      const response = await publicAPI.get('/public/search', { params });
+      const response = await publicAPI.get('/public', { params });
       return response;
     } catch (error) {
       console.error('Error searching jobs:', error);
-      throw error;
-    }
-  },
-  
-  // Check authentication
-  checkAuth: async () => {
-    try {
-      const response = await publicAPI.get('/public/auth/me');
-      return response;
-    } catch (error) {
-      console.error('Error checking auth:', error);
       throw error;
     }
   },

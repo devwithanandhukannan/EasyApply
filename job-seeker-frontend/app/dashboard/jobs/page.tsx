@@ -28,7 +28,6 @@ export default function JobsPage() {
   const { showToast } = useGlassToast();
 
   const [jobs, setJobs] = useState<any[]>([]);
-  const [filteredJobs, setFilteredJobs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState({
@@ -38,122 +37,91 @@ export default function JobsPage() {
   });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [appliedJobs, setAppliedJobs] = useState<Set<string>>(new Set());
   const [showApplicationModal, setShowApplicationModal] = useState(false);
   const [selectedJob, setSelectedJob] = useState<any>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true); 
 
+  // Fetch data when page, drop-down filters, or location string changes
   useEffect(() => {
-    checkAuth();
-  }, []);
+    fetchJobs();
+  }, [page, filters]);
 
+  // Fetch data when user stops writing or clears the search query input box
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchJobs();
-      fetchMyApplications();
-    }
-  }, [page, filters, isAuthenticated]);
+    const delayDebounce = setTimeout(() => {
+      // Reset to page 1 whenever search keyword updates to prevent pagination overflow
+      if (page !== 1) {
+        setPage(1);
+      } else {
+        fetchJobs();
+      }
+    }, 400);
 
-  useEffect(() => {
-    handleSearch();
-  }, [searchQuery, jobs]);
-
-  const checkAuth = async () => {
-    try {
-      const response = await api.get('/auth/me');
-      setIsAuthenticated(response.data.success);
-    } catch (error) {
-      setIsAuthenticated(false);
-      showToast('Session Expired', 'Please sign in to continue', 'info');
-      router.push('/login?redirect=/dashboard/jobs');
-    }
-  };
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
 
   const fetchJobs = async () => {
     try {
       setIsLoading(true);
+      
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '12',
+        limit: '12', // Sets limit parameter to match 12 per page
+        ...(searchQuery.trim() && { search: searchQuery.trim() }), // Matches backend req.query.search
         ...(filters.jobType !== 'all' && { jobType: filters.jobType }),
         ...(filters.locationType !== 'all' && { locationType: filters.locationType }),
-        ...(filters.location && { location: filters.location }),
+        ...(filters.location.trim() && { location: filters.location.trim() }),
       });
 
       const response = await api.get(`/public/search?${params}`);
       
       if (response.data.success) {
+        setIsAuthenticated(true);
         setJobs(response.data.data);
-        setFilteredJobs(response.data.data);
         setTotalPages(response.data.pagination?.totalPages || 1);
       }
     } catch (error: any) {
       console.error('Error fetching positions:', error);
+      // Optional authentication middleware allows requests, but intercept 401/500 faults gracefully
       if (error.response?.status === 401) {
+        setIsAuthenticated(false);
         showToast('Authentication Required', 'Please sign in to view jobs', 'info');
         router.push('/login?redirect=/dashboard/jobs');
+      } else {
+        showToast('Error', 'Failed to retrieve job database indices.', 'danger');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fetchMyApplications = async () => {
-    try {
-      const response = await api.get('/jobseeker/applications');
-      if (response.data.success) {
-        const jobIds = new Set(response.data.data.map((app: any) => app.jobPostingId));
-        setAppliedJobs(jobIds);
-      }
-    } catch (error: any) {
-      console.error('Error fetching applications:', error);
-      if (error.response?.status === 401) {
-        setIsAuthenticated(false);
-      }
-    }
-  };
-
-  const handleSearch = () => {
-    if (!searchQuery.trim()) {
-      setFilteredJobs(jobs);
-      return;
-    }
-
-    const filtered = jobs.filter(job =>
-      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      job.department?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    setFilteredJobs(filtered);
-  };
-
   const handleApplyClick = (job: any, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (!isAuthenticated) {
-      showToast('Sign In Required', 'Please sign in to apply for this position', 'info');
-      router.push(`/login?redirect=/dashboard/jobs`);
-      return;
-    }
-    
     setSelectedJob(job);
     setShowApplicationModal(true);
   };
 
   const handleApplicationSuccess = () => {
     setShowApplicationModal(false);
-    setAppliedJobs(prev => new Set([...prev, selectedJob.id]));
     setSelectedJob(null);
-    fetchMyApplications(); // Refresh applications
+    fetchJobs(); 
   };
 
   const calculateDaysAgo = (date: string) => {
     const diff = Date.now() - new Date(date).getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'Today';
+    if (days <= 0) return 'Today';
     if (days === 1) return 'Yesterday';
     return `${days} days ago`;
+  };
+
+  const formatStatusLabel = (status: string | null) => {
+    if (!status) return 'Application Submitted';
+    return status
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   if (!isAuthenticated) {
@@ -176,22 +144,21 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-6 text-zinc-300 max-w-7xl mx-auto p-2 md:p-0 font-sans antialiased">
-      {/* Header Context */}
       <div className="border-b border-zinc-900 pb-5">
         <h1 className="text-xl font-bold text-white tracking-tight sm:text-2xl">Explore Vacancies</h1>
         <p className="text-zinc-500 text-xs sm:text-sm mt-0.5 font-medium">
-          {filteredJobs.length} matching position{filteredJobs.length !== 1 ? 's' : ''} available in the directory
+          Find matching positions across various roles and tech stacks
         </p>
       </div>
 
-      {/* Filter Options Panel */}
+      {/* Search and Filters panel */}
       <div className="bg-zinc-950 border border-zinc-900/80 rounded-xl p-4 shadow-xl shadow-black/20">
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={15} />
             <input
               type="text"
-              placeholder="Search by title, corporate division, or company name..."
+              placeholder="Search by title, description or roles..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700 transition-colors"
@@ -236,7 +203,6 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* Main Stream Execution Block */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
           <div className="flex flex-col items-center gap-2">
@@ -244,7 +210,7 @@ export default function JobsPage() {
             <p className="text-zinc-500 text-[11px] tracking-wide font-medium">Loading records...</p>
           </div>
         </div>
-      ) : filteredJobs.length === 0 ? (
+      ) : jobs.length === 0 ? (
         <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-12 text-center max-w-md mx-auto">
           <Briefcase className="mx-auto mb-3 text-zinc-700" size={24} />
           <h3 className="text-sm font-semibold text-white mb-1">No vacancies found</h3>
@@ -262,8 +228,8 @@ export default function JobsPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredJobs.map((job) => {
-              const hasApplied = appliedJobs.has(job.id);
+            {jobs.map((job) => {
+              const hasApplied = job.hasApplied === true;
               
               return (
                 <Link
@@ -375,7 +341,7 @@ export default function JobsPage() {
                         className="w-full py-2 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed shadow-inner"
                       >
                         <CheckCircle2 size={13} className="text-zinc-600" />
-                        <span>Application Submitted</span>
+                        <span>{formatStatusLabel(job.applicationStatus)}</span>
                       </button>
                     ) : (
                       <button
@@ -391,6 +357,7 @@ export default function JobsPage() {
             })}
           </div>
 
+          {/* Pagination Controls */}
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-4 pt-6">
               <button

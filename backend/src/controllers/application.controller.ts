@@ -21,6 +21,7 @@ const ensureJobSeeker = async (userId: string): Promise<boolean> => {
 };
 
 export const applyToJob = async (req: Request, res: Response) => {
+  
   try {
     const userId = req.user!.userId;
 

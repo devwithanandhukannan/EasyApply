@@ -1,58 +1,22 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-// Explicitly import your default service wrapper object from the correct file path
-import publicAPIService from '@/app/lib/public'; 
-
-interface PublicUser {
-  userId: string;
-  fullName: string;
-  email: string;
-  globalRoles: number;
-  jobSeekerProfileId: string;
-}
+import { createContext, useContext, useState, ReactNode } from 'react';
 
 interface PublicAuthContextType {
   isAuthenticated: boolean;
-  user: PublicUser | null;
+  setIsAuthenticated: (status: boolean) => void;
   loading: boolean;
-  refresh: () => Promise<void>;
+  setLoading: (loading: boolean) => void;
 }
 
 const PublicAuthContext = createContext<PublicAuthContextType | undefined>(undefined);
 
 export function PublicAuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<PublicUser | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const refresh = async () => {
-    try {
-      // Use publicAPIService containing the clean getCurrentUser mapping method
-      const res: any = await publicAPIService.getCurrentUser();
-      
-      if (res && res.success && res.isAuthenticated) {
-        setIsAuthenticated(true);
-        setUser(res.user);
-      } else {
-        setIsAuthenticated(false);
-        setUser(null);
-      }
-    } catch (error) {
-      console.error('Context initialization auth check error:', error);
-      setIsAuthenticated(false);
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    refresh();
-  }, []);
+  const [loading, setLoading] = useState(false); // Default to false since no background API checks are ran on mount
 
   return (
-    <PublicAuthContext.Provider value={{ isAuthenticated, user, loading, refresh }}>
+    <PublicAuthContext.Provider value={{ isAuthenticated, setIsAuthenticated, loading, setLoading }}>
       {children}
     </PublicAuthContext.Provider>
   );
