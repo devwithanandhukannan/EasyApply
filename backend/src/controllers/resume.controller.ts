@@ -1,5 +1,8 @@
 import type { Request, Response } from 'express';
+import path from 'path';
 import fs from 'fs';
+// @ts-ignore
+import htmlPdf from 'html-pdf-node';
 import { prisma } from '../utils/prisma.ts';
 import { extractText } from '../utils/textExtractor.ts';
 import { analyzeResume, generateFreshCV, convertToHTML, optimizeForJD, suggestKeywords } from '../services/groq.service.ts';
@@ -170,6 +173,7 @@ const compileResumeHtml = (data: any): string => {
 
   return html;
 };
+
 export const generateCV = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -181,10 +185,7 @@ export const generateCV = async (req: Request, res: Response) => {
     });
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
 
-    // Call the updated LLM prompt function
     const generated = await generateFreshCV(profile, customPrompt, jobDescription);
-
-    // Render the HTML cleanly on the backend server side 
     const finalHtmlContent = generated.resumeData ? compileResumeHtml(generated.resumeData) : '';
 
     const contentData = {
@@ -222,6 +223,90 @@ export const generateCV = async (req: Request, res: Response) => {
   } catch (err) {
     console.error('generateCV error:', err);
     return res.status(500).json({ success: false, message: 'Failed to generate CV' });
+  }
+};
+
+export const downloadUploadedPDF = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    const profileId = await getProfileId(userId);
+    if (!profileId) {
+      return res.status(404).json({ success: false, message: 'Job seeker profile records mismatched.' });
+    }
+
+    const resume = await prisma.resume.findFirst({
+      where: { id, jobSeekerProfileId: profileId },
+    });
+
+    if (!resume) {
+      return res.status(404).json({ success: false, message: 'Document reference could not be found.' });
+    }
+
+    const safeDocumentName = resume.name.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume';
+    const clientSideFilename = `${safeDocumentName}.pdf`;
+
+    // ─── CASE 1: PHYSICAL STORAGE ATTACHMENT (UPLOADED FILE) ───────────
+    if (resume.filePath) {
+      const absoluteDiskPath = path.resolve(resume.filePath);
+
+      if (fs.existsSync(absoluteDiskPath)) {
+        return res.download(absoluteDiskPath, clientSideFilename, (err) => {
+          if (err && !res.headersSent) {
+            return res.status(500).json({ success: false, message: 'File transfer pipe interrupted.' });
+          }
+        });
+      }
+      console.warn(`File expected on disk but missing at: ${absoluteDiskPath}. Falling back to dynamic HTML stream.`);
+    }
+
+    // ─── CASE 2: VIRTUAL MEMORY RENDERING (BUILT / AI OPTIMIZED RESUME) ───
+    const contentData = readContent(resume);
+    let htmlContent = contentData.htmlContent;
+
+    if (!htmlContent && contentData.parsedData) {
+      htmlContent = compileResumeHtml(contentData.parsedData);
+    }
+
+    if (!htmlContent) {
+      return res.status(422).json({ 
+        success: false, 
+        message: 'This specific record does not contain renderable canvas content.' 
+      });
+    }
+
+    const margins = contentData.margins ?? { top: 60, right: 72, bottom: 60, left: 72 };
+    const pdfOptions = {
+      format: 'A4',
+      margin: {
+        top: `${margins.top}px`,
+        right: `${margins.right}px`,
+        bottom: `${margins.bottom}px`,
+        left: `${margins.left}px`,
+      },
+      printBackground: true,
+    };
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${clientSideFilename}"`);
+
+    htmlPdf.generatePdf({ content: htmlContent }, pdfOptions)
+      .then((pdfBuffer: Buffer) => {
+        return res.status(200).send(pdfBuffer);
+      })
+      .catch((pdfErr: Error) => {
+        console.error('PDF Engine generation pipeline exception:', pdfErr);
+        if (!res.headersSent) {
+          return res.status(500).json({ success: false, message: 'PDF translation engine failed.' });
+        }
+      });
+
+  } catch (err) {
+    console.error('System Failure within downloadUploadedPDF route execution:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: 'Internal Server Error handling document downstream extraction.' });
+    }
   }
 };
 

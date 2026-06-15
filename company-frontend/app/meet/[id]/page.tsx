@@ -33,7 +33,7 @@ export default function UnifiedLiveKitMeetPage() {
     const fetchRoomCredentials = async () => {
       try {
         const endpoint = roleType === 'jobseeker'
-          ? `/interviews/${interviewId}/token/jobseeker`
+          ? `l`
           : `/interviews/${interviewId}/token/company`;
 
         const response = await api.post(endpoint);

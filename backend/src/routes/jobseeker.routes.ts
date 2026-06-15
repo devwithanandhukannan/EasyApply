@@ -21,6 +21,7 @@ import {
   restoreVersion,
   deleteResume,
   downloadResume,
+  downloadUploadedPDF,
 } from '../controllers/resume.controller.ts';
 import {
   applyToJob,
@@ -99,7 +100,7 @@ router.post('/resumes/:id/optimize', optimizeResume);
 router.get('/resumes/:id/keywords', getKeywordSuggestions);
 router.patch('/resumes/:id/restore/:versionId', restoreVersion);
 router.get('/resumes', getAllResumes);
-router.get('/resumes/:id', getResumeById);
+router.get('/resumes/:id', downloadUploadedPDF);
 router.put('/resumes/:id', updateResume);
 router.delete('/resumes/:id', deleteResume);
 router.get('/resumes/:id/download', downloadResume);
@@ -115,7 +116,6 @@ router.get('/interviews', getMyScheduledInterviews);
 router.post('/interviews/:id/confirm', confirmInterviewPresence);
 router.post('/interviews/:id/reschedule', requestInterviewReschedule);
 
-
 // ─── APPLICATION TRACKER ─────────────────────────────────────────────────
 router.get('/applications/tracker/timeline', getApplicationsTracker);
 router.get('/tracker/:applicationId', authenticateToken, getSingleApplicationDetails);
@@ -129,11 +129,11 @@ router.get('/insights', getApplicationInsights);
 
 router.get('/salary-compare', getSalaryComparison);
 
-
 router.post('/notification/token', saveNotificationToken);
 
 //spot job seeker routes
 router.get('/spot-jobs/invitations', authenticateToken, requireJobSeeker, SpotJobController.getJobSeekerInvitations);
 router.patch('/spot-jobs/respond/:bookingId', authenticateToken, requireJobSeeker, SpotJobController.respondToBooking);
-
+router.get('/spot-jobs/toggle-status', authenticateToken, requireJobSeeker, SpotJobController.getSpotToggleStatus);
+router.patch('/spot-jobs/toggle-status', authenticateToken, requireJobSeeker, SpotJobController.updateSpotToggleStatus);
 export default router;

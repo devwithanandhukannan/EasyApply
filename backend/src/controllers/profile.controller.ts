@@ -161,7 +161,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // ✅ NEW: Handle quick availability status toggle (for Spot Jobs feature)
     if (req.body.availabilityStatus !== undefined && !req.body.profileData) {
       const inputStatus = String(req.body.availabilityStatus).trim().toLowerCase();
       
@@ -201,6 +200,25 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     }
 
     const profileData = JSON.parse(req.body.profileData);
+    const targetEmail = profileData.email?.trim() || '';
+
+    // 🛑 EMAIL CHECK RULE: Verify if email is already taken by another account
+    if (targetEmail) {
+      const emailConflict = await prisma.jobSeekerProfile.findFirst({
+        where: {
+          email: targetEmail,
+          NOT: { userId: userId } // Exclude current user checking their own profile
+        }
+      });
+
+      if (emailConflict) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'email already existed' 
+        });
+      }
+    }
+
     let profilePicBase64: string | null = profileData.profilePic || null;
 
     if (req.file) {
@@ -223,27 +241,27 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         where: { userId },
         update: {
           fullName: profileData.fullName?.trim() || 'Candidate',
-          email: profileData.email?.trim() || '',
+          email: targetEmail,
           phone: cleanStr(profileData.phone),
           location: cleanStr(profileData.location),
           linkedin: cleanStr(profileData.linkedin),
           github: cleanStr(profileData.github),
           portfolio: cleanStr(profileData.portfolio),
           bio: cleanStr(profileData.bio),
-          profilePhotoUrl: profilePicBase64, // ✅ FIXED: Use correct field name
+          profilePhotoUrl: profilePicBase64, 
           jobPreferences: jobPreferencesJson,
         },
         create: {
           userId,
           fullName: profileData.fullName?.trim() || 'Candidate',
-          email: profileData.email?.trim() || '',
+          email: targetEmail,
           phone: cleanStr(profileData.phone),
           location: cleanStr(profileData.location),
           linkedin: cleanStr(profileData.linkedin),
           github: cleanStr(profileData.github),
           portfolio: cleanStr(profileData.portfolio),
           bio: cleanStr(profileData.bio),
-          profilePhotoUrl: profilePicBase64, // ✅ FIXED: Use correct field name
+          profilePhotoUrl: profilePicBase64, 
           jobPreferences: jobPreferencesJson,
         },
       });
@@ -362,7 +380,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    // ✅ FIXED: Return consistent success response format
     return res.json({ 
       success: true, 
       message: 'Profile updated successfully' 

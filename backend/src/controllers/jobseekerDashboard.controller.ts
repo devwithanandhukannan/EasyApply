@@ -167,6 +167,7 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
           appliedAt: app.appliedAt,
           isWithdrawn: app.isWithdrawn,
           job: {
+            jobId: app.jobPosting.id, // ◄ Added job identifier link from your Prisma schema relations
             title: app.jobPosting.title,
             jobType: app.jobPosting.jobType,
             location: app.jobPosting.location,
@@ -220,7 +221,6 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
 function buildCompletionTips(profile: any, resume: any): string[] {
   const tips: string[] = [];
   if (!profile?.phone) tips.push('Add your phone number');

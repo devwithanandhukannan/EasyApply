@@ -14,6 +14,9 @@ interface MapLogLine {
 
 export const SpotJobController = {
 
+  /**
+   * 1. POST /spot-jobs
+   */
   createSpotJob: async (req: Request, res: Response): Promise<void> => {
     try {
       const companyId = req.company?.companyId;
@@ -238,7 +241,11 @@ export const SpotJobController = {
       }
 
       const profile = await prisma.jobSeekerProfile.findUnique({
-        where: { userId }
+        where: { userId },
+        select: {
+          id: true,
+          availabilityStatus: true
+        }
       });
 
       if (!profile) {
@@ -266,7 +273,13 @@ export const SpotJobController = {
         orderBy: { createdAt: 'desc' }
       });
 
-      res.status(200).json({ success: true, data: invitations });
+      const isSpotJobEnabled = profile.availabilityStatus === AvailabilityStatus.spot_available;
+
+      res.status(200).json({ 
+        success: true, 
+        isSpotJobEnabled, 
+        data: invitations 
+      });
     } catch (error: any) {
       console.error("Error fetching job seeker invitations:", error);
       res.status(500).json({ success: false, message: error.message });
@@ -476,6 +489,78 @@ export const SpotJobController = {
 
     } catch (error: any) {
       console.error("Error setting spot tracking index modifications manually:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  /**
+   * 7. GET /spot-jobs/toggle-status
+   */
+  getSpotToggleStatus: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+
+      const profile = await prisma.jobSeekerProfile.findUnique({
+        where: { userId },
+        select: { availabilityStatus: true }
+      });
+
+      if (!profile) {
+        res.status(404).json({ success: false, message: 'Profile workspace link not found.' });
+        return;
+      }
+
+      const isSpotJobEnabled = profile.availabilityStatus === AvailabilityStatus.spot_available;
+
+      res.status(200).json({
+        success: true,
+        isSpotJobEnabled
+      });
+    } catch (error: any) {
+      console.error("Error checking spot toggle status:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  /**
+   * 8. PATCH /spot-jobs/toggle-status
+   */
+  updateSpotToggleStatus: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized.' });
+        return;
+      }
+
+      const { enabled } = req.body;
+
+      if (typeof enabled !== 'boolean') {
+        res.status(400).json({ success: false, message: 'Invalid payload state format. Boolean expected.' });
+        return;
+      }
+
+      const targetStatus = enabled 
+        ? AvailabilityStatus.spot_available 
+        : AvailabilityStatus.immutable; 
+
+      const updatedProfile = await prisma.jobSeekerProfile.update({
+        where: { userId },
+        data: { availabilityStatus: targetStatus },
+        select: { availabilityStatus: true }
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Spot job matching engine status successfully adjusted.',
+        isSpotJobEnabled: updatedProfile.availabilityStatus === AvailabilityStatus.spot_available
+      });
+    } catch (error: any) {
+      console.error("Error mutating spot toggle target:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   }
