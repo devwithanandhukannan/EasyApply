@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getMessaging, getToken } from "firebase/messaging";
+import { getAnalytics, Analytics } from "firebase/analytics";
+import { getMessaging, getToken, Messaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDV_sTRvzW2niB-pFH7SQSGFQK32OgVVzk",
@@ -7,43 +8,38 @@ const firebaseConfig = {
   projectId: "interview-platform-6c2d5",
   storageBucket: "interview-platform-6c2d5.firebasestorage.app",
   messagingSenderId: "481624099070",
-  appId: "1:481624099070:web:aa692fb59e47551d2f7daf"
+  appId: "1:481624099070:web:aa692fb59e47551d2f7daf",
+  measurementId: "G-VC2JZW9LC0"
 };
 
+// 1. Initialize Firebase safely (prevents duplicate app initialization errors during hot-reloads)
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-export const messaging = typeof window !== "undefined" ? getMessaging(app) : null;
+// 2. Browser-only initializations (prevents Node.js server-side crashes)
+export const analytics: Analytics | null = typeof window !== "undefined" ? getAnalytics(app) : null;
+export const messaging: Messaging | null = typeof window !== "undefined" ? getMessaging(app) : null;
 
+/**
+ * Requests push permission and retrieves the FCM registration token
+ */
 export const requestNotificationPermission = async (): Promise<string | null> => {
-  if (typeof window === "undefined" || !messaging) return null;
+  if (typeof window === "undefined" || !messaging || !("serviceWorker" in navigator)) {
+    return null;
+  }
 
   try {
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") return null;
+    if (permission !== "granted") {
+      console.warn("Notification permission denied.");
+      return null;
+    }
 
-    // 1. Register the Service Worker
+    // Register your service worker
     const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
       scope: "/",
     });
 
-    // 2. WAIT for the Service Worker to be active
-    // This resolves the 'no active Service Worker' race condition
-    if (registration.active) {
-      // Worker is already active
-    } else {
-      await new Promise<void>((resolve) => {
-        const checkActive = () => {
-          if (registration.active) {
-            resolve();
-          } else {
-            registration.addEventListener('activate', resolve, { once: true });
-          }
-        };
-        checkActive();
-      });
-    }
-
-    // 3. Now that we are certain the SW is active, get the token
+    // Fetch the token using your public VAPID key
     const currentToken = await getToken(messaging, {
       vapidKey: "BA3Ue91cqFkFrfPUJ_QlVp653Dj8k5JgJrqwysusX3eEhSIR4xK2OMWsPdBxxO8SpW8F3r25v2op19DGp2vp4u8",
       serviceWorkerRegistration: registration,
@@ -51,9 +47,7 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     
     return currentToken;
   } catch (error) {
-    console.error("FCM Token generation error:", error);
+    console.error("Error generating FCM Token:", error);
     return null;
   }
 };
-
-

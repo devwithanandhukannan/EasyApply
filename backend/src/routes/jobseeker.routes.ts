@@ -1,4 +1,5 @@
-// src/routes/jobseeker.routes.ts
+// PATH: src/routes/jobseeker.routes.ts
+
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -22,6 +23,10 @@ import {
   deleteResume,
   downloadResume,
   downloadUploadedPDF,
+  generateRegionalCV,
+  scoreContentOnly,
+  getInlineSuggestions,
+  improveSelectedText,
 } from '../controllers/resume.controller.ts';
 import {
   applyToJob,
@@ -41,13 +46,14 @@ import {
 import { getApplicationsTracker, getSingleApplicationDetails, updateApplicationNotes, withdrawApplicationTracker } from '../controllers/applicationTracker.controller.ts';
 import offerRoutes from './offer.routes.ts';
 import { getJobSeekerDashboard, getApplicationInsights } from '../controllers/jobseekerDashboard.controller.ts';
-import {getSalaryComparison} from '../controllers/offer.controller.ts';
+import { getSalaryComparison } from '../controllers/offer.controller.ts';
 import { saveNotificationToken } from '../controllers/notification.controller.ts';
 import { SpotJobController } from '../controllers/spotJob.controller.ts';
+import { parseAndLoadResume } from '../controllers/resumeParser.controller.ts';
 
 const router = express.Router();
 
-// ─── PUBLIC ROUTES (No authentication) ───────────────────────────────────
+// ─── PUBLIC ROUTES ────────────────────────────────────────────────────────
 router.get('/jobs/public', getPublicJobs);
 router.get('/jobs/public/:id', getPublicJobDetails);
 
@@ -59,8 +65,26 @@ router.use(requireJobSeeker);
 router.get('/profile', getProfile);
 router.put('/profile', profileUpload.single('profileImage'), updateProfile);
 
-// ─── RESUME STORAGE CONFIGURATION ────────────────────────────────────────
-const UPLOAD_DIR = process.env.RESUME_UPLOAD_DIR ?? 
+// ─── RESUME PARSE — uses memoryStorage so req.file.buffer is populated ────
+const parseResumeUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    allowed.includes(file.mimetype)
+      ? cb(null, true)
+      : cb(new Error('Only PDF/DOCX allowed'));
+  },
+});
+
+router.post('/parse-resume', parseResumeUpload.single('resume'), parseAndLoadResume);
+
+// ─── RESUME DISK STORAGE (for save/analyze/download flows) ───────────────
+const UPLOAD_DIR = process.env.RESUME_UPLOAD_DIR ??
   path.join(process.cwd(), 'uploads/resumes');
 
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -89,7 +113,7 @@ const resumeUpload = multer({
       ? cb(null, true)
       : cb(new Error('Only PDF/DOCX allowed'));
   },
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
 // ─── RESUME MANAGEMENT ───────────────────────────────────────────────────
@@ -100,10 +124,14 @@ router.post('/resumes/:id/optimize', optimizeResume);
 router.get('/resumes/:id/keywords', getKeywordSuggestions);
 router.patch('/resumes/:id/restore/:versionId', restoreVersion);
 router.get('/resumes', getAllResumes);
-router.get('/resumes/:id', downloadUploadedPDF);
+router.get('/resumes/:id', getResumeById);
 router.put('/resumes/:id', updateResume);
 router.delete('/resumes/:id', deleteResume);
 router.get('/resumes/:id/download', downloadResume);
+router.post('/resumes/:id/score', scoreContentOnly);
+router.get('/resumes/:id/inline-suggestions', getInlineSuggestions);
+router.post('/resumes/improve-text', improveSelectedText);
+router.post('/resumes/generate-regional', generateRegionalCV);
 
 // ─── APPLICATION MANAGEMENT ──────────────────────────────────────────────
 router.post('/applications/apply', resumeUpload.single('newResume'), applyToJob);
@@ -126,14 +154,13 @@ router.use('/offers', offerRoutes);
 
 router.get('/dashboard', getJobSeekerDashboard);
 router.get('/insights', getApplicationInsights);
-
 router.get('/salary-compare', getSalaryComparison);
-
 router.post('/notification/token', saveNotificationToken);
 
-//spot job seeker routes
+// ─── SPOT JOB ROUTES ─────────────────────────────────────────────────────
 router.get('/spot-jobs/invitations', authenticateToken, requireJobSeeker, SpotJobController.getJobSeekerInvitations);
 router.patch('/spot-jobs/respond/:bookingId', authenticateToken, requireJobSeeker, SpotJobController.respondToBooking);
 router.get('/spot-jobs/toggle-status', authenticateToken, requireJobSeeker, SpotJobController.getSpotToggleStatus);
 router.patch('/spot-jobs/toggle-status', authenticateToken, requireJobSeeker, SpotJobController.updateSpotToggleStatus);
+
 export default router;

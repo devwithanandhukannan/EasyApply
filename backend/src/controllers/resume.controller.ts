@@ -6,6 +6,7 @@ import htmlPdf from 'html-pdf-node';
 import { prisma } from '../utils/prisma.ts';
 import { extractText } from '../utils/textExtractor.ts';
 import { analyzeResume, generateFreshCV, convertToHTML, optimizeForJD, suggestKeywords } from '../services/groq.service.ts';
+import { scoreResumeContent, generateInlineSuggestions, processTextSelection, generateRegionalResumeTemplate } from '../services/groq.service.ts';
 
 const getProfileId = async (userId: string) => {
   const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
@@ -530,5 +531,148 @@ export const downloadResume = async (req: Request, res: Response) => {
   } catch (err) {
     console.error('downloadResume error:', err);
     return res.status(500).json({ success: false, message: 'Failed to download' });
+  }
+};
+
+export const scoreContentOnly = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+    if (!profileId) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
+    if (!resume) return res.status(404).json({ success: false, message: 'Resume not found' });
+
+    const contentData = readContent(resume);
+    if (!contentData.htmlContent) return res.status(422).json({ success: false, message: 'No HTML content to score' });
+
+    const result = await scoreResumeContent(contentData.htmlContent);
+    
+    const aiData = readAI(resume);
+    aiData.scores = result.scores ?? aiData.scores;
+    aiData.strengths = result.strengths ?? aiData.strengths;
+    aiData.improvements = result.improvements ?? aiData.improvements;
+    aiData.missingSections = result.missingSections ?? aiData.missingSections;
+    aiData.keywordGaps = result.keywordGaps ?? aiData.keywordGaps;
+
+    const atsScore = result.scores?.ats ?? resume.atsScore;
+    contentData.atsBreakdown = result.atsBreakdown ?? contentData.atsBreakdown;
+
+    await prisma.resume.update({
+      where: { id },
+      data: { content: contentData, aiSuggestions: aiData, atsScore },
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('scoreContentOnly error:', err);
+    return res.status(500).json({ success: false, message: 'Scoring failed' });
+  }
+};
+
+export const getInlineSuggestions = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+    if (!profileId) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
+    if (!resume) return res.status(404).json({ success: false, message: 'Resume not found' });
+
+    const contentData = readContent(resume);
+    if (!contentData.htmlContent) return res.status(422).json({ success: false, message: 'Open in editor first' });
+
+    const result = await generateInlineSuggestions(contentData.htmlContent);
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to generate suggestions' });
+  }
+};
+
+export const improveSelectedText = async (req: Request, res: Response) => {
+  try {
+    // Check if the user object is properly mounted by your authentication middleware
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized profile request access' });
+    }
+
+    const { selectedText, action, customPrompt, context } = req.body;
+
+    if (!selectedText?.trim()) {
+      return res.status(400).json({ success: false, message: 'No text provided' });
+    }
+    if (!['grammar', 'rewrite', 'custom'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Invalid action parameter passed' });
+    }
+    if (action === 'custom' && !customPrompt?.trim()) {
+      return res.status(400).json({ success: false, message: 'Custom prompt required' });
+    }
+
+    const result = await processTextSelection(selectedText, action, customPrompt, context);
+    
+    return res.json({ success: true, data: result });
+  } catch (err: any) {
+    // Explicitly trace the complete stack trace error output to your server terminal console
+    console.error('Fatal internal failure inside improveSelectedText controller:', err);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Text processing failed', 
+      error: err?.message || 'Unknown processing error' 
+    });
+  }
+};
+
+export const generateRegionalCV = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { country, style, jobDescription } = req.body;
+
+    if (!country) return res.status(400).json({ success: false, message: 'Country required' });
+
+    const profile = await prisma.jobSeekerProfile.findUnique({
+      where: { userId },
+      include: { skills: true, education: true, experience: true, projects: true, certifications: true, languages: true, achievements: true },
+    });
+    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const result = await generateRegionalResumeTemplate(profile, country, style || 'modern', jobDescription);
+    
+    const contentData = {
+      htmlContent: result.htmlContent ?? '',
+      atsBreakdown: {},
+      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      template: `${country}-${style || 'modern'}`,
+      versions: [],
+      country,
+      style: style || 'modern',
+      culturalNotes: result.culturalNotes,
+    };
+
+    const aiData = {
+      scores: result.scores ?? {},
+      strengths: [],
+      improvements: {},
+      missingSections: [],
+      keywordGaps: [],
+    };
+
+    const resume = await prisma.resume.create({
+      data: {
+        jobSeekerProfileId: profile.id,
+        name: `${profile.fullName ?? 'My'} Resume — ${country} ${style || 'Modern'}`,
+        source: 'built',
+        atsScore: result.scores?.ats ?? null,
+        content: contentData,
+        aiSuggestions: aiData,
+        isPrimary: false,
+      },
+    });
+
+    return res.status(201).json({ success: true, data: resume });
+  } catch (err) {
+    console.error('generateRegionalCV error:', err);
+    return res.status(500).json({ success: false, message: 'Regional CV generation failed' });
   }
 };

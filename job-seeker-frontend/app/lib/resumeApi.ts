@@ -116,3 +116,18 @@ export const updateResume = (id: string, payload: {
 
 export const deleteResume = (id: string) =>
   api.delete<{ success: boolean }>(`/jobseeker/resumes/${id}`);
+
+// PATH: src/app/lib/resumeApi.ts
+// ADD at bottom
+
+export const scoreResumeContent = (id: string) =>
+  api.post(`/jobseeker/resumes/${id}/score`);
+
+export const getInlineSuggestions = (id: string) =>
+  api.get(`/jobseeker/resumes/${id}/inline-suggestions`);
+
+export const improveSelectedText = (selectedText: string, action: 'grammar' | 'rewrite' | 'custom', customPrompt?: string, context?: string) =>
+  api.post('/jobseeker/resumes/improve-text', { selectedText, action, customPrompt, context });
+
+export const generateRegionalResume = (country: string, style: string, jobDescription?: string) =>
+  api.post('/jobseeker/resumes/generate-regional', { country, style, jobDescription });

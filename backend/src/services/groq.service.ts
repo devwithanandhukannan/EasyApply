@@ -1,72 +1,7 @@
-// src/services/groq.service.ts
 import Groq from 'groq-sdk';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const MODEL = 'llama-3.3-70b-versatile';
-
-export const analyzeResume = async (rawText: string, jobDescription?: string) => {
-  const jdSection = jobDescription
-    ? `\nTarget Job Description:\n"""\n${jobDescription}\n"""\n`
-    : '';
-
-  const prompt = `You are an expert ATS analyzer and senior resume coach for IT/software engineering roles.
-Analyse the resume text below and return ONLY valid JSON.
-${jdSection}
-Resume Text:
-"""
-${rawText}
-"""
-
-Return EXACTLY this JSON schema:
-{
-  "parsedData": {
-    "name": "", "email": "", "phone": "", "location": "",
-    "linkedin": "", "github": "", "portfolio": "", "summary": "",
-    "skills": [""],
-    "experience": [{ "company":"","role":"","location":"","startDate":"","endDate":"","current":false,"description":"","achievements":[""] }],
-    "education": [{ "institution":"","degree":"","field":"","location":"","startYear":"","endYear":"","cgpa":"" }],
-    "projects": [{ "name":"","description":"","technologies":[""],"githubLink":"","liveLink":"" }],
-    "certifications": [{ "name":"","organization":"","issueDate":"","credentialUrl":"" }],
-    "languages": [{ "language":"","proficiency":"" }],
-    "achievements": [""]
-  },
-  "scores": {
-    "ats": 0,
-    "formatting": 0,
-    "keywords": 0,
-    "grammar": 0,
-    "readability": 0,
-    "impact": 0
-  },
-  "atsBreakdown": {
-    "contactInfo": 0, "summary": 0, "skills": 0,
-    "experience": 0, "education": 0, "formatting": 0
-  },
-  "strengths": [""],
-  "improvements": { "summary":"", "skills":"", "experience":"", "education":"", "formatting":"" },
-  "missingSections": [""],
-  "keywordGaps": [""],
-  "autoCorrectedText": "",
-  "jdOptimizationNotes": ""
-}
-
-Rules:
-- All score values: integers 0-100
-- strengths: 3-5 specific strengths
-- improvements: actionable tips (omit key if no issues)
-- keywordGaps: important IT keywords missing (docker, kubernetes, ci/cd, agile, etc.)
-- autoCorrectedText: full resume text with better grammar, stronger action verbs, quantified achievements
-- jdOptimizationNotes: only if job description provided — what to change to match the JD`;
-
-  const completion = await groq.chat.completions.create({
-    messages: [{ role: 'user', content: prompt }],
-    model: MODEL,
-    temperature: 0.2,
-    max_tokens: 4096,
-    response_format: { type: 'json_object' },
-  });
-  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
-};
 
 export const aggregateSalaryBenchmarks = async (
   title: string,
@@ -198,29 +133,6 @@ Return ONLY valid JSON with this exact schema structure:
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
 export const optimizeForJD = async (htmlContent: string, jobDescription: string) => {
-  const prompt = `You are a professional resume optimizer.
-
-Rewrite the resume HTML below to be perfectly optimised for the job description.
-Keep ALL inline styles intact. Only change text content.
-
-Job Description:
-"""
-${jobDescription}
-"""
-
-Current Resume HTML:
-"""
-${htmlContent}
-"""
-
-Return ONLY valid JSON:
-{
-  "htmlContent": "<optimized HTML with same inline styles>",
-  "keywordsInserted": ["keyword1", "keyword2"],
-  "changedSections": ["experience", "skills"],
-  "scores": { "ats":0,"formatting":0,"keywords":0,"grammar":0,"readability":0,"impact":0 },
-  "notes": "brief explanation of changes made"
-}`;
 
   const completion = await groq.chat.completions.create({
     messages: [{ role: 'user', content: prompt }],
@@ -547,4 +459,379 @@ Return ONLY valid JSON:
   });
 
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+};
+
+export const scoreResumeContent = async (htmlContent: string) => {
+  const prompt = `You are an expert ATS engine. Analyze this resume HTML content and return a comprehensive score breakdown.
+No job description provided — score based purely on content quality, completeness, and ATS best practices.
+
+Resume HTML:
+"""
+${htmlContent}
+"""
+
+Return ONLY valid JSON:
+{
+  "scores": {
+    "ats": 0,
+    "formatting": 0,
+    "keywords": 0,
+    "grammar": 0,
+    "readability": 0,
+    "impact": 0
+  },
+  "atsBreakdown": {
+    "contactInfo": 0,
+    "summary": 0,
+    "skills": 0,
+    "experience": 0,
+    "education": 0,
+    "formatting": 0
+  },
+  "strengths": [""],
+  "improvements": {},
+  "missingSections": [""],
+  "keywordGaps": [""]
+}
+
+Rules: all scores integers 0-100. Be accurate and strict.`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.1,
+    max_tokens: 1500,
+    response_format: { type: 'json_object' },
+  });
+  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+};
+
+export const generateInlineSuggestions = async (htmlContent: string) => {
+  const prompt = `You are a senior resume coach. Analyze this resume HTML and return specific inline improvement suggestions for individual sections.
+Each suggestion should target a specific piece of text that can be improved.
+
+Resume HTML:
+"""
+${htmlContent}
+"""
+
+Return ONLY valid JSON:
+{
+  "suggestions": [
+    {
+      "id": "unique_id_1",
+      "section": "experience | skills | summary | education | projects",
+      "type": "strengthen | quantify | keyword | grammar | impact",
+      "originalSnippet": "exact short text from the resume (max 60 chars)",
+      "suggestion": "Specific actionable improvement",
+      "replacement": "The improved version of just that snippet",
+      "priority": "high | medium | low"
+    }
+  ]
+}
+
+Rules:
+- Max 8 suggestions
+- originalSnippet must be exact text found in the HTML (strip tags)
+- Focus on high-impact changes: quantify achievements, add power verbs, fix weak phrasing
+- replacement should be a direct drop-in improvement`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.2,
+    max_tokens: 2000,
+    response_format: { type: 'json_object' },
+  });
+  return JSON.parse(completion.choices[0]?.message?.content ?? '{ "suggestions": [] }');
+};
+
+export const processTextSelection = async (
+  selectedText: string,
+  action: 'grammar' | 'rewrite' | 'custom',
+  customPrompt?: string,
+  context?: string
+) => {
+  const actionInstructions = {
+    grammar: 'Fix all grammar, spelling, and punctuation errors. Keep the same meaning and length.',
+    rewrite: 'Rewrite this to be more impactful, professional, and ATS-friendly. Use strong action verbs.',
+    custom: `Apply this transformation: "${customPrompt}". Keep it professional and resume-appropriate.`,
+  };
+
+  const prompt = `You are an expert resume editor.
+
+Task: ${actionInstructions[action]}
+
+${context ? `Context (surrounding text for tone reference): "${context}"` : ''}
+
+Selected text to improve:
+"""
+${selectedText}
+"""
+
+Return ONLY valid JSON:
+{
+  "result": "The improved text here",
+  "changes": "One sentence explaining what was changed and why"
+}
+
+Rules:
+- result must be a direct replacement for the selected text
+- Preserve any HTML tags if present in the input
+- Do NOT add quotes around the result`;
+
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: MODEL,
+      temperature: 0.3,
+      max_tokens: 800,
+      response_format: { type: 'json_object' },
+    });
+
+    const rawContent = completion.choices[0]?.message?.content ?? '{}';
+    
+    // Safely try to parse the output
+    return JSON.parse(rawContent);
+  } catch (parseError) {
+    console.error("Groq JSON parsing or generation failure fallback triggered:", parseError);
+    
+    // Fail gracefully back to the controller instead of crashing the process
+    return {
+      result: selectedText, // Return original text so the user doesn't lose data
+      changes: "Failed to process text due to a structural formatting issue."
+    };
+  }
+};
+
+export const generateRegionalResumeTemplate = async (
+  profile: any,
+  country: string,
+  style: 'modern' | 'classic' | 'minimal' | 'executive',
+  jobDescription?: string
+) => {
+  const regionalRules: Record<string, string> = {
+    germany: `GERMAN RESUME (Lebenslauf) RULES:
+- Start with full personal details: Name, Address, Phone, Email, Date of Birth, Nationality, Marital Status, Photo placeholder
+- Strict reverse-chronological order
+- Include a professional photo section placeholder
+- Add "Persönliche Daten" (Personal Data) section first
+- Use formal German business structure: Lebenslauf header
+- Include hobbies/interests section (Hobbys & Interessen)
+- Add language proficiencies with CEFR levels
+- Date format: DD.MM.YYYY
+- No buzzwords — precise factual statements only
+- Signature line at the bottom with city, date, signature placeholder`,
+    
+    france: `FRENCH RESUME (CV) RULES:
+- Include personal info: Name, Address, DOB, Nationality
+- Photo is common — include placeholder
+- 1-2 pages maximum, very concise
+- Include "Compétences" skills section with categorization
+- Add "Centres d'intérêt" (Interests) section
+- Professional objective/profile at top ("Profil Professionnel")
+- Education listed BEFORE experience (French convention)
+- Include "Langues" section with proficiency levels`,
+
+    uk: `UK CV RULES:
+- NO photo, NO DOB, NO nationality (discrimination laws)
+- Start with Personal Statement (3-4 lines professional summary)
+- Education after experience for experienced candidates
+- Include references section: "References available on request"
+- Use British English spelling
+- Focus on achievements with UK-relevant metrics
+- Include LinkedIn URL
+- Keep to 2 pages maximum`,
+
+    usa: `US RESUME RULES:
+- NO photo, NO DOB, NO marital status
+- Strong summary statement at top
+- Achievement-focused bullet points with metrics
+- Skills section with technical and soft skills
+- ATS-optimized with keywords throughout
+- 1 page for <10 years experience, 2 pages for senior
+- Include LinkedIn and GitHub if relevant`,
+
+    canada: `CANADIAN RESUME RULES:
+- Similar to US but bilingual context if applicable
+- Include both English and French proficiency if in Quebec
+- CHRP/professional designations prominent
+- Canadian English spelling
+- Include work authorization if relevant
+- References: "Available upon request"`,
+
+    australia: `AUSTRALIAN RESUME RULES:
+- Called "Resume" not CV
+- Include Australian phone format
+- Add Australian work rights/visa status if applicable
+- Casual yet professional tone
+- Include referees (2-3 with contact details) at the end
+- Skills summary prominent
+- Australian English spelling`,
+
+    india: `INDIAN RESUME RULES:
+- Include complete personal details: DOB, gender, marital status, nationality
+- Career Objective at the top
+- Academic achievements and CGPA scores important
+- Include hobbies and extracurricular activities
+- List all certifications and online courses
+- Include languages known
+- Technical skills very prominently featured
+- Project descriptions are critical`,
+
+    japan: `JAPANESE RESUME (履歴書 Rirekisho) RULES:
+- Strict formal format
+- Include photo (professional headshot)
+- Personal seal (印鑑) reference
+- Education and career in chronological order (not reverse)
+- Include special skills, certificates, desired conditions
+- Formal humble language tone
+- Include commute time to office if relevant
+- Handwritten feel — precise and systematic`,
+  };
+
+  const countryKey = country.toLowerCase().replace(/\s+/g, '');
+  const rules = regionalRules[countryKey] || `RESUME RULES FOR ${country.toUpperCase()}: Follow professional standards for ${country}. Use local date formats, conventions, and language style appropriate for the ${country} job market.`;
+
+  const styleGuide = {
+    modern: 'Clean sans-serif typography, accent colors (#2563EB blue), icon-style section dividers, skill tags/pills, two-column layout for header',
+    classic: 'Traditional serif typography, black and white, formal structure, Times New Roman feel, clean horizontal rules',
+    minimal: 'Maximally clean, lots of whitespace, subtle gray dividers, understated elegance, single accent line only',
+    executive: 'Premium feel, dark navy accent (#1e3a5f), gold highlights (#b8960c), sophisticated serif headings, gravitas and authority',
+  };
+
+  const prompt = `You are a world-class resume designer and career coach specializing in international resumes.
+
+Create a COMPLETE, PROFESSIONAL resume for this profile following the EXACT regional and style specifications.
+
+REGIONAL REQUIREMENTS:
+${rules}
+
+STYLE: ${styleGuide[style]}
+
+PROFILE DATA:
+- Full Name: ${profile.fullName}
+- Email: ${profile.email}
+- Phone: ${profile.phone}  
+- Location: ${profile.location}
+- Links: LinkedIn: ${profile.linkedin}, GitHub: ${profile.github}, Portfolio: ${profile.portfolio}
+- Summary/Bio: ${profile.bio}
+- Skills: ${JSON.stringify(profile.skills)}
+- Experience: ${JSON.stringify(profile.experience)}
+- Projects: ${JSON.stringify(profile.projects)}
+- Education: ${JSON.stringify(profile.education)}
+- Certifications: ${JSON.stringify(profile.certifications)}
+- Languages: ${JSON.stringify(profile.languages)}
+- Achievements: ${JSON.stringify(profile.achievements)}
+
+${jobDescription ? `Target Job Description:\n"""\n${jobDescription}\n"""` : ''}
+
+Generate a COMPLETE HTML resume with:
+1. ALL inline styles (no external CSS)
+2. Proper regional structure and conventions
+3. ${style} visual design with the specified color palette
+4. Every section properly formatted for ${country} standards
+5. Professional typography using system fonts matching the style
+
+Return ONLY valid JSON:
+{
+  "htmlContent": "<complete self-contained HTML with all inline styles>",
+  "templateName": "Descriptive template name",
+  "sections": ["list", "of", "sections", "included"],
+  "culturalNotes": "Brief note on regional conventions applied",
+  "scores": { "ats": 0, "formatting": 0, "keywords": 0, "grammar": 0, "readability": 0, "impact": 0 }
+}`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.3,
+    max_tokens: 6000,
+    response_format: { type: 'json_object' },
+  });
+  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+};
+
+export const analyzeResume = async (rawText: string, jobDescription?: string) => {
+  const jdSection = jobDescription
+    ? `\nTarget Job Description:\n"""\n${jobDescription}\n"""\n`
+    : '';
+
+  const prompt = `You are an ATS resume parser. Return ONLY valid JSON. No markdown.
+${jdSection}
+Resume:
+"""
+${rawText}
+"""
+
+JSON schema:
+{
+  "parsedData": {
+    "name":"","email":"","phone":"","location":"",
+    "linkedin":"","github":"","portfolio":"","summary":"",
+    "skills":[""],
+    "experience":[{"company":"","role":"","location":"","startDate":"","endDate":"","current":false,"description":"","achievements":[""]}],
+    "education":[{"institution":"","degree":"","field":"","location":"","startYear":"","endYear":"","cgpa":""}],
+    "projects":[{"name":"","description":"","technologies":[""],"githubLink":"","liveLink":""}],
+    "certifications":[{"name":"","organization":"","issueDate":"","credentialUrl":""}],
+    "languages":[{"language":"","proficiency":""}],
+    "achievements":[""]
+  },
+  "scores":{"ats":0,"formatting":0,"keywords":0,"grammar":0,"readability":0,"impact":0},
+  "atsBreakdown":{"contactInfo":0,"summary":0,"skills":0,"experience":0,"education":0,"formatting":0},
+  "strengths":[""],
+  "improvements":{"summary":"","skills":"","experience":"","education":"","formatting":""},
+  "missingSections":[""],
+  "keywordGaps":[""],
+  "autoCorrectedText":"",
+  "jdOptimizationNotes":""
+}
+
+Rules:
+- All score values: integers 0-100.
+- strengths: 3-5 items.
+- keywordGaps: missing IT keywords.
+- CRITICAL URL RULE: Every URL field (linkedin, github, portfolio, githubLink, liveLink, credentialUrl) MUST start with https://. Examples: "linkedin.com/in/john" → "https://linkedin.com/in/john", "github.com/user" → "https://github.com/user", "mysite.com" → "https://mysite.com". Never return a URL without https://.`;
+
+  const completion = await groq.chat.completions.create({
+    messages: [{ role: 'user', content: prompt }],
+    model: MODEL,
+    temperature: 0.2,
+    max_tokens: 4096,
+    response_format: { type: 'json_object' },
+  });
+
+  const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+
+  // Hard sanitizer — runs regardless of what AI returns
+  const ensureHttps = (url: string): string => {
+    if (!url || url.trim() === '') return '';
+    const t = url.trim();
+    if (t.startsWith('https://') || t.startsWith('http://')) return t;
+    return `https://${t}`;
+  };
+
+  if (result.parsedData) {
+    const p = result.parsedData;
+    p.linkedin  = ensureHttps(p.linkedin  || '');
+    p.github    = ensureHttps(p.github    || '');
+    p.portfolio = ensureHttps(p.portfolio || '');
+
+    if (Array.isArray(p.projects)) {
+      p.projects = p.projects.map((proj: any) => ({
+        ...proj,
+        githubLink: ensureHttps(proj.githubLink || ''),
+        liveLink:   ensureHttps(proj.liveLink   || ''),
+      }));
+    }
+
+    if (Array.isArray(p.certifications)) {
+      p.certifications = p.certifications.map((cert: any) => ({
+        ...cert,
+        credentialUrl: ensureHttps(cert.credentialUrl || ''),
+      }));
+    }
+  }
+
+  return result;
 };
