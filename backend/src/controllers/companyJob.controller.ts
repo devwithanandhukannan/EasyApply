@@ -81,25 +81,39 @@ export const getAllCompanyJobs = async (req: Request, res: Response) => {
 
 export const generateAIDescription = async (req: Request, res: Response) => {
   try {
-    const { roughDescription, title, skills } = req.body;
-
+    const { 
+      roughDescription, 
+      title, 
+      department, 
+      locationType, 
+      experienceRequired, 
+      skills, 
+      salaryRange 
+    } = req.body;
+    
     if (!roughDescription) {
       return res.status(400).json({ success: false, message: 'Initial writing summary text payload required.' });
     }
 
-    // ✅ USE THE SERVICE FUNCTION
-    const cleanPolishedTemplate = await generateJobDescription(roughDescription, title, skills);
+    const cleanPolishedTemplate = await generateJobDescription(
+      roughDescription, 
+      title, 
+      department, 
+      locationType, 
+      experienceRequired, 
+      skills, 
+      salaryRange
+    );
 
     return res.status(200).json({
       success: true,
       description: cleanPolishedTemplate
     });
   } catch (error) {
-    console.error('AI Description polish error processing:', error);
+    console.error('AI Description rewrite error processing:', error);
     return res.status(500).json({ success: false, message: 'AI enhancement module processing timeout' });
   }
 };
-
 export const getJobDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;

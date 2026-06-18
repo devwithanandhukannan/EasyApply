@@ -1,56 +1,48 @@
-// app/dashboard/jobs/[id]/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  Building2,
-  MapPin,
-  Clock,
-  DollarSign,
-  Briefcase,
-  Calendar,
-  Users,
-  Target,
-  Upload,
-  FileText,
+import { 
+  MapPin, 
+  Briefcase, 
+  Clock, 
+  DollarSign, 
+  Building2, 
+  ArrowLeft, 
   CheckCircle2,
   AlertCircle,
-  X,
-  ExternalLink,
-  Share2
+  Globe,
+  ShieldCheck
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 export default function JobDetailsPage() {
-  const params = useParams();
+  const { showToast } = useGlassToast();
+  const { id } = useParams();
   const router = useRouter();
   const [job, setJob] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showApplicationModal, setShowApplicationModal] = useState(false);
   const [hasApplied, setHasApplied] = useState(false);
-  const [applicationId, setApplicationId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (params.id) {
+    if (id) {
       fetchJobDetails();
       checkApplicationStatus();
     }
-  }, [params.id]);
+  }, [id]);
 
   const fetchJobDetails = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get(`/jobs/${params.id}`);
+      const response = await api.get(`/public/${id}`);
       if (response.data.success) {
         setJob(response.data.data);
       }
     } catch (error) {
-      console.error('Error fetching job details:', error);
-      alert('Failed to load job details');
-      router.push('/dashboard/jobs');
+      console.error('Error loading job specifications:', error);
     } finally {
       setIsLoading(false);
     }
@@ -59,61 +51,119 @@ export default function JobDetailsPage() {
   const checkApplicationStatus = async () => {
     try {
       const response = await api.get('/jobseeker/applications');
-      const applications = response.data.data || [];
-      const existingApp = applications.find((app: any) => app.jobPostingId === params.id);
-      if (existingApp) {
-        setHasApplied(true);
-        setApplicationId(existingApp.id);
+      if (response.data.success) {
+        const applied = response.data.data.some((app: any) => app.jobPostingId === id);
+        setHasApplied(applied);
       }
     } catch (error) {
-      console.error('Error checking application status:', error);
+      console.error('Error tracking configuration states:', error);
     }
   };
 
-  const getJobTypeColor = (type: string) => {
-    const colors: any = {
-      'Full-time': 'bg-green-500/10 text-green-500 border-green-500/20',
-      'Part-time': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-      'Contract': 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-      'Freelance': 'bg-orange-500/10 text-orange-500 border-orange-500/20',
-      'Spot': 'bg-pink-500/10 text-pink-500 border-pink-500/20',
-    };
-    return colors[type] || 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-  };
+  const handleDirectApply = async () => {
+    try {
+      setIsSubmitting(true);
+      const resumeRes = await api.get('/jobseeker/resumes');
+      if (!resumeRes.data.success || resumeRes.data.data.length === 0) {
+        showToast('failed', 'Please upload or generate a primary resume on your profile menu before submitting.', 'danger');
+        return;
+      }
 
-  const getLocationTypeIcon = (type: string) => {
-    if (type === 'Remote') return '🌐';
-    if (type === 'Hybrid') return '🏢';
-    return '📍';
+      const defaultResumeId = resumeRes.data.data[0].id;
+      const formData = new FormData();
+      formData.append('jobPostingId', id as string);
+      formData.append('applyWithNew', 'false');
+      formData.append('resumeId', defaultResumeId);
+
+      const response = await api.post('/jobseeker/applications/apply', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      if (response.data.success) {
+        showToast('applied', 'Application submitted successfully.', 'success');
+        setHasApplied(true);
+      }
+    } catch (error: any) {
+      console.error('Application transmission error:', error);
+      showToast('failed', error.response?.data?.message || 'Failed to submit application.', 'danger');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const calculateDaysAgo = (date: string) => {
+    if (!date) return '';
     const diff = Date.now() - new Date(date).getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days === 0) return 'Posted today';
-    if (days === 1) return 'Posted yesterday';
-    return `Posted ${days} days ago`;
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return `${days} days ago`;
   };
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: job.title,
-        text: `Check out this job at ${job.company.name}`,
-        url: window.location.href,
-      }).catch(err => console.log('Error sharing:', err));
-    } else {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Link copied to clipboard!');
-    }
+  // Helper helper engine to parse the Markdown content found in Screenshot 2026-06-01 at 10.57.47 AM.jpg
+  const renderFormattedDescription = (text: string) => {
+    if (!text) return <p className="text-zinc-500 text-xs">No detailed description specified.</p>;
+
+    const lines = text.split('\n');
+    let currentListItems: string[] = [];
+    const elements: React.ReactNode[] = [];
+
+    const flushList = (keyPrefix: string | number) => {
+      if (currentListItems.length > 0) {
+        elements.push(
+          <ul key={`list-${keyPrefix}`} className="list-disc pl-5 space-y-2 mb-4 text-zinc-300 text-sm">
+            {currentListItems.map((item, i) => (
+              <li key={i} className="leading-relaxed">{item}</li>
+            ))}
+          </ul>
+        );
+        currentListItems = [];
+      }
+    };
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+
+      // Identify Subheadings (e.g., ### **Key Responsibilities**)
+      if (trimmed.startsWith('###')) {
+        flushList(index);
+        const cleanHeader = trimmed.replace(/###|\*\*/g, '').trim();
+        elements.push(
+          <h4 key={index} className="text-white font-semibold text-sm mt-6 mb-3 tracking-wide first:mt-0">
+            {cleanHeader}
+          </h4>
+        );
+      }
+      // Identify Bullet Lists (e.g., * Implement Java-based...)
+      else if (trimmed.startsWith('*')) {
+        const cleanItem = trimmed.substring(1).trim();
+        currentListItems.push(cleanItem);
+      } 
+      // Handle normal paragraphs / empty spaces
+      else {
+        if (trimmed === '') {
+          flushList(index);
+        } else {
+          flushList(index);
+          elements.push(
+            <p key={index} className="text-zinc-300 text-sm leading-relaxed mb-4">
+              {trimmed.replace(/\*\*/g, '')}
+            </p>
+          );
+        }
+      }
+    });
+
+    flushList('final');
+    return <div className="space-y-1">{elements}</div>;
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-500">Loading job details...</p>
+      <div className="flex h-[60vh] items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-5 h-5 border border-zinc-900 border-t-zinc-400 rounded-full animate-spin"></div>
+          <p className="text-zinc-500 text-[11px] font-medium tracking-wide">Loading specifications...</p>
         </div>
       </div>
     );
@@ -121,550 +171,182 @@ export default function JobDetailsPage() {
 
   if (!job) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Briefcase className="mx-auto mb-4 text-gray-600" size={48} />
-          <h3 className="text-xl font-semibold text-white mb-2">Job not found</h3>
-          <p className="text-gray-500 mb-6">This job posting may have been removed</p>
-          <Link
-            href="/dashboard/jobs"
-            className="inline-block px-6 py-3 bg-white text-black rounded-xl hover:bg-gray-100 transition-colors"
-          >
-            Browse Jobs
-          </Link>
-        </div>
+      <div className="text-center py-20 font-sans max-w-sm mx-auto">
+        <AlertCircle className="mx-auto text-zinc-700 mb-3" size={24} />
+        <h3 className="text-sm font-semibold text-white">Position not found</h3>
+        <p className="text-zinc-500 text-xs mt-1 mb-5">The requested job listing could not be queried or has expired.</p>
+        <Link href="/dashboard/jobs" className="px-4 py-2 bg-zinc-950 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-medium text-zinc-300 hover:text-white transition-all">
+          Return to index
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Back Button and Share */}
-      <div className="flex items-center justify-between">
-        <Link
-          href="/dashboard/jobs"
-          className="inline-flex items-center space-x-2 text-gray-400 hover:text-white transition-colors"
-        >
-          <ArrowLeft size={20} />
-          <span>Back to Jobs</span>
-        </Link>
+    <div className="space-y-6 text-zinc-300 max-w-4xl mx-auto p-2 md:p-0 font-sans antialiased animate-fade-in">
+      
+      {/* Back Actions navigation */}
+      <div>
         <button
-          onClick={handleShare}
-          className="inline-flex items-center space-x-2 px-4 py-2 bg-[#1c1c1e] border border-[#2c2c2e] rounded-xl text-gray-400 hover:text-white hover:border-white transition-all"
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors text-xs font-semibold"
         >
-          <Share2 size={16} />
-          <span>Share</span>
+          <ArrowLeft size={14} />
+          <span>Back to Directory</span>
         </button>
       </div>
 
-      {/* Header Card */}
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-8">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-6">
-          <div className="flex items-start space-x-4 flex-1">
-            {job.company.logoUrl ? (
-              <img
-                src={job.company.logoUrl}
-                alt={job.company.name}
-                className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Building2 size={40} className="text-white" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-3xl font-bold text-white mb-2 break-words">{job.title}</h1>
-              <div className="flex flex-wrap items-center gap-3 text-gray-400 mb-2">
-                <span className="text-lg">{job.company.name}</span>
-                {job.company.verificationBadge === 'verified' && (
-                  <span className="inline-flex items-center bg-blue-500/10 text-blue-500 px-3 py-1 rounded-lg text-xs border border-blue-500/20">
-                    <CheckCircle2 size={12} className="mr-1" />
-                    Verified Company
-                  </span>
-                )}
-              </div>
-              {job.department && (
-                <p className="text-gray-500">{job.department}</p>
-              )}
-              <p className="text-sm text-gray-600 mt-2">{calculateDaysAgo(job.createdAt)}</p>
+      {/* Main Feature Header Card info */}
+      <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl shadow-black/40">
+        <div className="flex items-center gap-4 min-w-0">
+          {job.company?.logoUrl ? (
+            <img
+              src={job.company.logoUrl}
+              alt={job.company.name}
+              className="w-14 h-14 rounded-2xl border border-zinc-900 object-cover shrink-0 shadow-inner"
+            />
+          ) : (
+            <div className="w-14 h-14 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center shrink-0">
+              <Building2 size={24} className="text-zinc-600" />
             </div>
-          </div>
-
-          <div className="flex flex-col gap-3 md:items-end">
-            {hasApplied ? (
-              <div className="space-y-2">
-                <div className="px-6 py-3 bg-green-500/10 text-green-500 border border-green-500/20 rounded-xl font-medium text-center flex items-center justify-center space-x-2">
-                  <CheckCircle2 size={20} />
-                  <span>Application Submitted</span>
-                </div>
-                <Link
-                  href={`/dashboard/applications/${applicationId}`}
-                  className="inline-flex items-center justify-center space-x-2 px-6 py-2 bg-[#2c2c2e] text-white rounded-xl hover:bg-[#3c3c3e] transition-colors text-sm"
-                >
-                  <span>View Application Status</span>
-                  <ExternalLink size={14} />
-                </Link>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowApplicationModal(true)}
-                className="px-8 py-3 bg-white text-black rounded-xl font-medium hover:bg-gray-100 transition-colors text-lg"
-              >
-                Apply Now
-              </button>
-            )}
+          )}
+          <div className="min-w-0 space-y-0.5">
+            <h1 className="text-lg font-bold text-white tracking-tight sm:text-xl truncate">{job.title}</h1>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400 font-medium">
+              <span className="text-zinc-200 hover:underline cursor-pointer">{job.company?.name}</span>
+              <span className="text-zinc-700">•</span>
+              <span className="text-zinc-500 uppercase tracking-wider text-[10px]">{job.company?.industry || 'Technology'}</span>
+            </div>
           </div>
         </div>
 
-        {/* Quick Info Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-black rounded-xl p-4">
-            <div className="flex items-center space-x-2 text-gray-500 mb-2">
-              <Clock size={16} />
-              <span className="text-xs">Job Type</span>
-            </div>
-            <span className={`inline-block px-3 py-1.5 rounded-lg text-sm font-medium border ${getJobTypeColor(job.jobType)}`}>
-              {job.jobType}
-            </span>
-          </div>
-
-          <div className="bg-black rounded-xl p-4">
-            <div className="flex items-center space-x-2 text-gray-500 mb-2">
-              <MapPin size={16} />
-              <span className="text-xs">Work Mode</span>
-            </div>
-            <p className="text-white font-medium flex items-center">
-              <span className="mr-2">{getLocationTypeIcon(job.locationType)}</span>
-              {job.locationType}
-            </p>
-          </div>
-
-          {job.salaryRange ? (
-            <div className="bg-black rounded-xl p-4">
-              <div className="flex items-center space-x-2 text-gray-500 mb-2">
-                <DollarSign size={16} />
-                <span className="text-xs">Salary Range</span>
-              </div>
-              <p className="text-white font-medium">{job.salaryRange}</p>
+        {/* Embedded Actions */}
+        <div className="w-full md:w-auto shrink-0 pt-2 md:pt-0 border-t border-zinc-900 md:border-transparent">
+          {hasApplied ? (
+            <div className="w-full md:w-auto px-5 py-2.5 bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 shadow-inner">
+              <CheckCircle2 size={14} className="text-emerald-500" />
+              <span>Application Submitted</span>
             </div>
           ) : (
-            <div className="bg-black rounded-xl p-4">
-              <div className="flex items-center space-x-2 text-gray-500 mb-2">
-                <DollarSign size={16} />
-                <span className="text-xs">Salary</span>
-              </div>
-              <p className="text-white font-medium">Not disclosed</p>
-            </div>
+            <button
+              onClick={handleDirectApply}
+              disabled={isSubmitting}
+              className="w-full md:w-auto px-6 py-2.5 bg-white text-black font-bold rounded-xl text-xs hover:bg-zinc-200 transition-colors disabled:opacity-30 shadow-lg shadow-white/5"
+            >
+              {isSubmitting ? 'Processing...' : 'Apply with default resume'}
+            </button>
           )}
-
-          <div className="bg-black rounded-xl p-4">
-            <div className="flex items-center space-x-2 text-gray-500 mb-2">
-              <Users size={16} />
-              <span className="text-xs">Openings</span>
-            </div>
-            <p className="text-white font-medium">{job.openings} position{job.openings > 1 ? 's' : ''}</p>
-          </div>
         </div>
       </div>
 
-      {/* Additional Info Grid */}
+      {/* Split Details Section parameters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {job.location && (
-          <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-            <div className="flex items-center space-x-2 mb-3">
-              <MapPin className="text-gray-400" size={20} />
-              <h3 className="text-white font-medium">Office Location</h3>
-            </div>
-            <p className="text-gray-400">{job.location}</p>
-          </div>
-        )}
+        
+        {/* Main descriptions layout body panel */}
+        <div className="md:col-span-2 space-y-6">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 shadow-sm">
+            {/* Formatted description with layout parsing fixes applied natively */}
+            {renderFormattedDescription(job.description)}
 
-        {job.experienceRequired && (
-          <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-            <div className="flex items-center space-x-2 mb-3">
-              <Briefcase className="text-gray-400" size={20} />
-              <h3 className="text-white font-medium">Experience Required</h3>
-            </div>
-            <p className="text-gray-400">{job.experienceRequired}</p>
-          </div>
-        )}
-
-        {job.deadline && (
-          <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-            <div className="flex items-center space-x-2 mb-3">
-              <Calendar className="text-gray-400" size={20} />
-              <h3 className="text-white font-medium">Application Deadline</h3>
-            </div>
-            <p className="text-gray-400">
-              {new Date(job.deadline).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Required Skills */}
-      {job.requiredSkills && job.requiredSkills.length > 0 && (
-        <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <Target className="text-gray-400" size={20} />
-            <h3 className="text-white font-medium text-lg">Required Skills</h3>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {job.requiredSkills.map((skill: string, idx: number) => (
-              <span
-                key={idx}
-                className="px-4 py-2 bg-white text-black rounded-lg font-medium hover:bg-gray-100 transition-colors"
-              >
-                {skill}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Job Description */}
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-        <h3 className="text-white font-medium text-lg mb-4">Job Description</h3>
-        <div
-          className="prose prose-invert prose-sm max-w-none text-gray-300 whitespace-pre-wrap leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: job.description.replace(/\n/g, '<br/>') }}
-        />
-      </div>
-
-      {/* Company Info */}
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl p-6">
-        <h3 className="text-white font-medium text-lg mb-4 flex items-center space-x-2">
-          <Building2 size={20} />
-          <span>About {job.company.name}</span>
-        </h3>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-center justify-between p-4 bg-black rounded-xl">
-              <span className="text-gray-500">Industry</span>
-              <span className="text-white font-medium">{job.company.industry}</span>
-            </div>
-            <div className="flex items-center justify-between p-4 bg-black rounded-xl">
-              <span className="text-gray-500">Company Size</span>
-              <span className="text-white font-medium">{job.company.size}</span>
-            </div>
-          </div>
-          {job._count && (
-            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Users className="text-blue-500" size={20} />
-                <span className="text-blue-300">Active applicants for this role</span>
+            {job.requirements && (
+              <div className="mt-6 pt-6 border-t border-zinc-900">
+                <h4 className="text-white font-semibold text-sm mb-3 tracking-wide">Target Profile Criteria</h4>
+                <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line font-normal">
+                  {job.requirements}
+                </p>
               </div>
-              <span className="text-blue-500 font-semibold text-lg">{job._count.applications}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      {!hasApplied && (
-        <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-8 text-center">
-          <h3 className="text-2xl font-bold text-white mb-2">Ready to Apply?</h3>
-          <p className="text-gray-400 mb-6">
-            Submit your application now and take the next step in your career
-          </p>
-          <button
-            onClick={() => setShowApplicationModal(true)}
-            className="px-8 py-3 bg-white text-black rounded-xl font-medium hover:bg-gray-100 transition-colors text-lg"
-          >
-            Apply for this Position
-          </button>
-        </div>
-      )}
-
-      {/* Application Modal */}
-      {showApplicationModal && (
-        <ApplicationModal
-          job={job}
-          onClose={() => setShowApplicationModal(false)}
-          onSuccess={() => {
-            setShowApplicationModal(false);
-            setHasApplied(true);
-            checkApplicationStatus();
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// Application Modal Component
-function ApplicationModal({
-  job,
-  onClose,
-  onSuccess,
-}: {
-  job: any;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [resumes, setResumes] = useState<any[]>([]);
-  const [selectedResumeId, setSelectedResumeId] = useState('');
-  const [uploadNew, setUploadNew] = useState(false);
-  const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    fetchResumes();
-  }, []);
-
-  const fetchResumes = async () => {
-    try {
-      setIsLoading(true);
-      const response = await api.get('/jobseeker/resumes');
-      if (response.data.success) {
-        setResumes(response.data.data);
-        if (response.data.data.length > 0) {
-          setSelectedResumeId(response.data.data[0].id);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching resumes:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      if (file.size > 10 * 1024 * 1024) {
-        alert('File size must be less than 10MB');
-        return;
-      }
-      if (!['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)) {
-        alert('Only PDF and DOCX files are allowed');
-        return;
-      }
-      setNewResumeFile(file);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!uploadNew && !selectedResumeId) {
-      alert('Please select a resume');
-      return;
-    }
-
-    if (uploadNew && !newResumeFile) {
-      alert('Please upload a resume');
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const formData = new FormData();
-      formData.append('jobPostingId', job.id);
-
-      if (uploadNew && newResumeFile) {
-        formData.append('applyWithNew', 'true');
-        formData.append('newResume', newResumeFile);
-      } else {
-        formData.append('applyWithNew', 'false');
-        formData.append('resumeId', selectedResumeId);
-      }
-
-      const response = await api.post('/jobseeker/applications/apply', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      if (response.data.success) {
-        alert('Application submitted successfully!');
-        onSuccess();
-      }
-    } catch (error: any) {
-      console.error('Application error:', error);
-      alert(error.response?.data?.message || 'Failed to submit application');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#1c1c1e] border border-[#2c2c2e] rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-[#2c2c2e] flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Apply to {job.company.name}</h2>
-            <p className="text-gray-500 text-sm mt-1">{job.title}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-[#2c2c2e] rounded-lg transition-colors text-gray-400 hover:text-white"
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Resume Selection Tabs */}
-          <div className="flex space-x-2 bg-black rounded-xl p-1">
-            <button
-              onClick={() => setUploadNew(false)}
-              className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                !uploadNew
-                  ? 'bg-white text-black'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Select Existing Resume
-            </button>
-            <button
-              onClick={() => setUploadNew(true)}
-              className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                uploadNew
-                  ? 'bg-white text-black'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Upload New Resume
-            </button>
-          </div>
-
-          {/* Select Existing Resume */}
-          {!uploadNew && (
-            <div className="space-y-3">
-              {isLoading ? (
-                <div className="text-center py-8">
-                  <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="text-gray-500 text-sm mt-2">Loading resumes...</p>
-                </div>
-              ) : resumes.length === 0 ? (
-                <div className="text-center py-8 bg-black rounded-xl border border-[#2c2c2e] p-6">
-                  <FileText className="mx-auto mb-3 text-gray-600" size={40} />
-                  <p className="text-gray-400 mb-4">No resumes found</p>
-                  <button
-                    onClick={() => setUploadNew(true)}
-                    className="text-white hover:underline"
-                  >
-                    Upload a new resume
-                  </button>
-                </div>
-              ) : (
-                resumes.map((resume) => (
-                  <label
-                    key={resume.id}
-                    className={`flex items-center space-x-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedResumeId === resume.id
-                        ? 'border-white bg-white/5'
-                        : 'border-[#2c2c2e] hover:border-gray-600'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="resume"
-                      value={resume.id}
-                      checked={selectedResumeId === resume.id}
-                      onChange={() => setSelectedResumeId(resume.id)}
-                      className="w-5 h-5"
-                    />
-                    <FileText className="text-gray-400" size={24} />
-                    <div className="flex-1">
-                      <h4 className="text-white font-medium">{resume.name}</h4>
-                      <div className="flex items-center space-x-3 mt-1">
-                        <span className="text-xs text-gray-500">
-                          {resume.source === 'uploaded' ? '📄 Uploaded' : '✨ Generated'}
-                        </span>
-                        {resume.atsScore && (
-                          <span className="text-xs bg-green-500/10 text-green-500 px-2 py-0.5 rounded border border-green-500/20">
-                            ATS Score: {resume.atsScore}%
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <CheckCircle2
-                      className={selectedResumeId === resume.id ? 'text-white' : 'text-gray-600'}
-                      size={24}
-                    />
-                  </label>
-                ))
-              )}
-            </div>
-          )}
-
-          {/* Upload New Resume */}
-          {uploadNew && (
-            <div>
-              <label className="block border-2 border-dashed border-[#2c2c2e] rounded-xl p-10 text-center hover:border-white transition-colors cursor-pointer">
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-                {newResumeFile ? (
-                  <div className="space-y-3">
-                    <FileText className="mx-auto text-white" size={48} />
-                    <p className="text-white font-medium text-lg">{newResumeFile.name}</p>
-                    <p className="text-gray-500 text-sm">
-                      {(newResumeFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setNewResumeFile(null);
-                      }}
-                      className="text-red-500 hover:text-red-400 text-sm font-medium"
-                    >
-                      Remove file
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <Upload className="mx-auto text-gray-600" size={48} />
-                    <p className="text-white font-medium">Click to upload resume</p>
-                    <p className="text-gray-500 text-sm">PDF or DOCX (Max 10MB)</p>
-                  </div>
-                )}
-              </label>
-            </div>
-          )}
-
-          {/* Info Box */}
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex space-x-3">
-            <AlertCircle className="text-blue-500 flex-shrink-0 mt-0.5" size={20} />
-            <div className="text-sm text-blue-300">
-              <p className="font-medium mb-1">Your resume will be analyzed</p>
-              <p className="text-blue-400">
-                We'll automatically match your resume against the job description to improve your chances of getting shortlisted.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-6 border-t border-[#2c2c2e] flex items-center justify-end space-x-3">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 bg-[#2c2c2e] text-white rounded-xl hover:bg-[#3c3c3e] transition-colors font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSubmitting || (!uploadNew && !selectedResumeId) || (uploadNew && !newResumeFile)}
-            className="px-6 py-3 bg-white text-black rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            {isSubmitting ? (
-              <span className="flex items-center space-x-2">
-                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                <span>Submitting...</span>
-              </span>
-            ) : (
-              'Submit Application'
             )}
-          </button>
+          </div>
+        </div>
+
+        {/* Sidebar Parameters details grid */}
+        <div className="space-y-4">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-4 shadow-sm">
+            <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider border-b border-zinc-900 pb-2">Position Summary</h3>
+            
+            <div className="space-y-3.5 text-xs text-zinc-400">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                  <Briefcase size={14} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold text-zinc-500">Employment Model</p>
+                  <p className="text-zinc-200 font-medium mt-0.5">{job.jobType}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                  <Globe size={14} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold text-zinc-500">Workplace Setting</p>
+                  <p className="text-zinc-200 font-medium mt-0.5">{job.locationType}</p>
+                </div>
+              </div>
+
+              {job.location && (
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                    <MapPin size={14} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-semibold text-zinc-500">Location</p>
+                    <p className="text-zinc-200 font-medium mt-0.5 truncate">{job.location}</p>
+                  </div>
+                </div>
+              )}
+
+              {job.salaryRange && (
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                    <DollarSign size={14} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold text-zinc-500">Compensation Offer</p>
+                    <p className="text-zinc-200 font-medium mt-0.5">{job.salaryRange}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-500">
+                  <Clock size={14} />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase font-semibold text-zinc-500">Date Posted</p>
+                  <p className="text-zinc-200 font-medium mt-0.5">{calculateDaysAgo(job.createdAt)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Profile Core Skills Parameters tag index list */}
+          {job.requiredSkills && job.requiredSkills.length > 0 && (
+            <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-3 shadow-sm">
+              <h3 className="text-xs font-bold uppercase text-zinc-400 tracking-wider">Required Core Capabilities</h3>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {job.requiredSkills.map((skill: string, idx: number) => (
+                  <span
+                    key={idx}
+                    className="px-2.5 py-1 bg-zinc-900 border border-zinc-850 text-zinc-350 text-[11px] font-medium rounded-lg shadow-sm"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Verification Box Notice footer layout */}
+          <div className="bg-zinc-950/40 border border-zinc-900/60 rounded-2xl p-4 flex gap-3">
+            <ShieldCheck className="text-zinc-600 shrink-0 mt-0.5" size={15} />
+            <div className="text-[11px] text-zinc-500 font-medium leading-relaxed">
+              <p className="text-zinc-400 font-semibold mb-0.5">Verified Placement</p>
+              <p>This assignment framework is verified to handle applications directly into internal dashboard matching metrics pools.</p>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>

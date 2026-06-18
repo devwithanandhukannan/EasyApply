@@ -1,21 +1,18 @@
+// PATH: src/app/dashboard/resumes/editor/[id]/page.tsx
 'use client';
-// npm install @tiptap/react @tiptap/pm @tiptap/starter-kit @tiptap/extension-color
-//   @tiptap/extension-text-style @tiptap/extension-font-family @tiptap/extension-underline
-//   @tiptap/extension-link @tiptap/extension-text-align @tiptap/extension-highlight
-//   @tiptap/extension-horizontal-rule
 
 import { useEditor, EditorContent, Extension } from '@tiptap/react';
 import { type Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { Color } from '@tiptap/extension-color';
-import {TextStyle} from '@tiptap/extension-text-style';
+import { TextStyle } from '@tiptap/extension-text-style';
 import FontFamily from '@tiptap/extension-font-family';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import TextAlign from '@tiptap/extension-text-align';
 import Highlight from '@tiptap/extension-highlight';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
-import { useEffect, useState, useCallback, useRef, WheelEvent } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Bold, Italic, Underline as UIUnderline, Strikethrough,
@@ -23,17 +20,19 @@ import {
   List, ListOrdered, Link2, Undo2, Redo2,
   Save, Download, ChevronLeft, Highlighter, Unlink,
   IndentIcon, Type, Loader2, CheckCheck, AlertCircle,
-  ZoomIn, ZoomOut, Maximize2, Layers, Sparkles, History,
-  ChevronDown, ChevronRight, RotateCcw, X, Zap, Palette,
-  FileText, Copy, Trash2, Eye, EyeOff, Settings, Minus,
+  ZoomIn, ZoomOut, Sparkles, History,
+  ChevronDown, RotateCcw, X, Zap, Minus,
+  Wand2, SpellCheck, RefreshCw, CheckCircle, ChevronRight,
+  MessageSquare, Lightbulb, Eye,
 } from 'lucide-react';
 import {
   getResume, updateResume, convertToEditable, optimizeForJD,
-  getKeywordSuggestions, restoreVersion, type ResumeListItem, type ResumeVersion,
+  getKeywordSuggestions, restoreVersion, getInlineSuggestions, improveSelectedText,
+  type ResumeListItem, type ResumeVersion,
 } from '@/app/lib/resumeApi';
 
 // ══════════════════════════════════════════════════════════════════════════
-// Custom TipTap Extensions
+// TipTap Extensions
 // ══════════════════════════════════════════════════════════════════════════
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -94,6 +93,27 @@ const Indent = Extension.create({
     };
   },
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// Types
+// ══════════════════════════════════════════════════════════════════════════
+interface InlineSuggestion {
+  id: string;
+  section: string;
+  type: 'strengthen' | 'quantify' | 'keyword' | 'grammar' | 'impact';
+  originalSnippet: string;
+  suggestion: string;
+  replacement: string;
+  priority: 'high' | 'medium' | 'low';
+}
+
+interface SelectionToolbar {
+  x: number;
+  y: number;
+  text: string;
+  from: number;
+  to: number;
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // Toolbar Helpers
@@ -168,9 +188,6 @@ function ToolSelect({ value, onChange, options, width = 'w-32' }: { value: strin
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// Main Toolbar
-// ══════════════════════════════════════════════════════════════════════════
 function Toolbar({ editor }: { editor: Editor }) {
   const [textColor, setTextColor] = useState('#1a1a1a');
   const [hlColor, setHlColor] = useState('#fef08a');
@@ -223,20 +240,19 @@ function Toolbar({ editor }: { editor: Editor }) {
       <Btn onClick={setLink} active={editor.isActive('link')} title="Link"><Link2 size={14} /></Btn>
       {editor.isActive('link') && <Btn onClick={() => editor.chain().focus().unsetLink().run()} title="Remove Link"><Unlink size={14} /></Btn>}
       <Divider />
-      <Btn onClick={() => editor.chain().focus().setHorizontalRule().run()} title="Insert Horizontal Line"><Minus size={14} /></Btn>
+      <Btn onClick={() => editor.chain().focus().setHorizontalRule().run()} title="Horizontal Line"><Minus size={14} /></Btn>
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// Ruler Component (with Top/Bottom markers)
+// Rulers
 // ══════════════════════════════════════════════════════════════════════════
 function HorizontalRuler({ width, marginLeft, marginRight, onMarginChange }: {
   width: number; marginLeft: number; marginRight: number; onMarginChange: (l: number, r: number) => void;
 }) {
   const [dragging, setDragging] = useState<'left' | 'right' | null>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
-
   const handleMouseMove = useCallback((e: globalThis.MouseEvent) => {
     if (!dragging || !rulerRef.current) return;
     const rect = rulerRef.current.getBoundingClientRect();
@@ -244,33 +260,22 @@ function HorizontalRuler({ width, marginLeft, marginRight, onMarginChange }: {
     if (dragging === 'left') onMarginChange(Math.max(20, Math.min(x, width / 2 - 40)), marginRight);
     if (dragging === 'right') onMarginChange(marginLeft, Math.max(20, Math.min(width - x, width / 2 - 40)));
   }, [dragging, marginLeft, marginRight, width, onMarginChange]);
-
   useEffect(() => {
     if (!dragging) return;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', () => setDragging(null));
     return () => { document.removeEventListener('mousemove', handleMouseMove); };
   }, [dragging, handleMouseMove]);
-
   const ticks = Array.from({ length: Math.floor(width / 10) }, (_, i) => i * 10);
-
   return (
     <div ref={rulerRef} className="relative select-none" style={{ width, height: 24, backgroundColor: '#1a1a1a', borderBottom: '1px solid #2a2a2a', flexShrink: 0 }}>
-      {/* Tick marks */}
-      {ticks.map(x => (
-        <div key={x} style={{ position: 'absolute', left: x, top: x % 50 === 0 ? 10 : x % 20 === 0 ? 14 : 17, width: 1, height: x % 50 === 0 ? 14 : x % 20 === 0 ? 10 : 7, backgroundColor: '#444' }} />
-      ))}
-      {ticks.filter(x => x % 100 === 0 && x > 0).map(x => (
-        <span key={x} style={{ position: 'absolute', left: x + 2, top: 2, fontSize: 8, color: '#666', fontFamily: 'monospace' }}>{Math.round(x * 0.265)}</span>
-      ))}
-      {/* Margin regions */}
+      {ticks.map(x => (<div key={x} style={{ position: 'absolute', left: x, top: x % 50 === 0 ? 10 : x % 20 === 0 ? 14 : 17, width: 1, height: x % 50 === 0 ? 14 : x % 20 === 0 ? 10 : 7, backgroundColor: '#444' }} />))}
+      {ticks.filter(x => x % 100 === 0 && x > 0).map(x => (<span key={x} style={{ position: 'absolute', left: x + 2, top: 2, fontSize: 8, color: '#666', fontFamily: 'monospace' }}>{Math.round(x * 0.265)}</span>))}
       <div style={{ position: 'absolute', left: 0, top: 0, width: marginLeft, height: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
       <div style={{ position: 'absolute', right: 0, top: 0, width: marginRight, height: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
-      {/* Left handle */}
       <div onMouseDown={() => setDragging('left')} style={{ position: 'absolute', left: marginLeft - 4, top: 0, width: 8, height: '100%', cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
         <div style={{ width: 2, height: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
       </div>
-      {/* Right handle */}
       <div onMouseDown={() => setDragging('right')} style={{ position: 'absolute', right: marginRight - 4, top: 0, width: 8, height: '100%', cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
         <div style={{ width: 2, height: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
       </div>
@@ -283,7 +288,6 @@ function VerticalRuler({ height, marginTop, marginBottom, onMarginChange }: {
 }) {
   const [dragging, setDragging] = useState<'top' | 'bottom' | null>(null);
   const rulerRef = useRef<HTMLDivElement>(null);
-
   const handleMouseMove = useCallback((e: globalThis.MouseEvent) => {
     if (!dragging || !rulerRef.current) return;
     const rect = rulerRef.current.getBoundingClientRect();
@@ -291,33 +295,22 @@ function VerticalRuler({ height, marginTop, marginBottom, onMarginChange }: {
     if (dragging === 'top') onMarginChange(Math.max(20, Math.min(y, height / 2 - 40)), marginBottom);
     if (dragging === 'bottom') onMarginChange(marginTop, Math.max(20, Math.min(height - y, height / 2 - 40)));
   }, [dragging, marginTop, marginBottom, height, onMarginChange]);
-
   useEffect(() => {
     if (!dragging) return;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', () => setDragging(null));
     return () => { document.removeEventListener('mousemove', handleMouseMove); };
   }, [dragging, handleMouseMove]);
-
   const ticks = Array.from({ length: Math.floor(height / 10) }, (_, i) => i * 10);
-
   return (
     <div ref={rulerRef} className="relative select-none" style={{ width: 24, height, backgroundColor: '#1a1a1a', borderRight: '1px solid #2a2a2a', flexShrink: 0 }}>
-      {/* Tick marks */}
-      {ticks.map(y => (
-        <div key={y} style={{ position: 'absolute', top: y, left: y % 50 === 0 ? 10 : y % 20 === 0 ? 14 : 17, height: 1, width: y % 50 === 0 ? 14 : y % 20 === 0 ? 10 : 7, backgroundColor: '#444' }} />
-      ))}
-      {ticks.filter(y => y % 100 === 0 && y > 0).map(y => (
-        <span key={y} style={{ position: 'absolute', top: y + 2, left: 2, fontSize: 8, color: '#666', fontFamily: 'monospace', transform: 'rotate(-90deg)', transformOrigin: 'left top', width: 20 }}>{Math.round(y * 0.265)}</span>
-      ))}
-      {/* Margin regions */}
+      {ticks.map(y => (<div key={y} style={{ position: 'absolute', top: y, left: y % 50 === 0 ? 10 : y % 20 === 0 ? 14 : 17, height: 1, width: y % 50 === 0 ? 14 : y % 20 === 0 ? 10 : 7, backgroundColor: '#444' }} />))}
+      {ticks.filter(y => y % 100 === 0 && y > 0).map(y => (<span key={y} style={{ position: 'absolute', top: y + 2, left: 2, fontSize: 8, color: '#666', fontFamily: 'monospace', transform: 'rotate(-90deg)', transformOrigin: 'left top', width: 20 }}>{Math.round(y * 0.265)}</span>))}
       <div style={{ position: 'absolute', left: 0, top: 0, height: marginTop, width: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
       <div style={{ position: 'absolute', left: 0, bottom: 0, height: marginBottom, width: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
-      {/* Top handle */}
       <div onMouseDown={() => setDragging('top')} style={{ position: 'absolute', top: marginTop - 4, left: 0, height: 8, width: '100%', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
         <div style={{ height: 2, width: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
       </div>
-      {/* Bottom handle */}
       <div onMouseDown={() => setDragging('bottom')} style={{ position: 'absolute', bottom: marginBottom - 4, left: 0, height: 8, width: '100%', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
         <div style={{ height: 2, width: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
       </div>
@@ -326,24 +319,223 @@ function VerticalRuler({ height, marginTop, marginBottom, onMarginChange }: {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// Left Panel
+// Inline Suggestion Popup
 // ══════════════════════════════════════════════════════════════════════════
-type LeftPanel = 'ai' | 'versions' | null;
+function SuggestionPopup({ suggestion, onAccept, onDismiss }: {
+  suggestion: InlineSuggestion;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  const typeColors: Record<string, string> = {
+    strengthen: 'text-blue-300 bg-blue-500/10 border-blue-500/25',
+    quantify: 'text-green-300 bg-green-500/10 border-green-500/25',
+    keyword: 'text-purple-300 bg-purple-500/10 border-purple-500/25',
+    grammar: 'text-yellow-300 bg-yellow-500/10 border-yellow-500/25',
+    impact: 'text-orange-300 bg-orange-500/10 border-orange-500/25',
+  };
+  const priorityDot: Record<string, string> = {
+    high: 'bg-red-400',
+    medium: 'bg-yellow-400',
+    low: 'bg-green-400',
+  };
 
-function AIPanel({
-  resumeId, keywordGaps, onKeywordInsert, onJDOptimize,
-}: {
-  resumeId: string;
-  keywordGaps: string[];
-  onKeywordInsert: (kw: string) => void;
-  onJDOptimize: () => void;
+  return (
+    <div className="bg-[#1a1a1a] border border-blue-500/30 rounded-xl shadow-2xl shadow-blue-500/10 w-72 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#2a2a2a]">
+        <div className="flex items-center gap-2">
+          <Sparkles size={13} className="text-blue-400" />
+          <span className="text-white text-xs font-semibold">AI Suggestion</span>
+          <div className={`w-1.5 h-1.5 rounded-full ${priorityDot[suggestion.priority]}`} title={`${suggestion.priority} priority`} />
+        </div>
+        <span className={`text-xs px-2 py-0.5 rounded-full border capitalize ${typeColors[suggestion.type]}`}>
+          {suggestion.type}
+        </span>
+      </div>
+
+      {/* Content */}
+      <div className="p-3 space-y-2.5">
+        <div>
+          <p className="text-gray-500 text-xs mb-1">Current</p>
+          <p className="text-gray-400 text-xs bg-[#111] rounded-lg px-3 py-2 line-clamp-2 line-through opacity-70">
+            {suggestion.originalSnippet}
+          </p>
+        </div>
+        <div>
+          <p className="text-gray-500 text-xs mb-1">Suggested</p>
+          <p className="text-white text-xs bg-blue-500/8 border border-blue-500/20 rounded-lg px-3 py-2 leading-relaxed">
+            {suggestion.replacement}
+          </p>
+        </div>
+        <p className="text-gray-500 text-xs leading-relaxed">{suggestion.suggestion}</p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 px-3 pb-3">
+        <button onClick={onAccept}
+          className="flex-1 flex items-center justify-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs py-2 rounded-lg transition-colors font-medium">
+          <CheckCircle size={12} /> Apply
+        </button>
+        <button onClick={onDismiss}
+          className="flex-1 flex items-center justify-center gap-1.5 bg-[#111] hover:bg-[#222] text-gray-400 hover:text-white text-xs py-2 rounded-lg transition-colors border border-[#2a2a2a]">
+          <X size={12} /> Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Text Selection Floating Toolbar
+// ══════════════════════════════════════════════════════════════════════════
+function SelectionToolbarUI({ toolbar, onAction, onClose }: {
+  toolbar: SelectionToolbar;
+  onAction: (action: 'grammar' | 'rewrite' | 'custom', customPrompt?: string) => void;
+  onClose: () => void;
+}) {
+  const [mode, setMode] = useState<'main' | 'custom' | 'loading' | 'result'>('main');
+  const [customInput, setCustomInput] = useState('');
+  const [result, setResult] = useState<{ result: string; changes: string } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleAction = async (action: 'grammar' | 'rewrite' | 'custom', prompt?: string) => {
+    setMode('loading');
+    await onAction(action, prompt);
+  };
+
+  useEffect(() => {
+    if (mode === 'custom') setTimeout(() => inputRef.current?.focus(), 50);
+  }, [mode]);
+
+  const ACTIONS = [
+    { id: 'grammar' as const, icon: SpellCheck, label: 'Fix Grammar', color: 'hover:text-yellow-400' },
+    { id: 'rewrite' as const, icon: RefreshCw, label: 'Rewrite', color: 'hover:text-blue-400' },
+    { id: 'custom' as const, icon: MessageSquare, label: 'Ask AI', color: 'hover:text-purple-400' },
+  ];
+
+  return (
+    <div
+      style={{ position: 'fixed', left: toolbar.x, top: toolbar.y - 8, zIndex: 1000, transform: 'translate(-50%, -100%)' }}
+      className="selection-toolbar"
+      onMouseDown={e => e.preventDefault()}
+    >
+      {mode === 'main' && (
+        <div className="bg-[#1e1e1e] border border-[#333] rounded-xl shadow-2xl shadow-black/50 flex items-center gap-1 px-2 py-1.5 animate-in fade-in slide-in-from-bottom-1 duration-150">
+          {ACTIONS.map(({ id, icon: Icon, label, color }) => (
+            <button key={id} title={label}
+              onClick={() => id === 'custom' ? setMode('custom') : handleAction(id)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-300 ${color} transition-colors text-xs font-medium hover:bg-white/8`}>
+              <Icon size={13} />{label}
+            </button>
+          ))}
+          <div className="w-px h-4 bg-[#333] mx-0.5" />
+          <button onClick={onClose} className="p-1.5 text-gray-600 hover:text-white rounded-lg hover:bg-white/8 transition-colors">
+            <X size={12} />
+          </button>
+          {/* Arrow */}
+          <div className="absolute left-1/2 -bottom-1.5 -translate-x-1/2 w-3 h-3 bg-[#1e1e1e] border-r border-b border-[#333] rotate-45" />
+        </div>
+      )}
+
+      {mode === 'custom' && (
+        <div className="bg-[#1e1e1e] border border-[#333] rounded-xl shadow-2xl shadow-black/50 w-72 animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#2a2a2a]">
+            <Wand2 size={13} className="text-purple-400" />
+            <span className="text-white text-xs font-medium">Custom Instruction</span>
+          </div>
+          <div className="p-3">
+            <p className="text-gray-500 text-xs mb-2 truncate">"{toolbar.text.slice(0, 50)}{toolbar.text.length > 50 ? '…' : ''}"</p>
+            <input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && customInput.trim()) handleAction('custom', customInput); if (e.key === 'Escape') setMode('main'); }}
+              placeholder="e.g. Make this more quantified…"
+              className="w-full bg-[#111] border border-[#2a2a2a] rounded-lg px-3 py-2 text-white text-xs placeholder-gray-600 focus:outline-none focus:border-purple-500/50 mb-2" />
+            <div className="flex gap-2">
+              <button onClick={() => customInput.trim() && handleAction('custom', customInput)}
+                disabled={!customInput.trim()}
+                className="flex-1 bg-purple-500 hover:bg-purple-600 text-white text-xs py-2 rounded-lg transition-colors font-medium disabled:opacity-40 flex items-center justify-center gap-1">
+                <Wand2 size={11} /> Apply
+              </button>
+              <button onClick={() => setMode('main')}
+                className="px-3 bg-[#111] border border-[#2a2a2a] text-gray-400 hover:text-white text-xs py-2 rounded-lg transition-colors">
+                Back
+              </button>
+            </div>
+          </div>
+          <div className="absolute left-1/2 -bottom-1.5 -translate-x-1/2 w-3 h-3 bg-[#1e1e1e] border-r border-b border-[#333] rotate-45" />
+        </div>
+      )}
+
+      {mode === 'loading' && (
+        <div className="bg-[#1e1e1e] border border-[#333] rounded-xl shadow-2xl px-4 py-3 flex items-center gap-2.5 animate-in fade-in duration-150">
+          <Loader2 size={14} className="text-blue-400 animate-spin" />
+          <span className="text-gray-300 text-xs">Improving with AI…</span>
+          <div className="absolute left-1/2 -bottom-1.5 -translate-x-1/2 w-3 h-3 bg-[#1e1e1e] border-r border-b border-[#333] rotate-45" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// AI Result Popup (shows after text improvement)
+// ══════════════════════════════════════════════════════════════════════════
+function AIResultPopup({ result, onAccept, onDismiss, position }: {
+  result: { original: string; improved: string; changes: string };
+  onAccept: () => void;
+  onDismiss: () => void;
+  position: { x: number; y: number };
+}) {
+  return (
+    <div
+      style={{ position: 'fixed', left: position.x, top: position.y - 8, zIndex: 1000, transform: 'translate(-50%, -100%)' }}
+      onMouseDown={e => e.preventDefault()}
+    >
+      <div className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl shadow-2xl shadow-black/60 w-80 animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[#2a2a2a]">
+          <div className="flex items-center gap-2">
+            <Sparkles size={13} className="text-blue-400" />
+            <span className="text-white text-xs font-semibold">AI Result</span>
+          </div>
+          <button onClick={onDismiss} className="text-gray-600 hover:text-white transition-colors"><X size={13} /></button>
+        </div>
+
+        <div className="p-3 space-y-2">
+          <div className="text-xs text-gray-500 bg-[#111] rounded-lg px-3 py-2 line-through opacity-60 line-clamp-2">{result.original}</div>
+          <div className="text-xs text-white bg-blue-500/8 border border-blue-500/20 rounded-lg px-3 py-2 leading-relaxed">{result.improved}</div>
+          <p className="text-gray-600 text-xs">{result.changes}</p>
+        </div>
+
+        <div className="flex gap-2 px-3 pb-3">
+          <button onClick={onAccept}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs py-2 rounded-lg font-medium transition-colors">
+            <CheckCircle size={12} /> Replace
+          </button>
+          <button onClick={onDismiss}
+            className="px-4 bg-[#111] border border-[#2a2a2a] text-gray-400 hover:text-white text-xs py-2 rounded-lg transition-colors">
+            Keep
+          </button>
+        </div>
+
+        <div className="absolute left-1/2 -bottom-1.5 -translate-x-1/2 w-3 h-3 bg-[#1a1a1a] border-r border-b border-[#2a2a2a] rotate-45" />
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Left Panels
+// ══════════════════════════════════════════════════════════════════════════
+type LeftPanel = 'ai' | 'suggestions' | 'versions' | null;
+
+function AIPanel({ resumeId, keywordGaps, onKeywordInsert, onJDOptimize }: {
+  resumeId: string; keywordGaps: string[];
+  onKeywordInsert: (kw: string) => void; onJDOptimize: () => void;
 }) {
   const [showJD, setShowJD] = useState(false);
   const [jd, setJd] = useState('');
   const [loadingJD, setLoadingJD] = useState(false);
   const [fetchingKW, setFetchingKW] = useState(false);
   const [liveKeywords, setLiveKeywords] = useState<string[]>(keywordGaps);
-
   useEffect(() => { setLiveKeywords(keywordGaps); }, [keywordGaps]);
 
   const handleFetchKeywords = async () => {
@@ -351,8 +543,7 @@ function AIPanel({
     try {
       const res = await getKeywordSuggestions(resumeId);
       setLiveKeywords(res.data.data.missingKeywords ?? []);
-    } catch { }
-    finally { setFetchingKW(false); }
+    } catch {} finally { setFetchingKW(false); }
   };
 
   const handleJDOptimize = async () => {
@@ -363,9 +554,8 @@ function AIPanel({
 
   return (
     <div className="p-4 space-y-4">
-      {/* Keywords */}
       <div>
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2.5">
           <p className="text-gray-400 text-xs font-medium">ATS Keywords</p>
           <button onClick={handleFetchKeywords} disabled={fetchingKW}
             className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 flex items-center gap-1">
@@ -386,20 +576,19 @@ function AIPanel({
         )}
       </div>
 
-      {/* JD Optimizer */}
-      <div className="border-t border-[#2c2c2e] pt-4">
+      <div className="border-t border-[#222] pt-4">
         <button onClick={() => setShowJD(v => !v)}
           className="flex items-center justify-between w-full text-gray-400 text-xs font-medium hover:text-white transition-colors mb-2">
-          <span className="flex items-center gap-1.5"><Zap size={13} /> Optimise for JD</span>
-          <ChevronDown size={13} className={showJD ? 'rotate-180' : ''} />
+          <span className="flex items-center gap-1.5"><Zap size={12} />Optimise for JD</span>
+          <ChevronDown size={12} className={showJD ? 'rotate-180' : ''} />
         </button>
         {showJD && (
           <div className="space-y-2">
             <textarea value={jd} onChange={e => setJd(e.target.value)} rows={5}
               placeholder="Paste job description…"
-              className="w-full bg-[#111] border border-[#2c2c2e] rounded-lg px-3 py-2 text-white text-xs placeholder-gray-600 focus:outline-none focus:border-white transition-colors resize-none" />
+              className="w-full bg-[#111] border border-[#222] rounded-lg px-3 py-2 text-white text-xs placeholder-gray-600 focus:outline-none focus:border-white/40 resize-none" />
             <button onClick={handleJDOptimize} disabled={!jd.trim() || loadingJD}
-              className="w-full bg-white text-black text-xs py-2 rounded-lg font-medium hover:bg-gray-100 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5">
+              className="w-full bg-white text-black text-xs py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5">
               {loadingJD ? <><Loader2 size={12} className="animate-spin" />Optimising…</> : <><Sparkles size={12} />Optimise Resume</>}
             </button>
           </div>
@@ -409,18 +598,101 @@ function AIPanel({
   );
 }
 
+function SuggestionsPanel({ resumeId, suggestions, loading, onFetch, onAccept, onDismiss }: {
+  resumeId: string;
+  suggestions: InlineSuggestion[];
+  loading: boolean;
+  onFetch: () => void;
+  onAccept: (s: InlineSuggestion) => void;
+  onDismiss: (id: string) => void;
+}) {
+  const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+  const sorted = [...suggestions].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  const typeColors: Record<string, string> = {
+    strengthen: 'text-blue-300 bg-blue-500/10 border-blue-500/20',
+    quantify: 'text-green-300 bg-green-500/10 border-green-500/20',
+    keyword: 'text-purple-300 bg-purple-500/10 border-purple-500/20',
+    grammar: 'text-yellow-300 bg-yellow-500/10 border-yellow-500/20',
+    impact: 'text-orange-300 bg-orange-500/10 border-orange-500/20',
+  };
+
+  return (
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-gray-400 text-xs font-medium">
+          {suggestions.length > 0 ? `${suggestions.length} suggestion${suggestions.length !== 1 ? 's' : ''}` : 'AI Suggestions'}
+        </p>
+        <button onClick={onFetch} disabled={loading}
+          className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 flex items-center gap-1">
+          {loading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+          {loading ? 'Analysing…' : 'Analyse'}
+        </button>
+      </div>
+
+      {suggestions.length === 0 && !loading && (
+        <div className="text-center py-6">
+          <Lightbulb size={24} className="text-gray-700 mx-auto mb-2" />
+          <p className="text-gray-600 text-xs">Click "Analyse" to get AI suggestions for improving your resume.</p>
+        </div>
+      )}
+
+      {loading && (
+        <div className="flex flex-col items-center py-8 gap-3">
+          <Loader2 size={20} className="text-blue-400 animate-spin" />
+          <p className="text-gray-500 text-xs">Scanning resume…</p>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {sorted.map(s => (
+          <div key={s.id} className="bg-[#111] border border-[#222] rounded-xl overflow-hidden">
+            <div className="px-3 py-2.5 flex items-center justify-between border-b border-[#1e1e1e]">
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-0.5 rounded-full border capitalize ${typeColors[s.type]}`}>{s.type}</span>
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.priority === 'high' ? 'bg-red-400' : s.priority === 'medium' ? 'bg-yellow-400' : 'bg-green-400'}`} />
+              </div>
+              <button onClick={() => onDismiss(s.id)} className="text-gray-700 hover:text-gray-400 transition-colors"><X size={12} /></button>
+            </div>
+
+            <div className="p-3 space-y-2">
+              <p className="text-gray-400 text-xs line-through opacity-60 line-clamp-1">{s.originalSnippet}</p>
+              <p className="text-white text-xs leading-relaxed">{s.replacement}</p>
+              <p className="text-gray-500 text-xs">{s.suggestion}</p>
+            </div>
+
+            <div className="flex gap-2 px-3 pb-3">
+              <button onClick={() => onAccept(s)}
+                className="flex-1 bg-blue-500/15 border border-blue-500/25 text-blue-300 text-xs py-1.5 rounded-lg hover:bg-blue-500/25 transition-colors font-medium flex items-center justify-center gap-1">
+                <CheckCircle size={11} />Apply
+              </button>
+              <button onClick={() => onDismiss(s.id)}
+                className="px-3 bg-[#0a0a0a] border border-[#222] text-gray-500 hover:text-white text-xs py-1.5 rounded-lg transition-colors">
+                Skip
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function VersionsPanel({ versions, onRestore }: { versions: ResumeVersion[]; onRestore: (v: ResumeVersion) => void }) {
   return (
     <div className="p-4 space-y-2">
-      <p className="text-gray-500 text-xs mb-3">{versions.length} version{versions.length !== 1 ? 's' : ''} saved</p>
+      <p className="text-gray-600 text-xs mb-3">{versions.length} version{versions.length !== 1 ? 's' : ''} saved</p>
       {versions.length === 0 ? (
-        <p className="text-gray-600 text-xs">No versions yet. Edit and save to create versions.</p>
+        <div className="text-center py-6">
+          <History size={24} className="text-gray-700 mx-auto mb-2" />
+          <p className="text-gray-600 text-xs">No versions yet. Edit and save to create versions.</p>
+        </div>
       ) : [...versions].reverse().map(v => (
-        <div key={v.id} className="bg-[#111] border border-[#2c2c2e] rounded-lg p-3">
+        <div key={v.id} className="bg-[#111] border border-[#222] rounded-xl p-3">
           <p className="text-white text-xs font-medium mb-0.5">{v.label}</p>
-          <p className="text-gray-600 text-xs">{new Date(v.savedAt).toLocaleString()}</p>
-          <button onClick={() => onRestore(v)} className="mt-2 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-            <RotateCcw size={11} /> Restore this version
+          <p className="text-gray-600 text-xs">{new Date(v.savedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+          <button onClick={() => onRestore(v)}
+            className="mt-2 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            <RotateCcw size={11} />Restore
           </button>
         </div>
       ))}
@@ -445,16 +717,25 @@ export default function ResumeEditorPage() {
   const [activePanel, setActivePanel] = useState<LeftPanel>(null);
   const [keywordGaps, setKeywordGaps] = useState<string[]>([]);
   const [versions, setVersions] = useState<ResumeVersion[]>([]);
-  const [resumeId, setResumeId] = useState('');
+
+  // Inline suggestions state
+  const [inlineSuggestions, setInlineSuggestions] = useState<InlineSuggestion[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [activeSuggestion, setActiveSuggestion] = useState<{ suggestion: InlineSuggestion; x: number; y: number } | null>(null);
+
+  // Selection toolbar state
+  const [selectionToolbar, setSelectionToolbar] = useState<SelectionToolbar | null>(null);
+  const [aiResult, setAiResult] = useState<{
+    original: string; improved: string; changes: string;
+    from: number; to: number; position: { x: number; y: number };
+  } | null>(null);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const canvasRef = useRef<HTMLDivElement>(null);
-
-  // A4 dimensions (px at 96dpi)
   const PAGE_W = 794;
   const PAGE_H = 1123;
 
-  // ─── Mouse wheel zoom ────────────────────────────────────────────────
+  // ─── Wheel zoom ──────────────────────────────────────────────────────
   useEffect(() => {
     const handleWheel = (e: globalThis.WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -481,6 +762,86 @@ export default function ResumeEditorPage() {
     editorProps: { attributes: { class: 'outline-none min-h-full', style: 'min-height: 900px;' } },
   });
 
+  // ─── Selection detection ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleSelectionChange = () => {
+      const { from, to } = editor.state.selection;
+      if (from === to) {
+        setSelectionToolbar(null);
+        return;
+      }
+      const selectedText = editor.state.doc.textBetween(from, to, ' ').trim();
+      if (selectedText.length < 5) {
+        setSelectionToolbar(null);
+        return;
+      }
+
+      // Get caret position
+      const domSelection = window.getSelection();
+      if (!domSelection || domSelection.rangeCount === 0) return;
+      const range = domSelection.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+
+      setSelectionToolbar({
+        x: rect.left + rect.width / 2,
+        y: rect.top,
+        text: selectedText,
+        from,
+        to,
+      });
+      setAiResult(null);
+    };
+
+    editor.on('selectionUpdate', handleSelectionChange);
+    return () => { editor.off('selectionUpdate', handleSelectionChange); };
+  }, [editor]);
+
+  // Close selection toolbar on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.selection-toolbar') && !target.closest('.ai-result-popup')) {
+        setSelectionToolbar(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // ─── Handle text improvement ─────────────────────────────────────────
+  const handleTextAction = useCallback(async (action: 'grammar' | 'rewrite' | 'custom', customPrompt?: string) => {
+    if (!selectionToolbar || !editor) return;
+    const { text, from, to, x, y } = selectionToolbar;
+
+    try {
+      const context = editor.state.doc.textBetween(Math.max(0, from - 100), Math.min(editor.state.doc.content.size, to + 100), ' ');
+      const res = await improveSelectedText(text, action, customPrompt, context);
+      const data = res.data.data;
+
+      setSelectionToolbar(null);
+      setAiResult({
+        original: text,
+        improved: data.result,
+        changes: data.changes,
+        from,
+        to,
+        position: { x, y },
+      });
+    } catch {
+      setSelectionToolbar(null);
+    }
+  }, [selectionToolbar, editor]);
+
+  // ─── Accept AI result ────────────────────────────────────────────────
+  const handleAcceptResult = useCallback(() => {
+    if (!aiResult || !editor) return;
+    const { from, to, improved } = aiResult;
+    editor.chain().focus().setTextSelection({ from, to }).insertContent(improved).run();
+    setAiResult(null);
+  }, [aiResult, editor]);
+
   // ─── Load resume ─────────────────────────────────────────────────────
   const loadResume = useCallback(async () => {
     if (!editor) return;
@@ -492,15 +853,13 @@ export default function ResumeEditorPage() {
       if (!data.content?.htmlContent) {
         setConverting(true);
         try { res = await convertToEditable(id); data = res.data.data; }
-        catch { }
+        catch {}
         setConverting(false);
       }
 
       setResumeName(data.name);
-      setResumeId(data.id);
       setKeywordGaps(data.aiSuggestions?.keywordGaps ?? []);
       setVersions(data.content?.versions ?? []);
-
       const savedMargins = data.content?.margins ?? { top: 60, right: 72, bottom: 60, left: 72 };
       setMargins(savedMargins);
 
@@ -538,11 +897,40 @@ export default function ResumeEditorPage() {
     } catch { setSaveState('error'); }
   }, [editor, id, resumeName, margins]);
 
-  // ─── Margin change ───────────────────────────────────────────────────
+  // ─── Inline suggestions ──────────────────────────────────────────────
+  const fetchInlineSuggestions = useCallback(async () => {
+    setLoadingSuggestions(true);
+    try {
+      const res = await getInlineSuggestions(id);
+      setInlineSuggestions(res.data.data.suggestions ?? []);
+      setActivePanel('suggestions');
+    } catch {} finally { setLoadingSuggestions(false); }
+  }, [id]);
+
+  const handleAcceptSuggestion = useCallback((suggestion: InlineSuggestion) => {
+    if (!editor) return;
+    const html = editor.getHTML();
+    // Try to find and replace the snippet in the HTML
+    const escapedSnippet = suggestion.originalSnippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escapedSnippet, 'i');
+    if (regex.test(editor.getText())) {
+      // Use TipTap content replacement
+      const newHtml = html.replace(regex, suggestion.replacement);
+      editor.commands.setContent(newHtml);
+    }
+    setInlineSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+    setActiveSuggestion(null);
+  }, [editor]);
+
+  const handleDismissSuggestion = useCallback((id: string) => {
+    setInlineSuggestions(prev => prev.filter(s => s.id !== id));
+    setActiveSuggestion(null);
+  }, []);
+
+  // ─── Margin handlers ─────────────────────────────────────────────────
   const handleHorizontalMarginChange = useCallback((l: number, r: number) => {
     setMargins(m => ({ ...m, left: Math.round(l), right: Math.round(r) }));
   }, []);
-
   const handleVerticalMarginChange = useCallback((t: number, b: number) => {
     setMargins(m => ({ ...m, top: Math.round(t), bottom: Math.round(b) }));
   }, []);
@@ -554,9 +942,7 @@ export default function ResumeEditorPage() {
   }, [editor]);
 
   // ─── JD Optimize ─────────────────────────────────────────────────────
-  const handleJDOptimize = useCallback(async () => {
-    await loadResume();
-  }, [loadResume]);
+  const handleJDOptimize = useCallback(async () => { await loadResume(); }, [loadResume]);
 
   // ─── Version restore ─────────────────────────────────────────────────
   const handleVersionRestore = useCallback(async (version: ResumeVersion) => {
@@ -566,38 +952,30 @@ export default function ResumeEditorPage() {
       editor.commands.setContent(res.data.data.htmlContent);
       const refreshed = await getResume(id);
       setVersions(refreshed.data.data.content?.versions ?? []);
-    } catch { }
+    } catch {}
   }, [editor, id]);
 
-  // ─── Export PDF ──────────────────────────────────────────────────────
+  // ─── Export ──────────────────────────────────────────────────────────
   const handleExport = useCallback(() => {
     if (!editor) return;
     const win = window.open('', '_blank')!;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${resumeName}</title><style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Georgia, serif;font-size:12px;color:#1a1a1a;padding:${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px;max-width:${PAGE_W}px;margin:0 auto}
-h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:center}
-h2{font-size:15px;font-weight:700;color:#1a1a1a;margin-top:18px;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #ddd}
-h3{font-size:13px;font-weight:600;color:#1a1a1a;margin-top:10px}
-p{margin-bottom:5px}ul,ol{margin-left:18px;margin-bottom:6px}li{margin-bottom:3px}
-a{color:#1a1a1a;text-decoration:underline}
-hr{border:none;border-top:1px solid #ddd;margin:10px 0}
-strong{font-weight:700}em{font-style:italic}
-@media print{body{padding:20px}@page{margin:15mm}}
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;font-size:12px;color:#1a1a1a;padding:${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px;max-width:${PAGE_W}px;margin:0 auto}
+h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:center}h2{font-size:15px;font-weight:700;color:#1a1a1a;margin-top:18px;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #ddd}h3{font-size:13px;font-weight:600;color:#1a1a1a;margin-top:10px}p{margin-bottom:5px}ul,ol{margin-left:18px;margin-bottom:6px}li{margin-bottom:3px}a{color:#1a1a1a;text-decoration:underline}hr{border:none;border-top:1px solid #ddd;margin:10px 0}strong{font-weight:700}em{font-style:italic}@media print{body{padding:20px}@page{margin:15mm}}
 </style></head><body>${editor.getHTML()}</body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
   }, [editor, resumeName, margins]);
 
   const SaveIcon = saveState === 'saving' ? Loader2 : saveState === 'saved' ? CheckCheck : saveState === 'error' ? AlertCircle : Save;
-  const saveLabel = saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? 'Saved' : saveState === 'error' ? 'Error' : 'Save';
-  const saveClass = saveState === 'saved' ? 'bg-green-500/15 border-green-500/40 text-green-400' :
-    saveState === 'error' ? 'bg-red-500/15 border-red-500/40 text-red-400' : 'bg-[#1c1c1e] border-[#2c2c2e] text-gray-300 hover:text-white hover:border-white';
-
-  const ZOOM_LEVELS = [50, 75, 100, 125, 150];
+  const saveLabel = { idle: 'Save', saving: 'Saving…', saved: 'Saved', error: 'Error' }[saveState];
+  const saveClass = saveState === 'saved' ? 'bg-green-500/15 border-green-500/30 text-green-400' :
+    saveState === 'error' ? 'bg-red-500/15 border-red-500/30 text-red-400' :
+    'bg-[#1c1c1e] border-[#2c2c2e] text-gray-300 hover:text-white hover:border-white/40';
 
   const PANEL_TABS = [
     { key: 'ai' as LeftPanel, icon: Sparkles, label: 'AI Tools' },
+    { key: 'suggestions' as LeftPanel, icon: Lightbulb, label: 'Suggestions', badge: inlineSuggestions.length || null },
     { key: 'versions' as LeftPanel, icon: History, label: 'History' },
   ];
 
@@ -606,11 +984,11 @@ strong{font-weight:700}em{font-style:italic}
     .ProseMirror h1 { font-size: 26px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; text-align: center; }
     .ProseMirror h2 { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-top: 18px; margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1px solid #ddd; }
     .ProseMirror h3 { font-size: 13px; font-weight: 600; color: #1a1a1a; margin-top: 10px; }
-    .ProseMirror p  { margin-bottom: 5px; color: #1a1a1a; }
+    .ProseMirror p { margin-bottom: 5px; color: #1a1a1a; }
     .ProseMirror ul { list-style-type: disc; margin-left: 18px; margin-bottom: 6px; }
     .ProseMirror ol { list-style-type: decimal; margin-left: 18px; margin-bottom: 6px; }
     .ProseMirror li { margin-bottom: 3px; color: #1a1a1a; }
-    .ProseMirror a  { color: #1a1a1a; text-decoration: underline; }
+    .ProseMirror a { color: #1a1a1a; text-decoration: underline; }
     .ProseMirror hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
     .ProseMirror strong { font-weight: 700; }
     .ProseMirror em { font-style: italic; }
@@ -618,102 +996,127 @@ strong{font-weight:700}em{font-style:italic}
     .ProseMirror s { text-decoration: line-through; }
     .ProseMirror mark { border-radius: 2px; padding: 0 2px; }
     .ProseMirror:focus { outline: none; }
-    .ProseMirror ::selection { background: rgba(59,130,246,0.3); }
+    .ProseMirror ::selection { background: rgba(59,130,246,0.25); }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-in { animation: slideDown 0.15s ease; }
   `;
 
   return (
     <div className="flex flex-col h-screen bg-[#0a0a0a] overflow-hidden" style={{ fontFamily: '"Inter", sans-serif' }}>
 
-      {/* ── Page Header ──────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 px-4 py-2.5 bg-[#111] border-b border-[#222] z-40 flex-shrink-0">
+      {/* Header */}
+      <header className="flex items-center gap-3 px-4 py-2.5 bg-[#111] border-b border-[#1e1e1e] z-40 flex-shrink-0">
         <button onClick={() => router.push('/dashboard/resumes')}
           className="flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors text-sm flex-shrink-0">
-          <ChevronLeft size={16} /> Back
+          <ChevronLeft size={16} />Back
         </button>
-        <div className="w-px h-4 bg-[#333]" />
+        <div className="w-px h-4 bg-[#2a2a2a]" />
         <input value={resumeName} onChange={e => setResumeName(e.target.value)}
           className="flex-1 bg-transparent text-white text-sm focus:outline-none placeholder-gray-600 min-w-0"
-          placeholder="Untitled Resume"
-        />
+          placeholder="Untitled Resume" />
 
-        {/* Zoom controls */}
+        {/* Analyse button */}
+        <button onClick={fetchInlineSuggestions} disabled={loadingSuggestions || loading}
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-500/15 border border-blue-500/25 text-blue-300 rounded-lg hover:bg-blue-500/25 transition-colors disabled:opacity-40 flex-shrink-0">
+          {loadingSuggestions ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+          {loadingSuggestions ? 'Analysing…' : 'Analyse'}
+          {inlineSuggestions.length > 0 && (
+            <span className="bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-semibold">
+              {inlineSuggestions.length}
+            </span>
+          )}
+        </button>
+
+        {/* Zoom */}
         <div className="flex items-center gap-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-1 py-1">
-          <button onClick={() => setZoom(z => Math.max(50, z - 25))} className="text-gray-400 hover:text-white p-1 transition-colors"><ZoomOut size={14} /></button>
+          <button onClick={() => setZoom(z => Math.max(50, z - 25))} className="text-gray-400 hover:text-white p-1 transition-colors"><ZoomOut size={13} /></button>
           <select value={zoom} onChange={e => setZoom(Number(e.target.value))}
             className="bg-transparent text-white text-xs w-14 text-center focus:outline-none cursor-pointer">
-            {ZOOM_LEVELS.map(z => <option key={z} value={z}>{z}%</option>)}
+            {[50, 75, 100, 125, 150].map(z => <option key={z} value={z}>{z}%</option>)}
           </select>
-          <button onClick={() => setZoom(z => Math.min(200, z + 25))} className="text-gray-400 hover:text-white p-1 transition-colors"><ZoomIn size={14} /></button>
+          <button onClick={() => setZoom(z => Math.min(200, z + 25))} className="text-gray-400 hover:text-white p-1 transition-colors"><ZoomIn size={13} /></button>
         </div>
 
         <div className="flex items-center gap-2">
           <button onClick={() => handleSave('Manual save')} disabled={saveState === 'saving'}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all flex-shrink-0 ${saveClass}`}>
-            <SaveIcon size={13} className={saveState === 'saving' ? 'animate-spin' : ''} />
-            {saveLabel}
+            <SaveIcon size={12} className={saveState === 'saving' ? 'animate-spin' : ''} />{saveLabel}
           </button>
           <button onClick={handleExport}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-100 transition-colors font-medium flex-shrink-0">
-            <Download size={13} /> Export PDF
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-100 transition-colors font-semibold flex-shrink-0">
+            <Download size={12} />Export
           </button>
         </div>
       </header>
 
-      {/* ── Toolbar ──────────────────────────────────────────────────── */}
+      {/* Toolbar */}
       {editor && !loading && <Toolbar editor={editor} />}
 
-      {/* ── Body: Left panel + Canvas ────────────────────────────────── */}
+      {/* Body */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* Left panel tabs */}
-        <div className="flex flex-col border-r border-[#222] bg-[#0f0f0f] flex-shrink-0">
-          {PANEL_TABS.map(({ key, icon: Icon, label }) => (
+        {/* Left tabs */}
+        <div className="flex flex-col border-r border-[#1e1e1e] bg-[#0d0d0d] flex-shrink-0">
+          {PANEL_TABS.map(({ key, icon: Icon, label, badge }) => (
             <button key={String(key)} title={label ?? ''} onClick={() => setActivePanel(p => p === key ? null : key)}
-              className={`p-3 flex flex-col items-center gap-1 transition-colors text-xs ${activePanel === key ? 'text-white bg-white/10' : 'text-gray-500 hover:text-white hover:bg-white/5'}`}>
-              <Icon size={16} /><span className="text-[9px]">{label}</span>
+              className={`relative p-3 flex flex-col items-center gap-1 transition-colors text-xs ${activePanel === key ? 'text-white bg-white/8' : 'text-gray-600 hover:text-white hover:bg-white/5'}`}>
+              <Icon size={15} />
+              <span className="text-[9px]">{label}</span>
+              {badge && badge > 0 && (
+                <span className="absolute top-1.5 right-1.5 bg-blue-500 text-white text-xs rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold text-[8px]">{badge}</span>
+              )}
             </button>
           ))}
         </div>
 
         {/* Left expandable panel */}
         {activePanel && (
-          <div className="w-60 border-r border-[#222] bg-[#0f0f0f] flex-shrink-0 overflow-y-auto">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#222]">
-              <span className="text-white text-xs font-medium">
-                {activePanel === 'ai' ? 'AI Tools' : 'Version History'}
+          <div className="w-60 border-r border-[#1e1e1e] bg-[#0d0d0d] flex-shrink-0 flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e1e] flex-shrink-0">
+              <span className="text-white text-xs font-semibold">
+                {{ ai: 'AI Tools', suggestions: 'Suggestions', versions: 'History' }[activePanel]}
               </span>
-              <button onClick={() => setActivePanel(null)} className="text-gray-500 hover:text-white"><X size={14} /></button>
+              <button onClick={() => setActivePanel(null)} className="text-gray-600 hover:text-white transition-colors"><X size={13} /></button>
             </div>
-            {activePanel === 'ai' && (
-              <AIPanel resumeId={id} keywordGaps={keywordGaps} onKeywordInsert={handleKeywordInsert} onJDOptimize={handleJDOptimize} />
-            )}
-            {activePanel === 'versions' && <VersionsPanel versions={versions} onRestore={handleVersionRestore} />}
+            <div className="flex-1 overflow-y-auto">
+              {activePanel === 'ai' && (
+                <AIPanel resumeId={id} keywordGaps={keywordGaps} onKeywordInsert={handleKeywordInsert} onJDOptimize={handleJDOptimize} />
+              )}
+              {activePanel === 'suggestions' && (
+                <SuggestionsPanel
+                  resumeId={id}
+                  suggestions={inlineSuggestions}
+                  loading={loadingSuggestions}
+                  onFetch={fetchInlineSuggestions}
+                  onAccept={handleAcceptSuggestion}
+                  onDismiss={handleDismissSuggestion}
+                />
+              )}
+              {activePanel === 'versions' && <VersionsPanel versions={versions} onRestore={handleVersionRestore} />}
+            </div>
           </div>
         )}
 
-        {/* ── Canvas area ────────────────────────────────────────────── */}
-        <div ref={canvasRef} className="flex-1 overflow-auto bg-[#181818]">
+        {/* Canvas */}
+        <div ref={canvasRef} className="flex-1 overflow-auto bg-[#161616]">
           {loading || converting ? (
             <div className="flex flex-col items-center justify-center h-full gap-4">
               <div className="relative">
-                {/* Skeleton A4 preview */}
-                <div style={{ width: 300, background: '#fff', borderRadius: 4, padding: 24, opacity: 0.08 }}>
+                <div style={{ width: 300, background: '#fff', borderRadius: 4, padding: 24, opacity: 0.06 }}>
                   <div style={{ height: 20, background: '#ccc', borderRadius: 4, marginBottom: 8, width: '60%', marginLeft: '20%' }} />
                   <div style={{ height: 10, background: '#ccc', borderRadius: 4, marginBottom: 4, width: '80%', marginLeft: '10%' }} />
-                  <div style={{ height: 10, background: '#ccc', borderRadius: 4, marginBottom: 16, width: '70%', marginLeft: '15%' }} />
-                  {Array.from({ length: 6 }).map((_, i) => (
+                  {Array.from({ length: 8 }).map((_, i) => (
                     <div key={i} style={{ height: 8, background: '#ccc', borderRadius: 4, marginBottom: 6, width: `${70 + (i % 3) * 10}%` }} />
                   ))}
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 size={28} className="text-white animate-spin" />
+                  <Loader2 size={28} className="text-white/60 animate-spin" />
                 </div>
               </div>
-              <p className="text-gray-400 text-sm">{converting ? 'Converting to editable format…' : 'Loading resume…'}</p>
+              <p className="text-gray-500 text-sm">{converting ? 'Converting to editable format…' : 'Loading resume…'}</p>
             </div>
           ) : (
             <div className="flex py-8" style={{ minHeight: '100%', justifyContent: 'center' }}>
-              {/* Vertical Ruler */}
               <VerticalRuler
                 height={Math.round(PAGE_H * zoom / 100)}
                 marginTop={Math.round(margins.top * zoom / 100)}
@@ -722,7 +1125,6 @@ strong{font-weight:700}em{font-style:italic}
               />
 
               <div className="flex flex-col items-center">
-                {/* Horizontal Ruler */}
                 <HorizontalRuler
                   width={Math.round(PAGE_W * zoom / 100)}
                   marginLeft={Math.round(margins.left * zoom / 100)}
@@ -730,39 +1132,17 @@ strong{font-weight:700}em{font-style:italic}
                   onMarginChange={handleHorizontalMarginChange}
                 />
 
-                {/* A4 Paper */}
                 <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', marginBottom: `${(zoom / 100 - 1) * PAGE_H}px` }}>
                   <div style={{
                     width: PAGE_W, minHeight: PAGE_H,
                     backgroundColor: '#ffffff',
                     paddingTop: margins.top, paddingRight: margins.right,
                     paddingBottom: margins.bottom, paddingLeft: margins.left,
-                    boxShadow: '0 4px 40px rgba(0,0,0,0.5)',
-                    borderRadius: 2,
-                    position: 'relative',
+                    boxShadow: '0 8px 60px rgba(0,0,0,0.6)',
+                    borderRadius: 2, position: 'relative',
                   }}>
-                    {/* Top margin line */}
-                    <div style={{
-                      position: 'absolute',
-                      top: margins.top,
-                      left: 0,
-                      right: 0,
-                      height: 1,
-                      background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.3) 10%, rgba(59,130,246,0.3) 90%, transparent)',
-                      pointerEvents: 'none',
-                    }} />
-                    
-                    {/* Bottom margin line */}
-                    <div style={{
-                      position: 'absolute',
-                      bottom: margins.bottom,
-                      left: 0,
-                      right: 0,
-                      height: 1,
-                      background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.3) 10%, rgba(59,130,246,0.3) 90%, transparent)',
-                      pointerEvents: 'none',
-                    }} />
-
+                    <div style={{ position: 'absolute', top: margins.top, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.25) 10%, rgba(59,130,246,0.25) 90%, transparent)', pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', bottom: margins.bottom, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.25) 10%, rgba(59,130,246,0.25) 90%, transparent)', pointerEvents: 'none' }} />
                     {editor && <EditorContent editor={editor} />}
                   </div>
                 </div>
@@ -772,7 +1152,27 @@ strong{font-weight:700}em{font-style:italic}
         </div>
       </div>
 
-      {/* ── CSS injection ────────────────────────────────────────── */}
+      {/* Selection Toolbar */}
+      {selectionToolbar && !aiResult && (
+        <SelectionToolbarUI
+          toolbar={selectionToolbar}
+          onAction={handleTextAction}
+          onClose={() => setSelectionToolbar(null)}
+        />
+      )}
+
+      {/* AI Result Popup */}
+      {aiResult && (
+        <div className="ai-result-popup">
+          <AIResultPopup
+            result={aiResult}
+            position={aiResult.position}
+            onAccept={handleAcceptResult}
+            onDismiss={() => setAiResult(null)}
+          />
+        </div>
+      )}
+
       <style dangerouslySetInnerHTML={{ __html: EDITOR_CSS }} />
     </div>
   );

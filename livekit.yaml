@@ -1,0 +1,31 @@
+# LiveKit Server Configuration for Local Development
+port: 7880
+
+# API Keys matching your Next.js backend configuration
+keys:
+  devkey: "secret"  # Replace with the exact API key/secret your backend uses
+
+logging:
+  level: info
+  pion_level: error
+
+rtc:
+  # Crucial for local dev to speed up the local WebRTC handshakes
+  use_ice_lite: true
+  
+  # Local dynamic UDP media ports
+  port_range_start: 50000
+  port_range_end: 50050
+  
+  # Standard fallback port if WebRTC over UDP gets blocked locally
+  tcp_port: 7881
+
+  # Use Google's standard public STUN resolvers
+  stun_servers:
+    - stun.l.google.com:19302
+
+# Default behavior rules for generated meeting rooms
+room:
+  auto_create: true
+  empty_timeout: 300 # Automatically wipe the room state if empty for 5 minutes
+  max_participants: 0 # 0 sets no artificial caps for testing local tabs

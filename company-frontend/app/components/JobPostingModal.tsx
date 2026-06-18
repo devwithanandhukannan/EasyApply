@@ -2,8 +2,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Sparkles, Plus, Wand2, CheckCircle2 } from 'lucide-react';
+import { X, Sparkles, Plus, Wand2 } from 'lucide-react';
 import api from '@/app/lib/axios';
+import { useGlassToast } from './GlassToastContainer';
 
 interface JobPostingModalProps {
   isOpen: boolean;
@@ -13,9 +14,9 @@ interface JobPostingModalProps {
 }
 
 export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = null }: JobPostingModalProps) {
+  const { showToast } = useGlassToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [aiAction, setAiAction] = useState<'polish' | 'rewrite' | null>(null);
   const [skillInput, setSkillInput] = useState('');
   const [formData, setFormData] = useState({
     title: '',
@@ -92,20 +93,23 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
     }));
   };
 
-  const handleGenerateDescription = async (action: 'polish' | 'rewrite') => {
+  const handleGenerateDescription = async () => {
     if (!formData.description.trim()) {
-      alert('Please enter a description first');
+      showToast('failed', 'Please enter a description first', 'danger');
       return;
     }
 
     try {
       setIsGenerating(true);
-      setAiAction(action);
       
       const response = await api.post('/company/jobs/generate-description', {
         roughDescription: formData.description,
         title: formData.title,
+        department: formData.department,
+        locationType: formData.locationType,
+        experienceRequired: formData.experienceRequired,
         skills: formData.skills,
+        salaryRange: formData.salaryRange,
       });
 
       if (response.data.success) {
@@ -116,10 +120,9 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
       }
     } catch (error) {
       console.error('Error generating description:', error);
-      alert('Failed to generate description. Please try again.');
+      showToast('failed', 'Failed to rewrite description using AI. Please try again.', 'danger');
     } finally {
       setIsGenerating(false);
-      setAiAction(null);
     }
   };
 
@@ -127,7 +130,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
     e.preventDefault();
     
     if (!formData.title || !formData.department || !formData.description) {
-      alert('Please fill in all required fields');
+      showToast('failed', 'Please fill in all required fields', 'danger');
       return;
     }
 
@@ -135,10 +138,8 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
       setIsLoading(true);
       
       if (editJob) {
-        // Update existing job
         await api.put(`/company/jobs/${editJob.id}`, formData);
       } else {
-        // Create new job
         await api.post('/company/jobs', formData);
       }
       
@@ -146,7 +147,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
       onClose();
     } catch (error) {
       console.error('Error saving job:', error);
-      alert(`Failed to ${editJob ? 'update' : 'create'} job posting. Please try again.`);
+      showToast('failed', `Failed to ${editJob ? 'update' : 'create'} job posting. Please try again.`+ error, 'danger');
     } finally {
       setIsLoading(false);
     }
@@ -184,6 +185,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
             </p>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             className="p-2 hover:bg-zinc-900 rounded-lg transition-colors text-zinc-400 hover:text-white"
           >
@@ -346,21 +348,12 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handleGenerateDescription('polish')}
-                    disabled={isGenerating || !formData.description.trim()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition-all"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    {isGenerating && aiAction === 'polish' ? 'Polishing...' : 'Grammar Check'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleGenerateDescription('rewrite')}
+                    onClick={handleGenerateDescription}
                     disabled={isGenerating || !formData.description.trim()}
                     className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white text-xs font-medium transition-all"
                   >
                     <Wand2 className="h-3.5 w-3.5" />
-                    {isGenerating && aiAction === 'rewrite' ? 'Rewriting...' : 'AI Rewrite'}
+                    {isGenerating ? 'Rewriting with AI...' : 'AI Rewrite'}
                   </button>
                 </div>
               </div>
@@ -374,8 +367,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
                 required
               />
               <p className="mt-2 text-xs text-zinc-500">
-                <span className="font-semibold">Grammar Check:</span> Fix spelling and grammar • 
-                <span className="font-semibold ml-2">AI Rewrite:</span> Generate professional formatted description
+                <span className="font-semibold">AI Rewrite:</span> Structurally optimizes structure, highlights matching skills, and formats using professional Markdown conventions.
               </p>
             </div>
 
@@ -453,6 +445,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
             Cancel
           </button>
           <button
+            type="submit"
             onClick={handleSubmit}
             disabled={isLoading}
             className="px-4 py-2.5 bg-white hover:bg-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-black font-medium transition-colors"

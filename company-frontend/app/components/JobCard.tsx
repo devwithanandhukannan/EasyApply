@@ -5,6 +5,7 @@ import { MapPin, Clock, DollarSign, Users, Calendar, MoreVertical, Edit, Trash2 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/app/lib/axios';
+import { useGlassToast } from './GlassToastContainer';
 
 interface JobCardProps {
   job: any;
@@ -13,6 +14,7 @@ interface JobCardProps {
 }
 
 export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
+  const { showToast } = useGlassToast();
   const [showMenu, setShowMenu] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const router = useRouter();
@@ -40,7 +42,7 @@ export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
       onUpdate(); // Refresh the jobs list
     } catch (error) {
       console.error('Error deleting job:', error);
-      alert('Failed to delete job. Please try again.');
+      showToast('failed', 'Failed to delete job. Please try again.', 'danger');
     } finally {
       setIsDeleting(false);
       setShowMenu(false);

@@ -1,13 +1,10 @@
 'use client';
+
 import { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, 
   FileText, 
   Briefcase, 
   Calendar, 
-  Star, 
-  Bell, 
-  DollarSign,
   Menu,
   X,
   User,
@@ -15,272 +12,244 @@ import {
   LogOut,
   Search,
   Settings,
-  Home
+  Home,
+  ChevronLeft,
+  Compass
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 
 interface SidebarProps {
-  user?: {
-    name: string;
-    email: string;
-    avatar?: string;
-  };
+  user?: any;
 }
 
 export default function Sidebar({ user }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
   const { logout } = useAuth();
 
-  // Handle mobile responsiveness
-  useEffect(() => {
-    const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (mobile) {
-        setIsCollapsed(true);
-      }
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-// Update the menuItems array in app/components/Sidebar.tsx
-const menuItems = [
-  { icon: Home, label: 'Dashboard', href: '/dashboard' },
-  { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' }, // ADD THIS
-  { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
-  { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
-  { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
-  { icon: User, label: 'Profile', href: '/dashboard/profile' },
-];
+  const menuItems = [
+    { icon: Home, label: 'Dashboard', href: '/dashboard' },
+    { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' },
+    { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
+    { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
+    { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
+    { icon: User, label: 'Profile Workspace', href: '/dashboard/profile' },
+    { icon: User, label: 'Spot Jobs', href: '/dashboard/spot-jobs' },
+  ];
 
   const handleLogout = () => {
     logout();
   };
 
-  const handleNavClick = () => {
-    if (isMobile) {
-      setShowMobileMenu(false);
-    }
-  };
+  const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
+    <>
+      {menuItems.map((item) => {
+        const Icon = item.icon;
+        const isActive = item.href === '/dashboard' 
+          ? pathname === '/dashboard' 
+          : pathname.startsWith(item.href);
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onClickItem}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 group relative ${
+              isActive
+                ? 'bg-zinc-900 border border-zinc-800 text-white shadow-md shadow-black/40'
+                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/30 border border-transparent'
+            }`}
+          >
+            <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+            <span className={`transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
+              {item.label}
+            </span>
+          </Link>
+        );
+      })}
+    </>
+  );
 
   return (
     <>
-      {/* Mobile Header */}
-      {isMobile && (
-        <div className="fixed top-0 left-0 right-0 bg-[#1c1c1e] border-b border-[#2c2c2e] p-4 flex items-center justify-between z-50 h-16">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-black font-semibold text-sm">J</span>
-            </div>
-            <span className="text-white font-semibold">JobPortal</span>
+      {/* ─── MOBILE CONTAINER HEADER ───────────────────────── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-zinc-950 border-b border-zinc-900/80 px-5 flex items-center justify-between z-40 h-14">
+        <div className="flex items-center gap-2.5">
+          <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center shadow-md">
+            <Compass className="w-3.5 h-3.5 text-black" />
           </div>
-          <button
-            onClick={() => setShowMobileMenu(!showMobileMenu)}
-            className="p-2 hover:bg-[#2c2c2e] rounded-lg transition-colors text-gray-400 hover:text-white"
-          >
-            {showMobileMenu ? <X size={20} /> : <Menu size={20} />}
-          </button>
+          <span className="text-zinc-100 font-bold text-xs tracking-wider uppercase">Portal</span>
         </div>
-      )}
+        <button
+          onClick={() => setIsMobileOpen(!isMobileOpen)}
+          className="p-2 rounded-xl border border-zinc-800 bg-zinc-900/30 text-zinc-400"
+        >
+          {isMobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+        </button>
+      </div>
 
-      {/* Mobile Overlay */}
-      {isMobile && showMobileMenu && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 top-16"
-          onClick={() => setShowMobileMenu(false)}
-        />
-      )}
-
-      {/* Desktop/Mobile Sidebar */}
-      <div
-        className={`${
-          isMobile
-            ? `fixed top-16 left-0 right-0 h-[calc(100vh-64px)] bg-[#1c1c1e] border-b border-[#2c2c2e] overflow-y-auto z-40 transform transition-transform duration-300 ${
-                showMobileMenu ? 'translate-x-0' : '-translate-x-full'
-              }`
-            : `fixed top-0 left-0 h-screen bg-[#1c1c1e] border-r border-[#2c2c2e] transition-all duration-300 z-50 flex flex-col ${
-                isCollapsed ? 'w-20' : 'w-72'
-              }`
+      {/* ─── DESKTOP SIDEBAR ────────────────────────────────── */}
+      <aside
+        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-zinc-900/80 transition-all duration-300 fixed left-0 top-0 z-30 select-none ${
+          isCollapsed ? 'w-[70px]' : 'w-64'
         }`}
       >
-        {/* Desktop Header */}
-        {!isMobile && (
-          <div className="p-4 border-b border-[#2c2c2e] flex items-center justify-between sticky top-0 bg-[#1c1c1e]">
+        {/* Core Brand Header */}
+        <div className="p-4 border-b border-zinc-900/80 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0 shadow-inner">
+              <Compass className="w-4 h-4 text-zinc-300" />
+            </div>
             {!isCollapsed && (
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-                  <span className="text-black font-semibold text-sm">J</span>
-                </div>
-                <span className="text-white font-semibold text-lg">JobPortal</span>
-              </div>
+              <span className="font-bold text-xs tracking-wider text-zinc-100 uppercase transition-opacity duration-200">
+                JobPortal
+              </span>
             )}
-            {isCollapsed && (
-              <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center mx-auto">
-                <span className="text-black font-semibold text-sm">J</span>
-              </div>
-            )}
-            <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className={`p-2 hover:bg-[#2c2c2e] rounded-lg transition-colors text-gray-400 hover:text-white ${
-                isCollapsed ? 'absolute top-4 right-2' : ''
-              }`}
-            >
-              {isCollapsed ? <Menu size={20} /> : <X size={20} />}
-            </button>
           </div>
-        )}
+        </div>
 
-        {/* User Account Info */}
-        <div className="p-4 border-b border-[#2c2c2e]">
+        {/* Action Toggle Pin */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          className="absolute top-5 -right-3 p-1.5 rounded-full border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors shadow-xl"
+        >
+          <ChevronLeft className={`w-3 h-3 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
+        </button>
+
+        {/* User Workspace Profile Component */}
+        <div className="p-3 border-b border-zinc-900/60 bg-zinc-900/5">
           <div className="relative">
             <button
-              onClick={() => !isCollapsed && !isMobile && setShowUserMenu(!showUserMenu)}
-              className={`w-full flex items-center space-x-3 p-3 hover:bg-[#2c2c2e] rounded-xl transition-colors ${
+              onClick={() => !isCollapsed && setShowUserMenu(!showUserMenu)}
+              className={`w-full flex items-center gap-3 p-2 hover:bg-zinc-900/40 border border-transparent hover:border-zinc-900 rounded-xl transition-all ${
                 isCollapsed ? 'justify-center' : ''
               }`}
-              title={isCollapsed ? user?.name || 'User' : ''}
             >
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg">
-                {user?.avatar ? (
-                  <img src={user.avatar} alt={user.name} className="w-full h-full rounded-full object-cover" />
+              <div className="w-8 h-8 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                {user?.jobSeekerProfile?.profilePhotoUrl ? (
+                  <img 
+                    src={user.jobSeekerProfile.profilePhotoUrl} 
+                    alt={user?.name || 'User'} 
+                    className="w-full h-full object-cover" 
+                  />
                 ) : (
-                  <User size={20} className="text-white" />
+                  <User className="w-3.5 h-3.5 text-zinc-400" />
                 )}
               </div>
               {!isCollapsed && (
                 <>
-                  <div className="flex-1 text-left">
-                    <p className="text-white text-sm font-medium truncate">
-                      {user?.name || 'User Name'}
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-zinc-200 text-xs font-semibold truncate tracking-tight">
+                      {user?.jobSeekerProfile?.fullName || user?.name || 'User Profile'}
                     </p>
-                    <p className="text-gray-500 text-xs truncate">{user?.email || 'user@email.com'}</p>
+                    <p className="text-zinc-500 text-[10px] truncate mt-0.5">
+                      {user?.jobSeekerProfile?.email || user?.email || 'unconfigured@identity.net'}
+                    </p>
                   </div>
-                  <ChevronDown
-                    size={16}
-                    className={`text-gray-500 transition-transform ${
-                      showUserMenu ? 'rotate-180' : ''
-                    }`}
-                  />
+                  <ChevronDown className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${showUserMenu ? 'rotate-180 text-zinc-200' : ''}`} />
                 </>
               )}
             </button>
 
-            {/* User Dropdown Menu */}
-            {showUserMenu && !isCollapsed && !isMobile && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-[#000000] border border-[#2c2c2e] rounded-xl overflow-hidden shadow-xl z-50">
+            {/* User Dropdown Menu Card */}
+            {showUserMenu && !isCollapsed && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50 p-1 space-y-0.5 animate-fade-in">
                 <Link
                   href="/dashboard/profile"
                   onClick={() => setShowUserMenu(false)}
-                  className="flex items-center space-x-3 px-4 py-3 hover:bg-[#1c1c1e] transition-colors text-gray-300 hover:text-white"
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-medium"
                 >
-                  <User size={16} />
-                  <span className="text-sm">View Profile</span>
+                  <User className="w-3.5 h-3.5" />
+                  <span>View Profile</span>
                 </Link>
                 <Link
                   href="/dashboard/settings"
                   onClick={() => setShowUserMenu(false)}
-                  className="flex items-center space-x-3 px-4 py-3 hover:bg-[#1c1c1e] transition-colors text-gray-300 hover:text-white"
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-medium"
                 >
-                  <Settings size={16} />
-                  <span className="text-sm">Settings</span>
+                  <Settings className="w-3.5 h-3.5" />
+                  <span>Settings</span>
                 </Link>
                 <button 
                   onClick={handleLogout}
-                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-[#1c1c1e] transition-colors text-red-500 hover:text-red-400 border-t border-[#2c2c2e]"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-red-950/20 text-zinc-500 hover:text-red-400 border-t border-zinc-900/60 mt-1 pt-2 text-xs font-medium"
                 >
-                  <LogOut size={16} />
-                  <span className="text-sm">Logout</span>
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Logout</span>
                 </button>
-              </div>
-            )}
-
-            {/* Mobile User Menu */}
-            {isMobile && (
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#2c2c2e]">
-                <div>
-                  <p className="text-white text-xs font-medium">Account</p>
-                </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* Navigation Menu */}
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <ul className={isMobile ? 'space-y-2' : 'space-y-1'}>
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
-
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={handleNavClick}
-                    className={`flex items-center space-x-3 px-4 py-3 rounded-xl transition-all ${
-                      isActive
-                        ? 'bg-white text-black shadow-lg'
-                        : 'text-gray-400 hover:bg-[#2c2c2e] hover:text-white'
-                    } ${isCollapsed ? 'justify-center' : ''}`}
-                    title={isCollapsed ? item.label : ''}
-                  >
-                    <Icon size={20} />
-                    {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+        {/* Navigation Section */}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto mt-2">
+          <NavLinks />
         </nav>
+      </aside>
 
-        {/* Footer - App Version (Desktop only) */}
-        {!isCollapsed && !isMobile && (
-          <div className="p-4 border-t border-[#2c2c2e]">
-            <div className="text-center">
-              <p className="text-gray-600 text-xs">JobPortal v1.0</p>
-              <p className="text-gray-700 text-xs mt-1">© 2024 All rights reserved</p>
+      {/* ─── MOBILE DRAWER SHEET ───────────────────────────── */}
+      {isMobileOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+      
+      <aside 
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-zinc-950 border-r border-zinc-900 flex flex-col transform transition-transform duration-300 md:hidden ${
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="p-4 border-b border-zinc-900 flex items-center justify-between bg-zinc-900/10">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-7 h-7 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center overflow-hidden">
+              {user?.jobSeekerProfile?.profilePhotoUrl ? (
+                <img src={user.jobSeekerProfile.profilePhotoUrl} alt="User" className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-3.5 h-3.5 text-zinc-400" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <h2 className="font-semibold text-xs text-zinc-200 truncate">{user?.jobSeekerProfile?.fullName || 'Candidate'}</h2>
+              <p className="text-[10px] text-zinc-500 truncate">{user?.jobSeekerProfile?.email || user?.email}</p>
             </div>
           </div>
-        )}
+          <button 
+            onClick={() => setIsMobileOpen(false)}
+            className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400"
+          >
+            <div className="w-4 h-4" />
+          </button>
+        </div>
+        
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <NavLinks onClickItem={() => setIsMobileOpen(false)} />
+        </nav>
 
-        {/* Mobile Footer Actions */}
-        {isMobile && (
-          <div className="p-4 border-t border-[#2c2c2e] space-y-2">
-            <Link
-              href="/dashboard/profile"
-              onClick={handleNavClick}
-              className="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-[#2c2c2e] transition-colors text-sm"
-            >
-              <User size={16} />
-              <span>View Profile</span>
-            </Link>
-            <Link
-              href="/dashboard/settings"
-              onClick={handleNavClick}
-              className="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-[#2c2c2e] transition-colors text-sm"
-            >
-              <Settings size={16} />
-              <span>Settings</span>
-            </Link>
-            <button 
-              onClick={handleLogout}
-              className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-red-500 hover:text-red-400 hover:bg-[#2c2c2e] transition-colors text-sm"
-            >
-              <LogOut size={16} />
-              <span>Logout</span>
-            </button>
-          </div>
-        )}
-      </div>
+        {/* Mobile Actions Drawer Footer */}
+        <div className="p-3 border-t border-zinc-900 bg-zinc-950/60 grid grid-cols-2 gap-1.5">
+          <Link
+            href="/dashboard/settings"
+            onClick={() => setIsMobileOpen(false)}
+            className="flex items-center justify-center gap-2 p-2 rounded-xl border border-zinc-900 text-zinc-400 hover:text-white bg-zinc-900/20 text-xs font-medium"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            <span>Settings</span>
+          </Link>
+          <button 
+            onClick={handleLogout}
+            className="flex items-center justify-center gap-2 p-2 rounded-xl border border-red-950/30 bg-red-950/5 text-red-400 text-xs font-medium"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Logout</span>
+          </button>
+        </div>
+      </aside>
     </>
   );
 }

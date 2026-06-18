@@ -1,0 +1,27 @@
+export const ROLES = {
+  JOB_SEEKER:           1 << 0,  // 1
+  COMPANY_ADMIN:        1 << 1,  // 2
+  COMPANY_HR:           1 << 2,  // 4
+  COMPANY_INTERVIEWER:  1 << 3,  // 8
+  COMPANY_VIEWER:       1 << 4,  // 16
+  PLATFORM_ADMIN:       1 << 5,  // 32
+} as const;
+
+export const ROLE_NAMES: Record<number, string> = {
+  [ROLES.JOB_SEEKER]:          'Job Seeker',
+  [ROLES.COMPANY_ADMIN]:       'Company Admin',
+  [ROLES.COMPANY_HR]:          'HR Manager',
+  [ROLES.COMPANY_INTERVIEWER]: 'Interviewer',
+  [ROLES.COMPANY_VIEWER]:      'Viewer',
+  [ROLES.PLATFORM_ADMIN]:      'Platform Admin',
+};
+
+// Combined bitmask for stripping all company bits
+export const ALL_COMPANY_BITS =
+  ROLES.COMPANY_ADMIN | ROLES.COMPANY_HR | ROLES.COMPANY_INTERVIEWER | ROLES.COMPANY_VIEWER;
+
+export const ROLE_GROUPS = {
+  COMPANY_ROLES:      [ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER],
+  COMPANY_MANAGEMENT: [ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR],
+  COMPANY_STAFF:      [ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER],
+} as const;

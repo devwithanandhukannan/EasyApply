@@ -1,16 +1,18 @@
-// src/controllers/resume.controller.ts
 import type { Request, Response } from 'express';
+import path from 'path';
 import fs from 'fs';
+// @ts-ignore
+import htmlPdf from 'html-pdf-node';
 import { prisma } from '../utils/prisma.ts';
 import { extractText } from '../utils/textExtractor.ts';
 import { analyzeResume, generateFreshCV, convertToHTML, optimizeForJD, suggestKeywords } from '../services/groq.service.ts';
+import { scoreResumeContent, generateInlineSuggestions, processTextSelection, generateRegionalResumeTemplate } from '../services/groq.service.ts';
 
 const getProfileId = async (userId: string) => {
   const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
   return profile?.id ?? null;
 };
 
-// ─── Helpers: read/write nested content JSON ──────────────────────────────
 const readContent = (resume: any) => (resume.content as any) ?? {};
 const readAI = (resume: any) => (resume.aiSuggestions as any) ?? {};
 
@@ -23,13 +25,11 @@ const pushVersion = (contentData: any, label?: string) => {
       htmlContent: contentData.htmlContent,
       savedAt: new Date().toISOString(),
     });
-    // Keep max 20 versions
     if (versions.length > 20) versions.shift();
   }
   contentData.versions = versions;
 };
 
-// ─── Upload & Analyse ─────────────────────────────────────────────────────
 export const uploadAndAnalyze = async (req: Request, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -56,7 +56,7 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
       parsedData: analysis.parsedData ?? {},
       atsBreakdown: analysis.atsBreakdown ?? {},
       autoCorrectedText: analysis.autoCorrectedText ?? null,
-      htmlContent: null, // generated on first editor open via /convert
+      htmlContent: null, 
       margins: { top: 60, right: 72, bottom: 60, left: 72 },
       template: 'default',
       versions: [],
@@ -94,7 +94,87 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Generate Fresh CV ────────────────────────────────────────────────────
+const compileResumeHtml = (data: any): string => {
+  const headingStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; margin-bottom: 5px;";
+  const sectionTitleStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-top: 20px;";
+  const bodyStyle = "color: #333; font-family: 'Georgia, serif'; font-size: 14px; line-height: 1.5;";
+  const subStyle = "color: #555; font-family: Arial, sans-serif; font-size: 13px;";
+  const linkStyle = "color: #2563EB; text-decoration: none; margin-right: 10px;";
+
+  let html = `<h1 style="${headingStyle}">${data.fullName || ''}</h1>`;
+  
+  // Contact Section
+  html += `<p style="${bodyStyle}">`;
+  if (data.contact?.email) html += `Email: ${data.contact.email} | `;
+  if (data.contact?.phone) html += `Phone: ${data.contact.phone} | `;
+  if (data.contact?.location) html += `Location: ${data.contact.location}<br>`;
+  if (data.contact?.links) {
+    html += data.contact.links.map((link: string) => `<a style="${linkStyle}" href="${link}">${link}</a>`).join(' ');
+  }
+  html += `</p><hr>`;
+
+  // Summary Section
+  if (data.summary) {
+    html += `<h2 style="${sectionTitleStyle}">Professional Summary</h2>`;
+    html += `<p style="${bodyStyle}">${data.summary}</p>`;
+  }
+
+  // Skills Section
+  if (data.skills?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Skills</h2>`;
+    html += `<p style="${bodyStyle}"><strong>Core Competencies:</strong> ${data.skills.join(', ')}</p>`;
+  }
+
+  // Experience Section
+  if (data.experience?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Professional Experience</h2>`;
+    data.experience.forEach((exp: any) => {
+      html += `<p style="${bodyStyle}"><strong>${exp.company}</strong> — <em>${exp.role}</em> <span style="${subStyle}">(${exp.duration || ''})</span></p>`;
+      if (exp.bullets?.length) {
+        html += `<ul style="${bodyStyle}">`;
+        exp.bullets.forEach((b: string) => html += `<li>${b}</li>`);
+        html += `</ul>`;
+      }
+    });
+  }
+
+  // Projects Section
+  if (data.projects?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Key Projects</h2>`;
+    data.projects.forEach((proj: any) => {
+      html += `<p style="${bodyStyle}"><strong>${proj.name}</strong> ${proj.technologies ? `(${proj.technologies.join(', ')})` : ''}<br>${proj.description}</p>`;
+    });
+  }
+
+  // Education Section
+  if (data.education?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Education</h2>`;
+    data.education.forEach((edu: any) => {
+      html += `<p style="${bodyStyle}"><strong>${edu.institution}</strong> — ${edu.degree} ${edu.field ? `in ${edu.field}` : ''} <span style="${subStyle}">(${edu.duration || ''})</span><br>${edu.details || ''}</p>`;
+    });
+  }
+
+  // Certifications Section
+  if (data.certifications?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Certifications</h2>`;
+    html += `<ul style="${bodyStyle}">` + data.certifications.map((c: string) => `<li>${c}</li>`).join('') + `</ul>`;
+  }
+
+  // Languages Section
+  if (data.languages?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Languages</h2>`;
+    html += `<p style="${bodyStyle}">${data.languages.join(', ')}</p>`;
+  }
+
+  // Achievements Section
+  if (data.achievements?.length) {
+    html += `<h2 style="${sectionTitleStyle}">Key Achievements</h2>`;
+    html += `<ul style="${bodyStyle}">` + data.achievements.map((a: string) => `<li>${a}</li>`).join('') + `</ul>`;
+  }
+
+  return html;
+};
+
 export const generateCV = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -107,9 +187,10 @@ export const generateCV = async (req: Request, res: Response) => {
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
 
     const generated = await generateFreshCV(profile, customPrompt, jobDescription);
+    const finalHtmlContent = generated.resumeData ? compileResumeHtml(generated.resumeData) : '';
 
     const contentData = {
-      htmlContent: generated.htmlContent ?? '',
+      htmlContent: finalHtmlContent,
       atsBreakdown: generated.atsBreakdown ?? {},
       margins: { top: 60, right: 72, bottom: 60, left: 72 },
       template: 'default',
@@ -146,7 +227,90 @@ export const generateCV = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Convert uploaded resume to editable HTML ─────────────────────────────
+export const downloadUploadedPDF = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+
+    const profileId = await getProfileId(userId);
+    if (!profileId) {
+      return res.status(404).json({ success: false, message: 'Job seeker profile records mismatched.' });
+    }
+
+    const resume = await prisma.resume.findFirst({
+      where: { id, jobSeekerProfileId: profileId },
+    });
+
+    if (!resume) {
+      return res.status(404).json({ success: false, message: 'Document reference could not be found.' });
+    }
+
+    const safeDocumentName = resume.name.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume';
+    const clientSideFilename = `${safeDocumentName}.pdf`;
+
+    // ─── CASE 1: PHYSICAL STORAGE ATTACHMENT (UPLOADED FILE) ───────────
+    if (resume.filePath) {
+      const absoluteDiskPath = path.resolve(resume.filePath);
+
+      if (fs.existsSync(absoluteDiskPath)) {
+        return res.download(absoluteDiskPath, clientSideFilename, (err) => {
+          if (err && !res.headersSent) {
+            return res.status(500).json({ success: false, message: 'File transfer pipe interrupted.' });
+          }
+        });
+      }
+      console.warn(`File expected on disk but missing at: ${absoluteDiskPath}. Falling back to dynamic HTML stream.`);
+    }
+
+    // ─── CASE 2: VIRTUAL MEMORY RENDERING (BUILT / AI OPTIMIZED RESUME) ───
+    const contentData = readContent(resume);
+    let htmlContent = contentData.htmlContent;
+
+    if (!htmlContent && contentData.parsedData) {
+      htmlContent = compileResumeHtml(contentData.parsedData);
+    }
+
+    if (!htmlContent) {
+      return res.status(422).json({ 
+        success: false, 
+        message: 'This specific record does not contain renderable canvas content.' 
+      });
+    }
+
+    const margins = contentData.margins ?? { top: 60, right: 72, bottom: 60, left: 72 };
+    const pdfOptions = {
+      format: 'A4',
+      margin: {
+        top: `${margins.top}px`,
+        right: `${margins.right}px`,
+        bottom: `${margins.bottom}px`,
+        left: `${margins.left}px`,
+      },
+      printBackground: true,
+    };
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${clientSideFilename}"`);
+
+    htmlPdf.generatePdf({ content: htmlContent }, pdfOptions)
+      .then((pdfBuffer: Buffer) => {
+        return res.status(200).send(pdfBuffer);
+      })
+      .catch((pdfErr: Error) => {
+        console.error('PDF Engine generation pipeline exception:', pdfErr);
+        if (!res.headersSent) {
+          return res.status(500).json({ success: false, message: 'PDF translation engine failed.' });
+        }
+      });
+
+  } catch (err) {
+    console.error('System Failure within downloadUploadedPDF route execution:', err);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: 'Internal Server Error handling document downstream extraction.' });
+    }
+  }
+};
+
 export const convertResumeToHTML = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -171,7 +335,6 @@ export const convertResumeToHTML = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Optimise for Job Description ─────────────────────────────────────────
 export const optimizeResume = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -191,7 +354,6 @@ export const optimizeResume = async (req: Request, res: Response) => {
 
     const result = await optimizeForJD(contentData.htmlContent, jobDescription);
 
-    // Push version before overwriting
     pushVersion(contentData, 'Before JD optimization');
     contentData.htmlContent = result.htmlContent ?? contentData.htmlContent;
 
@@ -214,7 +376,6 @@ export const optimizeResume = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Get keyword suggestions ──────────────────────────────────────────────
 export const getKeywordSuggestions = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -235,7 +396,6 @@ export const getKeywordSuggestions = async (req: Request, res: Response) => {
   }
 };
 
-// ─── CRUD ─────────────────────────────────────────────────────────────────
 export const getAllResumes = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -246,13 +406,21 @@ export const getAllResumes = async (req: Request, res: Response) => {
       where: { jobSeekerProfileId: profileId },
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, name: true, source: true, atsScore: true, isPrimary: true,
-        aiSuggestions: true, content: true, createdAt: true, updatedAt: true,
+        id: true,
+        name: true,
+        source: true,
+        atsScore: true,
+        isPrimary: true,
+        createdAt: true,
+        updatedAt: true,
+        aiSuggestions: true,
       },
     });
+    
     return res.json({ success: true, data: resumes });
   } catch (err) {
-    return res.status(500).json({ success: false, message: 'Failed to fetch' });
+    console.error('getAllResumes error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch resume index metrics.' });
   }
 };
 
@@ -306,7 +474,6 @@ export const updateResume = async (req: Request, res: Response) => {
   }
 };
 
-// ─── Restore a version ───────────────────────────────────────────────────
 export const restoreVersion = async (req: Request, res: Response) => {
   try {
     const { id, versionId } = req.params;
@@ -321,7 +488,6 @@ export const restoreVersion = async (req: Request, res: Response) => {
     const version = (contentData.versions ?? []).find((v: any) => v.id === versionId);
     if (!version) return res.status(404).json({ success: false, message: 'Version not found' });
 
-    // Save current as version before restoring
     pushVersion(contentData, 'Before restore');
     contentData.htmlContent = version.htmlContent;
 
@@ -347,5 +513,166 @@ export const deleteResume = async (req: Request, res: Response) => {
     return res.json({ success: true, message: 'Deleted' });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to delete' });
+  }
+};
+
+export const downloadResume = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+    if (!profileId) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
+    if (!resume) return res.status(404).json({ success: false, message: 'Not found' });
+    if (!resume.filePath || !fs.existsSync(resume.filePath)) return res.status(404).json({ success: false, message: 'File not found' });
+
+    res.download(resume.filePath, resume.name + (resume.filePath.endsWith('.pdf') ? '.pdf' : '.docx'));
+  } catch (err) {
+    console.error('downloadResume error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to download' });
+  }
+};
+
+export const scoreContentOnly = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+    if (!profileId) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
+    if (!resume) return res.status(404).json({ success: false, message: 'Resume not found' });
+
+    const contentData = readContent(resume);
+    if (!contentData.htmlContent) return res.status(422).json({ success: false, message: 'No HTML content to score' });
+
+    const result = await scoreResumeContent(contentData.htmlContent);
+    
+    const aiData = readAI(resume);
+    aiData.scores = result.scores ?? aiData.scores;
+    aiData.strengths = result.strengths ?? aiData.strengths;
+    aiData.improvements = result.improvements ?? aiData.improvements;
+    aiData.missingSections = result.missingSections ?? aiData.missingSections;
+    aiData.keywordGaps = result.keywordGaps ?? aiData.keywordGaps;
+
+    const atsScore = result.scores?.ats ?? resume.atsScore;
+    contentData.atsBreakdown = result.atsBreakdown ?? contentData.atsBreakdown;
+
+    await prisma.resume.update({
+      where: { id },
+      data: { content: contentData, aiSuggestions: aiData, atsScore },
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('scoreContentOnly error:', err);
+    return res.status(500).json({ success: false, message: 'Scoring failed' });
+  }
+};
+
+export const getInlineSuggestions = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.userId;
+    const profileId = await getProfileId(userId);
+    if (!profileId) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
+    if (!resume) return res.status(404).json({ success: false, message: 'Resume not found' });
+
+    const contentData = readContent(resume);
+    if (!contentData.htmlContent) return res.status(422).json({ success: false, message: 'Open in editor first' });
+
+    const result = await generateInlineSuggestions(contentData.htmlContent);
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to generate suggestions' });
+  }
+};
+
+export const improveSelectedText = async (req: Request, res: Response) => {
+  try {
+    // Check if the user object is properly mounted by your authentication middleware
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized profile request access' });
+    }
+
+    const { selectedText, action, customPrompt, context } = req.body;
+
+    if (!selectedText?.trim()) {
+      return res.status(400).json({ success: false, message: 'No text provided' });
+    }
+    if (!['grammar', 'rewrite', 'custom'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Invalid action parameter passed' });
+    }
+    if (action === 'custom' && !customPrompt?.trim()) {
+      return res.status(400).json({ success: false, message: 'Custom prompt required' });
+    }
+
+    const result = await processTextSelection(selectedText, action, customPrompt, context);
+    
+    return res.json({ success: true, data: result });
+  } catch (err: any) {
+    // Explicitly trace the complete stack trace error output to your server terminal console
+    console.error('Fatal internal failure inside improveSelectedText controller:', err);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Text processing failed', 
+      error: err?.message || 'Unknown processing error' 
+    });
+  }
+};
+
+export const generateRegionalCV = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { country, style, jobDescription } = req.body;
+
+    if (!country) return res.status(400).json({ success: false, message: 'Country required' });
+
+    const profile = await prisma.jobSeekerProfile.findUnique({
+      where: { userId },
+      include: { skills: true, education: true, experience: true, projects: true, certifications: true, languages: true, achievements: true },
+    });
+    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+
+    const result = await generateRegionalResumeTemplate(profile, country, style || 'modern', jobDescription);
+    
+    const contentData = {
+      htmlContent: result.htmlContent ?? '',
+      atsBreakdown: {},
+      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      template: `${country}-${style || 'modern'}`,
+      versions: [],
+      country,
+      style: style || 'modern',
+      culturalNotes: result.culturalNotes,
+    };
+
+    const aiData = {
+      scores: result.scores ?? {},
+      strengths: [],
+      improvements: {},
+      missingSections: [],
+      keywordGaps: [],
+    };
+
+    const resume = await prisma.resume.create({
+      data: {
+        jobSeekerProfileId: profile.id,
+        name: `${profile.fullName ?? 'My'} Resume — ${country} ${style || 'Modern'}`,
+        source: 'built',
+        atsScore: result.scores?.ats ?? null,
+        content: contentData,
+        aiSuggestions: aiData,
+        isPrimary: false,
+      },
+    });
+
+    return res.status(201).json({ success: true, data: resume });
+  } catch (err) {
+    console.error('generateRegionalCV error:', err);
+    return res.status(500).json({ success: false, message: 'Regional CV generation failed' });
   }
 };

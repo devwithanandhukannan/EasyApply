@@ -5,20 +5,45 @@ interface AuthRequest extends Request {
   user?: { userId: string; mobileNumber: string; role: string };
 }
 
-// Helper: convert buffer to base64
+const calculateCompletionScore = (profile: any): number => {
+  let score = 0;
+
+  // 1. Core Profile Details (Max 30%)
+  if (profile.fullName?.trim()) score += 3;
+  if (profile.email?.trim()) score += 6;
+  if (profile.phone?.trim()) score += 10;
+
+  // 2. Personal & Professional Base (Max 35%)
+  if (profile.bio?.trim()) score += 10;
+  if (profile.location?.trim()) score += 10;
+  if (profile.skills && profile.skills.length > 0) {
+    score += profile.skills.length >= 3 ? 15 : profile.skills.length * 5;
+  }
+
+  // 3. Experience, Education & Credentials (Max 35%)
+  if (profile.education && profile.education.length > 0) score += 15;
+  if ((profile.experience && profile.experience.length > 0) || (profile.projects && profile.projects.length > 0)) {
+    score += 15;
+  }
+  if ((profile.certifications && profile.certifications.length > 0) || profile.linkedin?.trim() || profile.github?.trim()) {
+    score += 5;
+  }
+
+  return Math.min(score, 100);
+};
+
 const bufferToBase64 = (buffer: Buffer, mimeType: string): string => {
   return `data:${mimeType};base64,${buffer.toString('base64')}`;
 };
 
-// GET /api/jobseeker/profile
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
+    console.log('Received getProfile request for userId:', req.user?.userId);
     const userId = req.user?.userId;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Include sub-sections off the JobSeekerProfile instead of the User
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
       include: {
@@ -37,10 +62,12 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Job Seeker profile not found' });
     }
 
-    // Safely parse JSON database properties
+    const completionScore = calculateCompletionScore(profile);
     const preferences = (profile.jobPreferences as any) || {};
 
     const profileData = {
+      completionScore,
+      availabilityStatus: profile.availabilityStatus || 'available', // ✅ FIXED: Added this field
       fullName: profile.fullName || '',
       email: profile.email || '',
       phone: profile.phone || '',
@@ -49,7 +76,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       github: profile.github || '',
       portfolio: profile.portfolio || '',
       bio: profile.bio || '',
-      profilePic: profile.profilePhotoUrl || null,
+      profilePic: profile.profilePhotoUrl || null, // ✅ FIXED: Correct field name
       preferences: {
         roles: preferences.roles || [],
         industries: preferences.industries || [],
@@ -115,14 +142,17 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       })),
     };
 
-    return res.json(profileData);
+    // ✅ FIXED: Wrap response in success format for consistency
+    return res.json({
+      success: true,
+      data: profileData
+    });
   } catch (error) {
     console.error('Get profile error:', error);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// PUT /api/jobseeker/profile
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   console.log('Received updateProfile request with body:', req.body);
   try {
@@ -131,12 +161,64 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
+    if (req.body.availabilityStatus !== undefined && !req.body.profileData) {
+      const inputStatus = String(req.body.availabilityStatus).trim().toLowerCase();
+      
+      let cleanStatus: 'available' | 'not_available' | 'spot_available' = 'available';
+      if (inputStatus === 'spot_available') {
+        cleanStatus = 'spot_available';
+      } else if (inputStatus === 'not_available' || inputStatus === 'unavailable') {
+        cleanStatus = 'not_available';
+      }
+
+      // Check if profile exists first to avoid duplicate email issues
+      const existingProfile = await prisma.jobSeekerProfile.findUnique({
+        where: { userId }
+      });
+
+      const updatedProfile = await prisma.jobSeekerProfile.upsert({
+        where: { userId },
+        update: { availabilityStatus: cleanStatus },
+        create: {
+          userId,
+          availabilityStatus: cleanStatus,
+          fullName: 'Candidate',
+          email: existingProfile?.email || `candidate-${userId}@temp-internal.local`
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: 'Availability status updated successfully',
+        data: { availabilityStatus: updatedProfile.availabilityStatus }
+      });
+    }
+
+    // ✅ STANDARD WORKFLOW: Full profile update
     if (!req.body.profileData) {
       return res.status(400).json({ error: 'Missing profileData key in request body' });
     }
 
-    // Parse profile data from form-data payload
     const profileData = JSON.parse(req.body.profileData);
+    const targetEmail = profileData.email?.trim() || '';
+
+    // 🛑 EMAIL CHECK RULE: Verify if email is already taken by another account
+    if (targetEmail) {
+      const emailConflict = await prisma.jobSeekerProfile.findFirst({
+        where: {
+          email: targetEmail,
+          NOT: { userId: userId } // Exclude current user checking their own profile
+        }
+      });
+
+      if (emailConflict) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'email already existed' 
+        });
+      }
+    }
+
     let profilePicBase64: string | null = profileData.profilePic || null;
 
     if (req.file) {
@@ -145,7 +227,6 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 
     const cleanStr = (val: any) => (val && val.trim() !== '' ? val.trim() : null);
 
-    // Structure preferences payload into a clean unified JSON block matching the schema
     const jobPreferencesJson = {
       roles: profileData.preferences?.roles || [],
       industries: profileData.preferences?.industries || [],
@@ -156,39 +237,38 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
     };
 
     await prisma.$transaction(async (tx) => {
-      // 1. Upsert the Core JobSeekerProfile (which now holds email and fullName fields)
       const seekerProfile = await tx.jobSeekerProfile.upsert({
         where: { userId },
         update: {
           fullName: profileData.fullName?.trim() || 'Candidate',
-          email: profileData.email?.trim() || '',
+          email: targetEmail,
           phone: cleanStr(profileData.phone),
           location: cleanStr(profileData.location),
           linkedin: cleanStr(profileData.linkedin),
           github: cleanStr(profileData.github),
           portfolio: cleanStr(profileData.portfolio),
           bio: cleanStr(profileData.bio),
-          profilePhotoUrl: profilePicBase64,
+          profilePhotoUrl: profilePicBase64, 
           jobPreferences: jobPreferencesJson,
         },
         create: {
           userId,
           fullName: profileData.fullName?.trim() || 'Candidate',
-          email: profileData.email?.trim() || '',
+          email: targetEmail,
           phone: cleanStr(profileData.phone),
           location: cleanStr(profileData.location),
           linkedin: cleanStr(profileData.linkedin),
           github: cleanStr(profileData.github),
           portfolio: cleanStr(profileData.portfolio),
           bio: cleanStr(profileData.bio),
-          profilePhotoUrl: profilePicBase64,
+          profilePhotoUrl: profilePicBase64, 
           jobPreferences: jobPreferencesJson,
         },
       });
 
       const profileId = seekerProfile.id;
 
-      // 2. Skills: Delete and create relative to profileId
+      // Skills
       await tx.skill.deleteMany({ where: { jobSeekerProfileId: profileId } });
       const validSkills = (profileData.skills || []).filter((name: string) => name && name.trim() !== '');
       if (validSkills.length > 0) {
@@ -197,7 +277,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // 3. Education: Reference jobSeekerProfileId
+      // Education
       await tx.education.deleteMany({ where: { jobSeekerProfileId: profileId } });
       const validEdu = (profileData.education || []).filter((edu: any) => edu.institution && edu.institution.trim() !== '');
       if (validEdu.length > 0) {
@@ -218,7 +298,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // 4. Experience: Reference jobSeekerProfileId
+      // Experience
       await tx.experience.deleteMany({ where: { jobSeekerProfileId: profileId } });
       const validExp = (profileData.experience || []).filter((exp: any) => exp.company && exp.company.trim() !== '');
       if (validExp.length > 0) {
@@ -239,7 +319,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // 5. Projects: Reference jobSeekerProfileId
+      // Projects
       await tx.project.deleteMany({ where: { jobSeekerProfileId: profileId } });
       const validProjects = (profileData.projects || []).filter((p: any) => p.name && p.name.trim() !== '');
       if (validProjects.length > 0) {
@@ -257,7 +337,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // 6. Certifications
+      // Certifications
       await tx.certification.deleteMany({ where: { jobSeekerProfileId: profileId } });
       const validCerts = (profileData.certifications || []).filter((c: any) => c.name && c.name.trim() !== '');
       if (validCerts.length > 0) {
@@ -272,7 +352,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // 7. Languages
+      // Languages
       await tx.language.deleteMany({ where: { jobSeekerProfileId: profileId } });
       const validLangs = (profileData.languages || []).filter((l: any) => l.language && l.language.trim() !== '');
       if (validLangs.length > 0) {
@@ -285,7 +365,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         });
       }
 
-      // 8. Achievements
+      // Achievements
       await tx.achievement.deleteMany({ where: { jobSeekerProfileId: profileId } });
       const validAchievements = (profileData.achievements || []).filter((a: any) => a.title && a.title.trim() !== '');
       if (validAchievements.length > 0) {
@@ -300,9 +380,15 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    return res.json({ message: 'Profile updated successfully' });
+    return res.json({ 
+      success: true, 
+      message: 'Profile updated successfully' 
+    });
   } catch (error) {
     console.error('Update profile error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
   }
 };

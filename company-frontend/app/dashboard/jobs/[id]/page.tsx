@@ -5,58 +5,80 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, MapPin, Clock, DollarSign, Users, Calendar,
   Edit, Trash2, Building2, Target, ChevronRight,
-  Sparkles, UserCheck, UserX, Eye, BarChart3, CheckSquare, Square, Check
+  Sparkles, UserCheck, UserX, Eye, BarChart3,
+  CheckSquare, Square, Check, Filter, X, MoveHorizontal
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import JobPostingModal from '@/app/components/JobPostingModal';
 import AIFilterModal from '@/app/components/AIFilterModal';
 import ScheduleInterviewsModal from '@/app/components/ScheduleInterviewsModal';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 const STATUS_STYLES: Record<string, string> = {
   active:      'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   closed:      'bg-red-500/10 text-red-400 border-red-500/20',
   draft:       'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
   applied:     'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  reviewed:    'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  shortlisted: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  interview:   'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-  offer:       'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  screened:    'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
+  technical_round: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  hr_round:    'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+  offer_sent:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
   hired:       'bg-green-500/10 text-green-400 border-green-500/20',
   rejected:    'bg-red-500/10 text-red-400 border-red-500/20',
 };
 
-export default function JobDetailsPage() {
-  const params  = useParams();
-  const router  = useRouter();
+const STAGE_COLUMNS = [
+  { key: 'applied', label: 'Applied' },
+  { key: 'screened', label: 'Screened' },
+  { key: 'technical_round', label: 'Technical Round' },
+  { key: 'hr_round', label: 'HR Round' },
+  { key: 'offer_sent', label: 'Offer Sent' },
+  { key: 'hired', label: 'Hired' },
+  { key: 'rejected', label: 'Rejected' }
+];
 
-  const [job,           setJob]           = useState<any>(null);
-  const [applications,  setApplications]  = useState<any[]>([]);
-  const [statusFilter,  setStatusFilter]  = useState('all');
-  const [activeTab,     setActiveTab]     = useState<'details' | 'applicants'>('details');
-  const [isLoading,     setIsLoading]     = useState(true);
-  const [appsLoading,   setAppsLoading]   = useState(false);
-  const [isDeleting,    setIsDeleting]    = useState(false);
-  const [editOpen,      setEditOpen]      = useState(false);
-  const [aiFilterOpen,  setAiFilterOpen]  = useState(false);
+export default function JobDetailsPage() {
+  const { showToast } = useGlassToast();
+  const params = useParams();
+  const router = useRouter();
+
+  const [job, setJob] = useState<any>(null);
+  const [applications, setApplications] = useState<any[]>([]);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState<'details' | 'applicants'>('details');
+  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+  const [isLoading, setIsLoading] = useState(true);
+  const [appsLoading, setAppsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [aiFilterOpen, setAiFilterOpen] = useState(false);
   
-  // Advanced Filter state variables
-  const [minAtsScore,   setMinAtsScore]   = useState<number>(0);
-  const [searchQuery,   setSearchQuery]   = useState<string>('');
+  // Filter state
+  const [minAtsScore, setMinAtsScore] = useState<number>(0);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showFilters, setShowFilters] = useState(false);
   
-  // Selection and Batch Orchestration State
+  // Selection & batch
   const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
 
-  useEffect(() => { if (params.id) fetchJob(); }, [params.id]);
   useEffect(() => {
-    if (activeTab === 'applicants' && params.id) fetchApplications();
-  }, [activeTab, statusFilter, params.id]);
-  
-  const fetchJob = async () => {
+    if (params.id) initPageData();
+  }, [params.id]);
+
+  useEffect(() => {
+    if (params.id && !isLoading) fetchApplications();
+  }, [statusFilter]);
+
+  const initPageData = async () => {
     try {
       setIsLoading(true);
-      const r = await api.get(`/company/jobs/${params.id}`);
-      setJob(r.data.job);
+      const [jobRes, appsRes] = await Promise.all([
+        api.get(`/company/jobs/${params.id}`),
+        api.get(`/company/jobs/${params.id}/applications`)
+      ]);
+      setJob(jobRes.data.job);
+      setApplications(appsRes.data.applications || []);
     } catch {
       router.push('/dashboard/jobs');
     } finally {
@@ -72,7 +94,7 @@ export default function JobDetailsPage() {
         : `/company/jobs/${params.id}/applications?status=${statusFilter}`;
       const r = await api.get(url);
       setApplications(r.data.applications || []);
-      setSelectedApplicationIds([]); // Reset select queue on filter change
+      setSelectedApplicationIds([]);
     } catch (e) {
       console.error(e);
     } finally {
@@ -86,24 +108,65 @@ export default function JobDetailsPage() {
       setIsDeleting(true);
       await api.delete(`/company/jobs/${params.id}`);
       router.push('/dashboard/jobs');
-    } catch { alert('Failed to delete job.'); }
+    } catch { showToast('failed', 'Failed to delete job.', 'danger'); }
     finally { setIsDeleting(false); }
   };
 
-  // Process pipeline matching layers on the client side
+  // Drag & drop handlers
+  const handleDragStart = (e: React.DragEvent, appId: string, sourceStatus: string) => {
+    e.dataTransfer.setData('applicationId', appId);
+    e.dataTransfer.setData('sourceStatus', sourceStatus);
+  };
+
+  const handleDrop = async (e: React.DragEvent, destinationStatus: string) => {
+    e.preventDefault();
+    const appId = e.dataTransfer.getData('applicationId');
+    const sourceStatus = e.dataTransfer.getData('sourceStatus');
+    if (!appId || sourceStatus === destinationStatus) return;
+
+    setApplications(prev => prev.map(app =>
+      (app.applicationId === appId || app.id === appId) ? { ...app, status: destinationStatus } : app
+    ));
+
+    try {
+      await api.patch('/kanban/move-card', {
+        applicationId: appId,
+        jobPostingId: params.id,
+        sourceStatus,
+        destinationStatus,
+        newIndex: 0
+      });
+    } catch (err) {
+      console.error('Failed to move card', err);
+      fetchApplications();
+    }
+  };
+
+  // Filter applicants
   const displayedApplications = applications.filter((app: any) => {
     const matchesAts = (app.resume?.atsScore ?? 0) >= minAtsScore;
+    const profile = app.candidate || app.jobSeekerProfile || {};
     const matchesSearch = !searchQuery ? true : (
-      app.candidate?.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.candidate?.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      app.candidate?.skills?.some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
+      profile.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      profile.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      profile.skills?.some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
     );
     return matchesAts && matchesSearch;
   });
 
+  const getKanbanColumnsData = () => {
+    const board: Record<string, any[]> = {
+      applied: [], screened: [], technical_round: [], hr_round: [], offer_sent: [], hired: [], rejected: []
+    };
+    displayedApplications.forEach(app => {
+      if (board[app.status]) board[app.status].push(app);
+    });
+    return board;
+  };
+
   const toggleSelectCandidate = (appId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Avoid triggering details navigation route on card container
-    setSelectedApplicationIds(prev => 
+    e.stopPropagation();
+    setSelectedApplicationIds(prev =>
       prev.includes(appId) ? prev.filter(id => id !== appId) : [...prev, appId]
     );
   };
@@ -112,7 +175,7 @@ export default function JobDetailsPage() {
     if (selectedApplicationIds.length === displayedApplications.length) {
       setSelectedApplicationIds([]);
     } else {
-      setSelectedApplicationIds(displayedApplications.map((app: any) => app.applicationId));
+      setSelectedApplicationIds(displayedApplications.map((app: any) => app.applicationId || app.id));
     }
   };
 
@@ -123,99 +186,140 @@ export default function JobDetailsPage() {
   };
 
   if (isLoading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-800 border-t-white" />
+    <div className="flex items-center justify-center min-h-screen bg-black">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
     </div>
   );
   if (!job) return null;
 
   const totalApps = applications.length;
+  const kanbanData = getKanbanColumnsData();
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-
-      {/* Back */}
+    <div className="max-w-7xl mx-auto space-y-6 px-4 sm:px-6 py-6 bg-black min-h-screen text-zinc-300">
+      
+      {/* Back button */}
       <button onClick={() => router.push('/dashboard/jobs')}
-        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Back to Jobs
+        className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-white transition-colors">
+        <ArrowLeft size={16} /> Back to Jobs
       </button>
 
-      {/* Header card */}
-      <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-6">
-        <div className="flex items-start justify-between mb-6">
+      {/* Job header card */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">{job.title}</h1>
-            <div className="flex items-center gap-4 text-zinc-500 text-sm">
-              {job.department && <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5" />{job.department}</span>}
-              <span className="flex items-center gap-1.5"><Calendar className="h-3.5 w-3.5" />Posted {new Date(job.createdAt).toLocaleDateString()}</span>
+            <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-500">
+              {job.department && (
+                <span className="flex items-center gap-1.5">
+                  <Building2 size={14} /> {job.department}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5">
+                <Calendar size={14} /> Posted {new Date(job.createdAt).toLocaleDateString()}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${STATUS_STYLES[job.status] ?? STATUS_STYLES.active}`}>
+            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${STATUS_STYLES[job.status] || STATUS_STYLES.active}`}>
               {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
             </span>
             <button onClick={() => setEditOpen(true)}
-              className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-white transition-colors">
-              <Edit className="h-4 w-4" />
+              className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white transition-colors">
+              <Edit size={16} />
             </button>
             <button onClick={handleDelete} disabled={isDeleting}
-              className="p-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-red-400 transition-colors disabled:opacity-50">
-              <Trash2 className="h-4 w-4" />
+              className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors disabled:opacity-50">
+              <Trash2 size={16} />
             </button>
           </div>
         </div>
 
-        {/* Quick stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-zinc-900">
-          {[
-            { icon: Clock,     label: 'Job Type',   value: job.jobType },
-            { icon: MapPin,    label: 'Location',   value: job.locationType },
-            { icon: Users,     label: 'Openings',   value: `${job.openings} open` },
-            { icon: BarChart3, label: 'Applicants', value: `${totalApps} total` },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-center gap-3">
-              <div className="p-2 bg-zinc-900 rounded-lg"><Icon className="h-4 w-4 text-zinc-400" /></div>
-              <div>
-                <p className="text-xs text-zinc-500">{label}</p>
-                <p className="text-sm font-medium text-white">{value}</p>
-              </div>
-            </div>
-          ))}
+        {/* Stats row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-zinc-800">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-zinc-800 rounded-lg"><Clock size={16} className="text-zinc-400" /></div>
+            <div><p className="text-xs text-zinc-500">Job Type</p><p className="text-sm font-medium text-white">{job.jobType}</p></div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-zinc-800 rounded-lg"><MapPin size={16} className="text-zinc-400" /></div>
+            <div><p className="text-xs text-zinc-500">Location</p><p className="text-sm font-medium text-white">{job.locationType}</p></div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-zinc-800 rounded-lg"><Users size={16} className="text-zinc-400" /></div>
+            <div><p className="text-xs text-zinc-500">Openings</p><p className="text-sm font-medium text-white">{job.openings} open</p></div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-zinc-800 rounded-lg"><BarChart3 size={16} className="text-zinc-400" /></div>
+            <div><p className="text-xs text-zinc-500">Applicants</p><p className="text-sm font-medium text-white">{totalApps} total</p></div>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-zinc-900 flex gap-6">
-        {(['details', 'applicants'] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
+      {/* Tabs with blinking alert on top of the layout option */}
+      <div className="border-b border-zinc-800 flex justify-between items-center">
+        <div className="flex gap-6">
+          <button onClick={() => setActiveTab('details')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors capitalize ${
-              activeTab === tab ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+              activeTab === 'details' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}>
-            {tab === 'applicants' ? `Applicants (${totalApps})` : 'Job Details'}
+            Job Details
           </button>
-        ))}
+          
+          <button onClick={() => setActiveTab('applicants')}
+            className={`pb-3 text-sm font-medium border-b-2 transition-all capitalize flex items-center gap-1.5 relative ${
+              activeTab === 'applicants' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
+            }`}>
+            <span>Applicants ({totalApps})</span>
+            
+            {/* High-fidelity glowing notification alert pill layer above the element */}
+            {totalApps > 0 && (
+              <span className="absolute -top-1.5 -right-3.5 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.9)]"></span>
+              </span>
+            )}
+          </button>
+        </div>
+        
+        {activeTab === 'applicants' && (
+          <div className="flex bg-zinc-800 rounded-lg p-0.5">
+            <button onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                viewMode === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
+              }`}>
+              List
+            </button>
+            <button onClick={() => setViewMode('kanban')}
+              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                viewMode === 'kanban' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
+              }`}>
+              Kanban
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── DETAILS TAB ── */}
+      {/* Details Tab View */}
       {activeTab === 'details' && (
-        <div className="space-y-4">
-          {(job.location || job.experienceRequired || job.deadline) && (
+        <div className="space-y-6">
+          { (job.location || job.experienceRequired || job.salaryRange) && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {job.location && (
-                <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5">
-                  <p className="text-xs text-zinc-500 mb-1">City</p>
+                <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">City</p>
                   <p className="text-white">{job.location}</p>
                 </div>
               )}
               {job.experienceRequired && (
-                <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5">
-                  <p className="text-xs text-zinc-500 mb-1">Experience</p>
+                <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Experience</p>
                   <p className="text-white">{job.experienceRequired}</p>
                 </div>
               )}
               {job.salaryRange && (
-                <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-5">
-                  <p className="text-xs text-zinc-500 mb-1">Salary Range</p>
+                <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Salary Range</p>
                   <p className="text-white">{job.salaryRange}</p>
                 </div>
               )}
@@ -223,9 +327,9 @@ export default function JobDetailsPage() {
           )}
 
           {job.requiredSkills?.length > 0 && (
-            <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-6">
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
               <div className="flex items-center gap-2 mb-4">
-                <Target className="h-4 w-4 text-zinc-400" />
+                <Target size={16} className="text-zinc-400" />
                 <h3 className="font-semibold text-white text-sm">Required Skills</h3>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -236,7 +340,7 @@ export default function JobDetailsPage() {
             </div>
           )}
 
-          <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-6">
+          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
             <h3 className="font-semibold text-white mb-4">Job Description</h3>
             <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap"
               dangerouslySetInnerHTML={{ __html: job.description.replace(/\n/g, '<br/>') }} />
@@ -244,183 +348,195 @@ export default function JobDetailsPage() {
         </div>
       )}
 
-      {/* ── APPLICANTS TAB ── */}
+      {/* Applicants Tab View */}
       {activeTab === 'applicants' && (
-        <div className="space-y-4">
+        <div className="space-y-5">
+          
+          {/* Stage filter pills */}
+          <div className="flex flex-wrap gap-2">
+            {['all','applied','screened','technical_round','hr_round','offer_sent','hired','rejected'].map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  statusFilter === s
+                    ? 'bg-white text-black'
+                    : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                }`}>
+                {s === 'all' ? 'All Stages' : s.replace('_', ' ')}
+              </button>
+            ))}
+          </div>
 
-          {/* Workflow Stage Toolbar Selector Rows */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap gap-1.5">
-              {['all','applied','reviewed','shortlisted','interview','offer','hired','rejected'].map(s => (
-                <button key={s} onClick={() => setStatusFilter(s)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${
-                    statusFilter === s ? 'bg-white text-black font-semibold' : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-900'
-                  }`}>
-                  {s === 'all' ? 'All Stages' : s}
-                </button>
-              ))}
-            </div>
+          {/* Filter bar toggle & AI button */}
+          <div className="flex justify-between items-center">
+            <button onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-white transition-colors">
+              <Filter size={14} />
+              {showFilters ? 'Hide Filters' : 'Show Filters'}
+            </button>
             <button onClick={() => setAiFilterOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 rounded-lg text-white text-xs font-semibold transition-all shadow-md shadow-indigo-600/10">
-              <Sparkles className="h-3.5 w-3.5" />
-              AI Matching Engine
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg text-xs font-medium text-white hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm">
+              <Sparkles size={14} />
+              AI Match
             </button>
           </div>
 
-          {/* Advanced Local Filtering Stack Shelf */}
-          <div className="bg-zinc-950 border border-zinc-900 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">Candidate Search</label>
-              <input 
-                type="text"
-                placeholder="Filter current view by name, email, or skill set..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-medium text-zinc-500 uppercase tracking-wider">Min ATS Score Threshold</label>
-                <span className="text-xs font-bold text-indigo-400">{minAtsScore}+</span>
+          {/* Advanced filters (collapsible) */}
+          {showFilters && (
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-1">Search by name, email or skill</label>
+                <input type="text" placeholder="e.g., John, frontend, react..."
+                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600" />
               </div>
-              <input 
-                type="range"
-                min="0"
-                max="100"
-                value={minAtsScore}
-                onChange={(e) => setMinAtsScore(Number(e.target.value))}
-                className="w-full accent-white bg-zinc-900 h-1 rounded-lg cursor-pointer"
-              />
-            </div>
-            <div className="flex items-end">
-              {selectedApplicationIds.length > 0 ? (
-                <button
-                  onClick={() => setScheduleModalOpen(true)}
-                  className="w-full py-2 bg-white text-black font-semibold text-xs rounded-lg hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 shadow-xl shadow-white/5"
-                >
-                  <Calendar className="h-3.5 w-3.5" />
-                  Schedule Batch Call ({selectedApplicationIds.length})
-                </button>
-              ) : (
-                <div className="w-full text-center py-2 bg-zinc-900/40 border border-zinc-900 border-dashed rounded-lg text-[11px] text-zinc-500">
-                  Select candidates below to trigger bulk processes
+              <div>
+                <div className="flex justify-between mb-1">
+                  <label className="text-xs font-medium text-zinc-400">Minimum ATS Score</label>
+                  <span className="text-xs font-bold text-indigo-400">{minAtsScore}%</span>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Batch Selector Master Utility Bar Header Component */}
-          {displayedApplications.length > 0 && (
-            <div className="bg-zinc-900/30 border border-zinc-900 rounded-lg px-4 py-2.5 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2.5 text-zinc-400">
-                <button 
-                  onClick={toggleSelectAllVisible}
-                  className="text-zinc-500 hover:text-white transition-colors"
-                >
-                  {selectedApplicationIds.length === displayedApplications.length ? (
-                    <CheckSquare className="h-4 w-4 text-white" />
-                  ) : (
-                    <Square className="h-4 w-4" />
-                  )}
-                </button>
-                <span>
-                  Showing {displayedApplications.length} of {totalApps} profiles filtered 
-                  {selectedApplicationIds.length > 0 && ` (${selectedApplicationIds.length} checked)`}
-                </span>
+                <input type="range" min="0" max="100" value={minAtsScore}
+                  onChange={(e) => setMinAtsScore(Number(e.target.value))}
+                  className="w-full accent-white bg-zinc-800 h-1.5 rounded-lg cursor-pointer" />
               </div>
-              {selectedApplicationIds.length > 0 && (
-                <button 
-                  onClick={() => setSelectedApplicationIds([])}
-                  className="text-zinc-500 hover:text-red-400 text-[11px] transition-colors"
-                >
-                  Clear Selection
-                </button>
-              )}
             </div>
           )}
 
-          {/* List Content Area */}
-          {appsLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-800 border-t-white" />
+          {/* Batch actions bar (only when selected) */}
+          {selectedApplicationIds.length > 0 && (
+            <div className="bg-zinc-800/50 rounded-lg p-3 flex items-center justify-between border border-zinc-700">
+              <span className="text-sm text-white">{selectedApplicationIds.length} candidate(s) selected</span>
+              <button onClick={() => setScheduleModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-1.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+                <Calendar size={14} />
+                Schedule Batch Call
+              </button>
             </div>
+          )}
+
+          {/* Loading / Empty states */}
+          {appsLoading ? (
+            <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-white" /></div>
           ) : displayedApplications.length === 0 ? (
-            <div className="text-center py-16 bg-zinc-950 border border-zinc-900 rounded-xl">
-              <Users className="h-10 w-10 text-zinc-700 mx-auto mb-3" />
+            <div className="text-center py-16 bg-zinc-900 rounded-xl border border-zinc-800">
+              <Users size={40} className="text-zinc-700 mx-auto mb-3" />
               <p className="text-zinc-400 font-medium">No candidates match current criteria</p>
-              <p className="text-zinc-600 text-xs mt-1">Adjust search parameters or check alternative pipeline categories</p>
+              <p className="text-zinc-600 text-xs mt-1">Adjust filters or search query</p>
+            </div>
+          ) : viewMode === 'list' ? (
+            /* List View */
+            <div className="space-y-3">
+              {displayedApplications.length > 1 && (
+                <div className="bg-zinc-900/50 rounded-lg px-4 py-2 flex justify-between items-center text-xs border border-zinc-800">
+                  <button onClick={toggleSelectAllVisible} className="flex items-center gap-2 text-zinc-400 hover:text-white">
+                    {selectedApplicationIds.length === displayedApplications.length ? (
+                      <CheckSquare size={14} />
+                    ) : (
+                      <Square size={14} />
+                    )}
+                    {selectedApplicationIds.length === displayedApplications.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                  <span className="text-zinc-500">{displayedApplications.length} of {totalApps} shown</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                {displayedApplications.map((app: any) => {
+                  const targetId = app.applicationId || app.id;
+                  const isSelected = selectedApplicationIds.includes(targetId);
+                  const profile = app.candidate || app.jobSeekerProfile || {};
+                  return (
+                    <div key={targetId}
+                      onClick={() => router.push(`/dashboard/jobs/${params.id}/applicants/${targetId}`)}
+                      className={`bg-zinc-900 border rounded-xl p-4 cursor-pointer transition-all group flex items-center gap-4 ${
+                        isSelected ? 'border-zinc-600 bg-zinc-800/60' : 'border-zinc-800 hover:border-zinc-700'
+                      }`}>
+                      <div onClick={(e) => toggleSelectCandidate(targetId, e)} className="flex-shrink-0">
+                        {isSelected ? (
+                          <div className="w-4 h-4 rounded bg-white flex items-center justify-center">
+                            <Check size={12} className="text-black" />
+                          </div>
+                        ) : (
+                          <div className="w-4 h-4 rounded border border-zinc-600 group-hover:border-zinc-400" />
+                        )}
+                      </div>
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                        {profile.fullName?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                          <p className="font-semibold text-white text-sm">{profile.fullName}</p>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${STATUS_STYLES[app.status] || ''}`}>
+                            {app.status.replace('_', ' ')}
+                          </span>
+                        </div>
+                        <p className="text-zinc-500 text-xs truncate">{profile.email}</p>
+                      </div>
+                      {app.resume?.atsScore != null && (
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-[10px] text-zinc-500">ATS Score</p>
+                          <p className={`text-sm font-bold ${
+                            app.resume.atsScore >= 70 ? 'text-emerald-400' :
+                            app.resume.atsScore >= 40 ? 'text-yellow-400' : 'text-red-400'
+                          }`}>{app.resume.atsScore}%</p>
+                        </div>
+                      )}
+                      <ChevronRight size={16} className="text-zinc-600 group-hover:text-zinc-400 flex-shrink-0" />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
-            <div className="space-y-2">
-              {displayedApplications.map((app: any) => {
-                const isSelected = selectedApplicationIds.includes(app.applicationId);
+            /* Kanban Board */
+            <div className="flex gap-4 overflow-x-auto pb-4 -mx-1 px-1">
+              {STAGE_COLUMNS.map(col => {
+                const columnCards = kanbanData[col.key] || [];
                 return (
-                  <div key={app.applicationId}
-                    onClick={() => router.push(`/dashboard/jobs/${params.id}/applicants/${app.applicationId}`)}
-                    className={`border rounded-xl p-4 cursor-pointer transition-all group flex items-center gap-4 ${
-                      isSelected 
-                        ? 'bg-zinc-900/60 border-zinc-700' 
-                        : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800'
-                    }`}
-                  >
-                    {/* Multi-Selection Checkbox Area Column */}
-                    <div 
-                      onClick={(e) => toggleSelectCandidate(app.applicationId, e)}
-                      className="p-1 text-zinc-600 hover:text-white transition-colors"
-                    >
-                      {isSelected ? (
-                        <div className="h-4 w-4 rounded bg-white flex items-center justify-center">
-                          <Check className="h-3 w-3 text-black stroke-[3]" />
+                  <div key={col.key}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => handleDrop(e, col.key)}
+                    className="w-80 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col flex-shrink-0 max-h-[70vh]">
+                    <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center rounded-t-xl">
+                      <span className="font-medium text-sm text-white">{col.label}</span>
+                      <span className="bg-zinc-800 px-2 py-0.5 rounded text-xs font-bold text-zinc-400">{columnCards.length}</span>
+                    </div>
+                    <div className="p-2 space-y-2 overflow-y-auto flex-1 min-h-[200px]">
+                      {columnCards.length === 0 ? (
+                        <div className="py-8 text-center text-zinc-600 text-xs border border-dashed border-zinc-800 rounded-lg">
+                          Drop candidates here
                         </div>
                       ) : (
-                        <div className="h-4 w-4 rounded border border-zinc-700 group-hover:border-zinc-500" />
+                        columnCards.map(card => {
+                          const cardId = card.applicationId || card.id;
+                          const profile = card.jobSeekerProfile || card.candidate || {};
+                          return (
+                            <div key={cardId}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, cardId, col.key)}
+                              onClick={() => router.push(`/dashboard/jobs/${params.id}/applicants/${cardId}`)}
+                              className="p-3 bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 rounded-lg cursor-grab active:cursor-grabbing transition-colors group">
+                              <div className="flex justify-between items-start gap-2">
+                                <p className="font-medium text-white text-sm truncate">{profile.fullName || 'Anonymous'}</p>
+                                {card.resume?.atsScore != null && (
+                                  <span className={`text-[10px] font-bold ${
+                                    card.resume.atsScore >= 70 ? 'text-emerald-400' :
+                                    card.resume.atsScore >= 40 ? 'text-yellow-400' : 'text-red-400'
+                                  }`}>{card.resume.atsScore}%</span>
+                                )}
+                              </div>
+                              <p className="text-zinc-400 text-xs truncate mt-0.5">{profile.email}</p>
+                              {profile.skills?.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {profile.skills.slice(0, 2).map((sk: string, i: number) => (
+                                    <span key={i} className="px-1.5 py-0.5 bg-black border border-zinc-700 text-zinc-400 text-[9px] rounded">
+                                      {sk}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
                       )}
-                    </div>
-
-                    {/* Candidate Initials Avatar */}
-                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-                      {app.candidate.fullName?.charAt(0)?.toUpperCase() ?? '?'}
-                    </div>
-
-                    {/* Candidate Context Info Column */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-0.5">
-                        <p className="font-semibold text-white text-sm">{app.candidate.fullName}</p>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${STATUS_STYLES[app.status] ?? ''}`}>
-                          {app.status}
-                        </span>
-                      </div>
-                      <p className="text-zinc-500 text-xs">{app.candidate.email}
-                        {app.candidate.location && <span className="ml-2">· {app.candidate.location}</span>}
-                      </p>
-                      {app.candidate.skills?.length > 0 && (
-                        <div className="flex gap-1.5 mt-2 flex-wrap">
-                          {app.candidate.skills.slice(0, 5).map((sk: string, i: number) => (
-                            <span key={i} className="px-2 py-0.5 bg-zinc-900 text-zinc-400 text-[10px] rounded border border-zinc-800/40">{sk}</span>
-                          ))}
-                          {app.candidate.skills.length > 5 && (
-                            <span className="px-2 py-0.5 bg-zinc-900 text-zinc-500 text-[10px] rounded">+{app.candidate.skills.length - 5}</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ATS Score evaluation analytics metrics framework */}
-                    <div className="flex items-center gap-4 flex-shrink-0">
-                      {app.resume?.atsScore != null && (
-                        <div className="text-right">
-                          <p className="text-[10px] text-zinc-500 uppercase tracking-wider">ATS Score</p>
-                          <p className={`text-sm font-bold ${app.resume.atsScore >= 70 ? 'text-emerald-400' : app.resume.atsScore >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
-                            {app.resume.atsScore}%
-                          </p>
-                        </div>
-                      )}
-                      <div className="text-right hidden sm:block">
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Applied On</p>
-                        <p className="text-zinc-400 text-xs mt-0.5">{new Date(app.appliedAt).toLocaleDateString()}</p>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-zinc-700 group-hover:text-zinc-400 transition-colors" />
                     </div>
                   </div>
                 );
@@ -430,28 +546,10 @@ export default function JobDetailsPage() {
         </div>
       )}
 
-      {/* Mounting Overlay Modal Elements */}
-      <JobPostingModal 
-        isOpen={editOpen} 
-        onClose={() => setEditOpen(false)} 
-        onSuccess={() => { fetchJob(); setEditOpen(false); }} 
-        editJob={job} 
-      />
-      
-      <AIFilterModal 
-        isOpen={aiFilterOpen} 
-        onClose={() => setAiFilterOpen(false)} 
-        jobId={params.id as string} 
-        jobTitle={job.title} 
-      />
-
-      <ScheduleInterviewsModal 
-        isOpen={scheduleModalOpen}
-        onClose={() => setScheduleModalOpen(false)}
-        jobId={params.id as string}
-        selectedApplicationIds={selectedApplicationIds}
-        onSuccess={handleBulkSchedulingSuccess}
-      />
+      {/* Modals Container */}
+      <JobPostingModal isOpen={editOpen} onClose={() => setEditOpen(false)} onSuccess={() => { initPageData(); setEditOpen(false); }} editJob={job} />
+      <AIFilterModal isOpen={aiFilterOpen} onClose={() => setAiFilterOpen(false)} jobId={params.id as string} jobTitle={job.title} />
+      <ScheduleInterviewsModal isOpen={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)} jobId={params.id as string} selectedApplicationIds={selectedApplicationIds} onSuccess={handleBulkSchedulingSuccess} />
     </div>
   );
 }
