@@ -103,7 +103,6 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
       prisma.resume.count({ where: { jobSeekerProfileId: profileId } }),
     ]);
 
-    // Build profile completion score
     const completionFactors = [
       !!profile?.fullName, !!profile?.email, !!profile?.phone,
       !!profile?.location, !!profile?.bio, (profile?.skills?.length ?? 0) >= 3,
@@ -113,7 +112,6 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
       (completionFactors.filter(Boolean).length / completionFactors.length) * 100
     );
 
-    // Aggregate application status counts
     const statusMap = applicationStats.reduce((acc: any, s) => {
       acc[s.status] = s._count.status;
       return acc;
@@ -122,12 +120,10 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
       (a: number, b) => a + (b as number), 0
     ) as number;
 
-    // Active pipeline (not rejected/withdrawn)
     const activeApplications = totalApplications
       - (statusMap.rejected ?? 0)
       - (statusMap.hired ?? 0);
 
-    // Recent activity: last 30 apps bucketed by week
     const weeklyActivity = Array(4).fill(0).map((_, i) => {
       const weekStart = new Date(now.getTime() - (i + 1) * 7 * 86400000);
       const weekEnd = new Date(now.getTime() - i * 7 * 86400000);
@@ -167,7 +163,7 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
           appliedAt: app.appliedAt,
           isWithdrawn: app.isWithdrawn,
           job: {
-            jobId: app.jobPosting.id, // ◄ Added job identifier link from your Prisma schema relations
+            jobId: app.jobPosting.id,
             title: app.jobPosting.title,
             jobType: app.jobPosting.jobType,
             location: app.jobPosting.location,
@@ -221,6 +217,7 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 function buildCompletionTips(profile: any, resume: any): string[] {
   const tips: string[] = [];
   if (!profile?.phone) tips.push('Add your phone number');
@@ -251,14 +248,12 @@ export const getApplicationInsights = async (req: Request, res: Response) => {
       orderBy: { appliedAt: 'asc' }
     });
 
-    // Industry breakdown
     const industryMap: Record<string, number> = {};
     applications.forEach(a => {
       const ind = a.jobPosting.company.industry ?? 'Other';
       industryMap[ind] = (industryMap[ind] ?? 0) + 1;
     });
 
-    // Average ATS score of applied resumes
     const scores = applications
       .map(a => a.resume?.atsScore)
       .filter((s): s is number => s !== null && s !== undefined);
@@ -266,13 +261,11 @@ export const getApplicationInsights = async (req: Request, res: Response) => {
       ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)
       : null;
 
-    // Response rate (got at least one status change beyond 'applied')
     const responded = applications.filter(a => a.statusHistory.length > 1).length;
     const responseRate = applications.length
       ? ((responded / applications.length) * 100).toFixed(1)
       : '0';
 
-    // Time to first response (avg days from applied to first status change)
     const responseTimes = applications
       .filter(a => a.statusHistory.length > 1)
       .map(a => {
@@ -287,7 +280,6 @@ export const getApplicationInsights = async (req: Request, res: Response) => {
       ? (responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length).toFixed(1)
       : null;
 
-    // Monthly application trend (last 6 months)
     const monthlyTrend = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date();

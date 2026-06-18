@@ -199,7 +199,6 @@ const generateOfferPDF = async (offer: any, content: string): Promise<string> =>
         doc.restore();
 
         // ── OPENING PARAGRAPH (flowing, but bounded) ───────────────────────────────
-        // We allow this one to flow — measure it first so we know where table starts
         const openingText = `We are pleased to extend this formal offer of employment for the position of ${offer.position} with ${companyName}. We were incredibly impressed by your qualifications and technical profile during our review cycles, and we believe your skills will make an excellent addition to our team.`;
         
         // Move cursor to opening start
