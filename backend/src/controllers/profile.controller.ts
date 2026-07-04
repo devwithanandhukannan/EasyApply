@@ -47,7 +47,6 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
       include: {
-        user: true, 
         skills: true,
         education: true,
         experience: true,

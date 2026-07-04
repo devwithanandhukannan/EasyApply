@@ -8,8 +8,10 @@ import {
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import AddToTalentPoolModal from '@/app/components/AddToTalentPoolModal';
+import { useAuth } from '@/app/contexts/AuthContext';
 
 export default function ApplicationDetailsPage() {
+  const { isAdmin, isHR } = useAuth();
   const params = useParams();
   const router = useRouter();
   const applicationId = params.applicationId as string;
@@ -118,30 +120,32 @@ export default function ApplicationDetailsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Star Candidate Action */}
-          <button
-            onClick={handleToggleStar}
-            disabled={isStarLoading}
-            className={`p-2 border rounded-lg transition-colors ${
-              appData.isStarred 
-                ? 'border-amber-500/30 bg-amber-950/20 text-amber-400 hover:bg-amber-950/40' 
-                : 'border-zinc-800 bg-zinc-950 text-zinc-500 hover:text-zinc-300'
-            }`}
-            title={appData.isStarred ? "Unstar Candidate" : "Star Candidate"}
-          >
-            <Star className={`w-4 h-4 ${appData.isStarred ? 'fill-current' : ''}`} />
-          </button>
+        {(isAdmin || isHR) && (
+          <div className="flex items-center gap-2">
+            {/* Star Candidate Action */}
+            <button
+              onClick={handleToggleStar}
+              disabled={isStarLoading}
+              className={`p-2 border rounded-lg transition-colors ${
+                appData.isStarred 
+                  ? 'border-amber-500/30 bg-amber-950/20 text-amber-400 hover:bg-amber-950/40' 
+                  : 'border-zinc-800 bg-zinc-950 text-zinc-500 hover:text-zinc-300'
+              }`}
+              title={appData.isStarred ? "Unstar Candidate" : "Star Candidate"}
+            >
+              <Star className={`w-4 h-4 ${appData.isStarred ? 'fill-current' : ''}`} />
+            </button>
 
-          {/* Add to Talent Pool Action */}
-          <button
-            onClick={() => setPoolModalOpen(true)}
-            className="p-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-950 text-zinc-400 hover:text-white rounded-lg transition-colors flex items-center gap-2 text-xs"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add to Pool</span>
-          </button>
-        </div>
+            {/* Add to Talent Pool Action */}
+            <button
+              onClick={() => setPoolModalOpen(true)}
+              className="p-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-950 text-zinc-400 hover:text-white rounded-lg transition-colors flex items-center gap-2 text-xs"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add to Pool</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Grid Layout */}

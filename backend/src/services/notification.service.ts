@@ -23,7 +23,7 @@ if (!admin.apps.length) {
 }
 
 export class NotificationService {
-  static async sendToUser(userId: string, title: string, body: string, deepLinkUrl?: string) {
+  static async sendToUser(userId: string, title: string, body: string, deepLinkUrl?: string): Promise<any> {
     try {
         console.log(`[FCM] Preparing to send notification to User ID: ${userId} with title: "${title}"`);
       const userTokens = await prisma.notificationToken.findMany({
@@ -44,11 +44,11 @@ export class NotificationService {
           title: title,
           body: body,
         },
-        webpush: {
+        webpush: deepLinkUrl ? {
           fcmOptions: {
-            link: deepLinkUrl || undefined,
+            link: deepLinkUrl,
           },
-        },
+        } : undefined,
       };
 
 
@@ -63,7 +63,10 @@ export class NotificationService {
               resp.error?.code === 'messaging/invalid-registration-token' ||
               resp.error?.code === 'messaging/registration-token-not-registered'
             ) {
-              failedTokens.push(registrationTokens[idx]);
+              const token = registrationTokens[idx];
+              if (token) {
+                failedTokens.push(token);
+              }
             }
           }
         });

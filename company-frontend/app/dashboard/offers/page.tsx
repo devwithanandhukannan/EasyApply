@@ -25,6 +25,7 @@ import CreateOfferModal from '@/app/components/CreateOfferModal';
 import SignOfferModal from '@/app/components/SignOfferModal';
 import SendOfferModal from '@/app/components/SendOfferModal';
 import EditOfferModal from '@/app/components/EditOfferModal';
+import { useAuth } from '@/app/contexts/AuthContext';
 
 interface OfferLetter {
   id: string;
@@ -53,6 +54,7 @@ interface OfferLetter {
 }
 
 export default function OffersPage() {
+  const { isAdmin, isHR } = useAuth();
   const [offers, setOffers] = useState<OfferLetter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -158,13 +160,15 @@ export default function OffersPage() {
           <h1 className="text-lg font-semibold tracking-tight text-white uppercase">Offer Letter Pipeline</h1>
           <p className="text-xs text-zinc-500 mt-1">Manage digital offer generation, signatures, and candidate responses.</p>
         </div>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors flex items-center gap-2 text-xs"
-        >
-          <Plus className="w-4 h-4" />
-          Generate Offer Letter
-        </button>
+        {(isAdmin || isHR) && (
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors flex items-center gap-2 text-xs"
+          >
+            <Plus className="w-4 h-4" />
+            Generate Offer Letter
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -302,7 +306,7 @@ export default function OffersPage() {
 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-900/50">
   
   {/* DRAFT STATUS - Edit + Sign */}
-  {offer.status === 'draft' && (
+  {(isAdmin || isHR) && offer.status === 'draft' && (
     <>
       <button
         onClick={() => {
@@ -326,7 +330,7 @@ export default function OffersPage() {
   )}
 
   {/* ✅ NEW: PENDING STATUS WITHOUT SIGNATURE - Show Sign Button */}
-  {offer.status === 'pending' && !offer.companySignature && (
+  {(isAdmin || isHR) && offer.status === 'pending' && !offer.companySignature && (
     <button
       onClick={() => handleSign(offer.id)}
       className="px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
@@ -337,7 +341,7 @@ export default function OffersPage() {
   )}
 
   {/* PENDING STATUS WITH SIGNATURE - Send to Candidate */}
-  {offer.status === 'pending' && offer.companySignature && (
+  {(isAdmin || isHR) && offer.status === 'pending' && offer.companySignature && (
     <button
       onClick={() => handleSend(offer.id)}
       className="px-3 py-1.5 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"

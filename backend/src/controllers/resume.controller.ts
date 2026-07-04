@@ -104,14 +104,20 @@ const compileResumeHtml = (data: any): string => {
   let html = `<h1 style="${headingStyle}">${data.fullName || ''}</h1>`;
   
   // Contact Section
-  html += `<p style="${bodyStyle}">`;
-  if (data.contact?.email) html += `Email: ${data.contact.email} | `;
-  if (data.contact?.phone) html += `Phone: ${data.contact.phone} | `;
-  if (data.contact?.location) html += `Location: ${data.contact.location}<br>`;
+  html += `<p style="${bodyStyle} text-align: center;">`;
+  const contactParts = [];
+  if (data.contact?.location) contactParts.push(data.contact.location);
+  if (data.contact?.phone) contactParts.push(data.contact.phone);
+  if (data.contact?.email) contactParts.push(data.contact.email);
+  html += contactParts.join(' &nbsp;&middot;&nbsp; ');
+  html += `<br>`;
+  
+  const linkParts = [];
   if (data.contact?.links) {
-    html += data.contact.links.map((link: string) => `<a style="${linkStyle}" href="${link}">${link}</a>`).join(' ');
+     data.contact.links.forEach((link: string) => linkParts.push(`<a style="${linkStyle}" href="${link}">${link}</a>`));
   }
-  html += `</p><hr>`;
+  html += linkParts.join(' &nbsp;&middot;&nbsp; ');
+  html += `</p>`;
 
   // Summary Section
   if (data.summary) {
@@ -129,7 +135,7 @@ const compileResumeHtml = (data: any): string => {
   if (data.experience?.length) {
     html += `<h2 style="${sectionTitleStyle}">Professional Experience</h2>`;
     data.experience.forEach((exp: any) => {
-      html += `<p style="${bodyStyle}"><strong>${exp.company}</strong> — <em>${exp.role}</em> <span style="${subStyle}">(${exp.duration || ''})</span></p>`;
+      html += `<p style="${bodyStyle}"><strong>${exp.role}</strong> <span style="float: right;">${exp.duration || ''}</span><br>${exp.company} ${exp.location ? `— ${exp.location}` : ''}</p>`;
       if (exp.bullets?.length) {
         html += `<ul style="${bodyStyle}">`;
         exp.bullets.forEach((b: string) => html += `<li>${b}</li>`);
@@ -140,9 +146,12 @@ const compileResumeHtml = (data: any): string => {
 
   // Projects Section
   if (data.projects?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Key Projects</h2>`;
+    html += `<h2 style="${sectionTitleStyle}">Projects</h2>`;
     data.projects.forEach((proj: any) => {
-      html += `<p style="${bodyStyle}"><strong>${proj.name}</strong> ${proj.technologies ? `(${proj.technologies.join(', ')})` : ''}<br>${proj.description}</p>`;
+      html += `<p style="${bodyStyle}"><strong>${proj.name}</strong> <span style="float: right;">${proj.link || 'GitHub'}</span><br><em>${proj.technologies ? proj.technologies.join(', ') : ''}</em></p>`;
+      if (proj.description) {
+        html += `<ul style="${bodyStyle}"><li>${proj.description}</li></ul>`;
+      }
     });
   }
 
@@ -150,7 +159,7 @@ const compileResumeHtml = (data: any): string => {
   if (data.education?.length) {
     html += `<h2 style="${sectionTitleStyle}">Education</h2>`;
     data.education.forEach((edu: any) => {
-      html += `<p style="${bodyStyle}"><strong>${edu.institution}</strong> — ${edu.degree} ${edu.field ? `in ${edu.field}` : ''} <span style="${subStyle}">(${edu.duration || ''})</span><br>${edu.details || ''}</p>`;
+      html += `<p style="${bodyStyle}"><strong>${edu.degree} ${edu.field ? `(${edu.field})` : ''} — ${edu.institution}</strong> <span style="float: right;">${edu.duration || ''}</span><br>${edu.details || ''}</p>`;
     });
   }
 
@@ -175,6 +184,61 @@ const compileResumeHtml = (data: any): string => {
   return html;
 };
 
+const compileResumeText = (data: any): string => {
+  let text = '';
+  if (data.fullName) text += `${data.fullName}\n`;
+  if (data.contact) {
+    const parts = [];
+    if (data.contact.location) parts.push(data.contact.location);
+    if (data.contact.phone) parts.push(data.contact.phone);
+    if (data.contact.email) parts.push(data.contact.email);
+    if (data.contact.links) parts.push(...data.contact.links);
+    text += parts.join(' | ') + '\n';
+  }
+  if (data.summary) {
+    text += `\nProfessional Summary\n${data.summary}\n`;
+  }
+  if (data.skills && data.skills.length) {
+    text += `\nSkills\n${data.skills.join(', ')}\n`;
+  }
+  if (data.experience && data.experience.length) {
+    text += `\nExperience\n`;
+    data.experience.forEach((exp: any) => {
+      text += `${exp.role} at ${exp.company} (${exp.duration || ''})\n`;
+      if (exp.location) text += `${exp.location}\n`;
+      if (exp.bullets && exp.bullets.length) {
+        exp.bullets.forEach((b: string) => {
+          text += `- ${b}\n`;
+        });
+      }
+    });
+  }
+  if (data.projects && data.projects.length) {
+    text += `\nProjects\n`;
+    data.projects.forEach((proj: any) => {
+      text += `${proj.name} (${proj.technologies ? proj.technologies.join(', ') : ''})\n`;
+      if (proj.description) text += `${proj.description}\n`;
+    });
+  }
+  if (data.education && data.education.length) {
+    text += `\nEducation\n`;
+    data.education.forEach((edu: any) => {
+      text += `${edu.degree} in ${edu.field || ''} - ${edu.institution} (${edu.duration || ''})\n`;
+      if (edu.details) text += `${edu.details}\n`;
+    });
+  }
+  if (data.certifications && data.certifications.length) {
+    text += `\nCertifications\n${data.certifications.join('\n')}\n`;
+  }
+  if (data.languages && data.languages.length) {
+    text += `\nLanguages\n${data.languages.join(', ')}\n`;
+  }
+  if (data.achievements && data.achievements.length) {
+    text += `\nKey Achievements\n${data.achievements.join('\n')}\n`;
+  }
+  return text;
+};
+
 export const generateCV = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -188,9 +252,12 @@ export const generateCV = async (req: Request, res: Response) => {
 
     const generated = await generateFreshCV(profile, customPrompt, jobDescription);
     const finalHtmlContent = generated.resumeData ? compileResumeHtml(generated.resumeData) : '';
+    const rawText = generated.resumeData ? compileResumeText(generated.resumeData) : '';
 
     const contentData = {
       htmlContent: finalHtmlContent,
+      rawText,
+      parsedData: generated.resumeData ?? {},
       atsBreakdown: generated.atsBreakdown ?? {},
       margins: { top: 60, right: 72, bottom: 60, left: 72 },
       template: 'default',

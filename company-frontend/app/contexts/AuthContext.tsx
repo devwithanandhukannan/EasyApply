@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import api from '@/app/lib/axios';
+import api, { setAccessToken } from '@/app/lib/axios';
 
 // Bitwise System Role Flags matching your system specifications
 const ROLES = {
@@ -16,6 +16,14 @@ interface WorkspaceSummary {
   companyId: string;
   companyName: string;
   companyRoles: number;
+}
+
+interface CompanyDetails {
+  id: string;
+  name: string;
+  email: string;
+  logoUrl?: string | null;
+  industry?: string | null;
 }
 
 interface UserProfile {
@@ -39,7 +47,7 @@ interface AuthContextType {
   isHR: boolean;
   isInterviewer: boolean;
   isViewer: boolean;
-  login: (payload: { user: any; company: any }) => void;
+  login: (payload: any) => void;
   logout: () => void;
 }
 
@@ -73,8 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             id: response.data.user.id,
             userId: response.data.user.id,
             name: response.data.user.name || response.data.company.name.split(' ')[0] + ' Team',
-            email: response.data.company.email,
-            avatar: null,
+            email: response.data.user.email || response.data.company.email,
+            avatar: response.data.user.avatar || null,
             rolesMask: response.data.user.companyRoles,
             globalRolesMask: response.data.user.globalRoles,
             status: 'active',
@@ -112,16 +120,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isAuthenticated, isLoading, pathname, router]);
 
   const login = (loginPayload: any) => {
+    if (loginPayload.accessToken) {
+      setAccessToken(loginPayload.accessToken);
+    }
     if (loginPayload.user && loginPayload.company) {
       setUser({
         id: loginPayload.user.memberId || loginPayload.user.id,
         userId: loginPayload.user.userId || loginPayload.user.id,
-        name: loginPayload.user.name || loginPayload.user.fullName || loginPayload.user.email?.split('@')[0],
-        email: loginPayload.user.email,
+        name: loginPayload.user.name || loginPayload.user.fullName || loginPayload.user.email?.split('@')[0] || loginPayload.company.name.split(' ')[0] + ' Team',
+        email: loginPayload.user.email || loginPayload.company.email,
         avatar: loginPayload.user.avatar || null,
-        rolesMask: loginPayload.user.rolesMask || loginPayload.user.roles || 16,
-        globalRolesMask: loginPayload.user.globalRolesMask || 1,
-        status: loginPayload.user.status || 'active'
+        rolesMask: loginPayload.user.rolesMask || loginPayload.user.roles || loginPayload.user.companyRoles || 16,
+        globalRolesMask: loginPayload.user.globalRolesMask || loginPayload.user.globalRoles || 1,
+        status: loginPayload.user.status || 'active',
+        allWorkspaces: loginPayload.user.allWorkspaces || []
       });
       setCompany(loginPayload.company);
     } else {
@@ -140,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsAuthenticated(false);
       setUser(null);
       setCompany(null);
+      setAccessToken('');
       router.replace('/login');
     }
   };

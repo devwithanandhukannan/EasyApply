@@ -180,8 +180,8 @@ export const verifyCompanyEmail = async (req: Request, res: Response) => {
     if (!adminMember)
       return res.status(404).json({ success: false, message: 'Admin record missing.' });
 
-    issueSessionCookies(res, { userId: adminMember.userId, globalRoles: adminMember.user.globalRoles });
-    return res.status(200).json({ success: true, message: 'Email verified. Logged in.' });
+    const accessToken = issueSessionCookies(res, { userId: adminMember.userId, globalRoles: adminMember.user.globalRoles });
+    return res.status(200).json({ success: true, message: 'Email verified. Logged in.', accessToken });
   } catch (error) {
     console.error('verifyCompanyEmail error:', error);
     return res.status(500).json({ success: false, message: 'Verification failed.' });
@@ -217,20 +217,37 @@ export const companyLogin = async (req: Request, res: Response) => {
     // Get the admin TeamMember to issue a session
     const adminMember = await prisma.teamMember.findFirst({
       where: { companyId: company.id, status: 'active' },
-      include: { user: { select: { id: true, globalRoles: true, mobileNumber: true } } },
+      include: { 
+        user: { 
+          select: { 
+            id: true, 
+            globalRoles: true, 
+            mobileNumber: true,
+            jobSeekerProfile: {
+              select: { fullName: true, email: true }
+            }
+          } 
+        } 
+      },
       orderBy: { createdAt: 'asc' },
     });
 
     if (!adminMember)
       return res.status(422).json({ success: false, message: 'No company workspace found.' });
 
-    issueSessionCookies(res, { userId: adminMember.user.id, globalRoles: adminMember.user.globalRoles });
+    const accessToken = issueSessionCookies(res, { userId: adminMember.user.id, globalRoles: adminMember.user.globalRoles });
 
     return res.status(200).json({
       success: true,
       message: 'Login successful.',
-      user: { id: adminMember.user.id, globalRoles: adminMember.user.globalRoles },
-      company: { id: company.id, name: company.name },
+      accessToken,
+      user: { 
+        id: adminMember.user.id, 
+        globalRoles: adminMember.user.globalRoles,
+        email: adminMember.user.jobSeekerProfile?.email || (adminMember.user.mobileNumber.includes('@') ? adminMember.user.mobileNumber : company.email),
+        name: adminMember.user.jobSeekerProfile?.fullName || (adminMember.user.mobileNumber.includes('@') ? adminMember.user.mobileNumber.split('@')[0] : 'Admin')
+      },
+      company: { id: company.id, name: company.name, email: company.email, logoUrl: company.logoUrl || null },
     });
   } catch (error) {
     console.error('companyLogin error:', error);
@@ -270,11 +287,14 @@ export const checkCompanySession = async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
+        jobSeekerProfile: {
+          select: { fullName: true, email: true }
+        },
         teamMemberships: {
           where: { status: 'active' },
           include: { 
             company: { 
-              select: { id: true, name: true, email: true, isVerified: true } 
+              select: { id: true, name: true, email: true, isVerified: true, logoUrl: true } 
             } 
           },
         },
@@ -291,6 +311,9 @@ export const checkCompanySession = async (req: Request, res: Response) => {
 
     // 1. Target the primary/active selection slot workspace context
     const activeMembership = user.teamMemberships[0];
+    if (!activeMembership) {
+      return res.status(403).json({ success: false, message: 'No active company linkages tracked for profile.' });
+    }
 
     // 2. Map all workspaces the user has access to, including their respective bitmask privileges
     const allRolesSummary = user.teamMemberships.map(m => ({
@@ -306,12 +329,15 @@ export const checkCompanySession = async (req: Request, res: Response) => {
         id: user.id, 
         globalRoles: user.globalRoles, 
         companyRoles: activeMembership.roles, // Active working context mask
-        allWorkspaces: allRolesSummary        // Collection array containing all memberships
+        allWorkspaces: allRolesSummary,        // Collection array containing all memberships
+        email: user.jobSeekerProfile?.email || (user.mobileNumber.includes('@') ? user.mobileNumber : activeMembership.company.email),
+        name: user.jobSeekerProfile?.fullName || (user.mobileNumber.includes('@') ? user.mobileNumber.split('@')[0] : 'Admin')
       },
       company: { 
         id: activeMembership.company.id, 
         name: activeMembership.company.name, 
-        email: activeMembership.company.email 
+        email: activeMembership.company.email,
+        logoUrl: activeMembership.company.logoUrl || null
       },
     });
   } catch (error) {
@@ -380,12 +406,18 @@ export const getMyCompanyProfile = async (req: Request, res: Response) => {
         corporateLink: true,
         createdAt: true,
         updatedAt: true,
-        // Get linked admin's mobile (from User via TeamMember)
+        // Get all company team members
         teamMembers: {
-          where: { userId },
           select: {
+            id: true,
+            userId: true,
+            roles: true,
+            status: true,
             user: {
-              select: { mobileNumber: true }
+              select: {
+                id: true,
+                mobileNumber: true
+              }
             }
           }
         }
@@ -399,7 +431,7 @@ export const getMyCompanyProfile = async (req: Request, res: Response) => {
       });
     }
 
-    const mobileNumber = company.teamMembers[0]?.user?.mobileNumber || null;
+    const mobileNumber = company.teamMembers.find(m => m.userId === userId)?.user?.mobileNumber || null;
 
     const sanitizedCompany = {
       ...company,
@@ -411,7 +443,7 @@ export const getMyCompanyProfile = async (req: Request, res: Response) => {
       products: company.products || {},
       officeLocations: company.officeLocations || [],
       socialMedia: company.socialMedia || {},
-      teamMembers: undefined // Remove relation data
+      teamMembers: company.teamMembers // Return list of team members to frontend
     };
 
     return res.status(200).json({

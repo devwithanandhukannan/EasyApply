@@ -16,7 +16,8 @@ import {
   Building2, 
   ChevronLeft, 
   X,
-  LogOut 
+  LogOut,
+  User
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -35,15 +36,23 @@ export default function CompanySidebar({
   setIsMobileOpen 
 }: SidebarProps) {
   const pathname = usePathname();
-  const { isAdmin, isHR, isInterviewer, isViewer, loading, logout } = useAuth();
+  const { user, isAdmin, isHR, isInterviewer, isViewer, isLoading, logout } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
+
+  const getRoleLabel = () => {
+    if (isAdmin) return 'Admin';
+    if (isHR) return 'HR';
+    if (isInterviewer) return 'Interviewer';
+    if (isViewer) return 'Viewer';
+    return 'Member';
+  };
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   const filteredNav = useMemo(() => {
-    const hasAccess = isMounted && !loading;
+    const hasAccess = isMounted && !isLoading;
 
     return [
       { 
@@ -101,7 +110,7 @@ export default function CompanySidebar({
         visible: hasAccess && (isAdmin || isHR || isViewer) 
       }
     ].filter(item => item.visible);
-  }, [isMounted, loading, isAdmin, isHR, isInterviewer, isViewer]);
+  }, [isMounted, isLoading, isAdmin, isHR, isInterviewer, isViewer]);
 
   const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
     <>
@@ -142,17 +151,26 @@ export default function CompanySidebar({
         }`}
       >
         {/* Brand Space */}
-        <div className="p-4 border-b border-zinc-900 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
+        <div className="p-4 border-b border-zinc-900 h-auto min-h-[73px] py-4 flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
-              <Building2 className="w-4 h-4 text-zinc-300" />
+            <div className="h-8 w-8 border border-zinc-800 rounded-xl bg-zinc-900 flex-shrink-0 flex items-center justify-center overflow-hidden">
+              {company?.logoUrl ? (
+                <img src={company.logoUrl} alt={company.name} className="h-full w-full object-cover" />
+              ) : (
+                <Building2 className="w-4 h-4 text-zinc-300" />
+              )}
             </div>
             {!isCollapsed && company && (
               <div className="min-w-0 transition-opacity duration-200">
                 <h2 className="font-semibold text-xs tracking-wide text-zinc-100 truncate uppercase">
                   {company.name}
                 </h2>
-                <p className="text-[10px] text-zinc-500 truncate mt-0.5">{company.email}</p>
+                <p className="text-[10px] text-zinc-400 truncate mt-0.5">{user?.email || company.email}</p>
+                <div className="mt-1">
+                  <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded">
+                    {getRoleLabel()}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -198,13 +216,27 @@ export default function CompanySidebar({
           isMobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="p-5 border-b border-zinc-900 h-[73px] flex items-center justify-between">
-          {company && (
-            <div className="min-w-0">
-              <h2 className="font-semibold text-xs tracking-wide text-zinc-200 truncate uppercase">{company.name}</h2>
-              <p className="text-[10px] text-zinc-500 truncate">{company.email}</p>
+        <div className="p-5 border-b border-zinc-900 h-auto min-h-[73px] py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="h-8 w-8 border border-zinc-800 rounded-xl bg-zinc-900 flex-shrink-0 flex items-center justify-center overflow-hidden">
+              {company?.logoUrl ? (
+                <img src={company.logoUrl} alt={company.name} className="h-full w-full object-cover" />
+              ) : (
+                <Building2 className="w-4 h-4 text-zinc-300" />
+              )}
             </div>
-          )}
+            {company && (
+              <div className="min-w-0">
+                <h2 className="font-semibold text-xs tracking-wide text-zinc-200 truncate uppercase">{company.name}</h2>
+                <p className="text-[10px] text-zinc-400 truncate mt-0.5">{user?.email || company.email}</p>
+                <div className="mt-1">
+                  <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded">
+                    {getRoleLabel()}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
           <button 
             onClick={() => setIsMobileOpen(false)}
             className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white transition-colors"

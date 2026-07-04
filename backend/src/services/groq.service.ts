@@ -3,6 +3,19 @@ import Groq from 'groq-sdk';
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const MODEL = 'llama-3.3-70b-versatile';
 
+const normalizeScores = (scores: any) => {
+  if (!scores || typeof scores !== 'object') return {};
+  const normalized: any = {};
+  for (const [key, val] of Object.entries(scores)) {
+    if (typeof val === 'number') {
+      normalized[key] = val <= 10 ? Math.round(val * 10) : val;
+    } else {
+      normalized[key] = val;
+    }
+  }
+  return normalized;
+};
+
 export const aggregateSalaryBenchmarks = async (
   title: string,
   location: string,
@@ -121,7 +134,10 @@ Return ONLY valid JSON with this exact schema structure:
   "improvements": {},
   "missingSections": [""],
   "keywordGaps": [""]
-}`;
+}
+
+Rules:
+- All score values: integers 0-100.`;
 
   const completion = await groq.chat.completions.create({
     messages: [{ role: 'user', content: prompt }],
@@ -130,9 +146,44 @@ Return ONLY valid JSON with this exact schema structure:
     max_tokens: 4000,
     response_format: { type: 'json_object' },
   });
-  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  if (result.scores) {
+    result.scores = normalizeScores(result.scores);
+  }
+  return result;
 };
 export const optimizeForJD = async (htmlContent: string, jobDescription: string) => {
+  const prompt = `You are an expert ATS optimization assistant.
+Analyze the following resume HTML and the target job description. Optimize the resume to match the job description.
+Tailor the professional summary, highlight relevant skills, and optimize the accomplishment bullet points to showcase experiences aligning with the job requirements.
+Keep the overall layout, styling, and design tags intact, modifying only the copy/text inside elements to align with the JD.
+
+Ensure the returned output is a valid JSON object matching the schema below.
+
+JSON Schema:
+{
+  "htmlContent": "optimized HTML string here",
+  "scores": {
+    "ats": 85,
+    "formatting": 80,
+    "keywords": 85,
+    "grammar": 90,
+    "readability": 85,
+    "impact": 80
+  },
+  "notes": "Brief explanation of changes made to optimize the resume",
+  "keywordsInserted": ["keyword1", "keyword2"]
+}
+
+Resume HTML:
+"""
+${htmlContent}
+"""
+
+Job Description:
+"""
+${jobDescription}
+"""`;
 
   const completion = await groq.chat.completions.create({
     messages: [{ role: 'user', content: prompt }],
@@ -503,7 +554,11 @@ Rules: all scores integers 0-100. Be accurate and strict.`;
     max_tokens: 1500,
     response_format: { type: 'json_object' },
   });
-  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  if (result.scores) {
+    result.scores = normalizeScores(result.scores);
+  }
+  return result;
 };
 
 export const generateInlineSuggestions = async (htmlContent: string) => {
@@ -577,8 +632,9 @@ Return ONLY valid JSON:
 
 Rules:
 - result must be a direct replacement for the selected text
-- Preserve any HTML tags if present in the input
-- Do NOT add quotes around the result`;
+- If the instruction requires structural changes (like adding bullet points or lists), output the appropriate HTML tags (e.g., <ul><li>...</li></ul>).
+- Otherwise, preserve any existing HTML tags if present in the input
+- Do NOT wrap the improved text in additional quotes inside the JSON string`;
 
   try {
     const completion = await groq.chat.completions.create({
@@ -740,7 +796,10 @@ Return ONLY valid JSON:
   "sections": ["list", "of", "sections", "included"],
   "culturalNotes": "Brief note on regional conventions applied",
   "scores": { "ats": 0, "formatting": 0, "keywords": 0, "grammar": 0, "readability": 0, "impact": 0 }
-}`;
+}
+
+Rules:
+- All score values: integers 0-100.`;
 
   const completion = await groq.chat.completions.create({
     messages: [{ role: 'user', content: prompt }],
@@ -749,7 +808,11 @@ Return ONLY valid JSON:
     max_tokens: 6000,
     response_format: { type: 'json_object' },
   });
-  return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  if (result.scores) {
+    result.scores = normalizeScores(result.scores);
+  }
+  return result;
 };
 
 export const analyzeResume = async (rawText: string, jobDescription?: string) => {
@@ -802,6 +865,9 @@ Rules:
   });
 
   const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  if (result.scores) {
+    result.scores = normalizeScores(result.scores);
+  }
 
   // Hard sanitizer — runs regardless of what AI returns
   const ensureHttps = (url: string): string => {

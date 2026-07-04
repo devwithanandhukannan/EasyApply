@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import axios from '@/app/lib/axios';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { ShieldAlert, CheckCircle2, Lock, Eye, EyeOff } from 'lucide-react';
 
-export default function AcceptInvitePage() {
+function AcceptInviteContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login } = useAuth();
@@ -201,5 +201,18 @@ export default function AcceptInvitePage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col gap-3 justify-center items-center h-screen bg-[#0a0a0a] text-zinc-400 font-mono text-xs">
+        <div className="h-5 w-5 animate-spin rounded-full border border-zinc-800 border-t-white"></div>
+        <span>Validating workspace invitation criteria streams...</span>
+      </div>
+    }>
+      <AcceptInviteContent />
+    </Suspense>
   );
 }

@@ -56,7 +56,7 @@ export default function LoginPage() {
       const res = await api.post(targetEndpoint, { email, password });
       
       if (res.data?.success) {
-        login(res.data.user);
+        login(res.data);
       }
     } catch (err) {
       const error = err as AxiosError<{ message?: string; emailVerified?: boolean }>;

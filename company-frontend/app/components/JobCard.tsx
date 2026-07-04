@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import api from '@/app/lib/axios';
 import { useGlassToast } from './GlassToastContainer';
 
+import { useAuth } from '@/app/contexts/AuthContext';
+
 interface JobCardProps {
   job: any;
   onUpdate: () => void;
@@ -14,6 +16,7 @@ interface JobCardProps {
 }
 
 export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
+  const { isAdmin, isHR } = useAuth();
   const { showToast } = useGlassToast();
   const [showMenu, setShowMenu] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -68,52 +71,54 @@ export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
       className="bg-zinc-950 border border-zinc-900 rounded-xl p-6 hover:border-zinc-800 transition-all group relative cursor-pointer"
     >
       {/* Menu */}
-      <div className="absolute top-4 right-4 menu-container">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowMenu(!showMenu);
-          }}
-          className="p-2 rounded-lg hover:bg-zinc-900 transition-colors text-zinc-500 hover:text-white"
-        >
-          <MoreVertical className="h-4 w-4" />
-        </button>
-        
-        {showMenu && (
-          <>
-            <div 
-              className="fixed inset-0 z-10" 
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowMenu(false);
-              }}
-            />
-            <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-20 py-1">
-              <button
+      {(isAdmin || isHR) && (
+        <div className="absolute top-4 right-4 menu-container">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(!showMenu);
+            }}
+            className="p-2 rounded-lg hover:bg-zinc-900 transition-colors text-zinc-500 hover:text-white"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+          
+          {showMenu && (
+            <>
+              <div 
+                className="fixed inset-0 z-10" 
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleEdit();
+                  setShowMenu(false);
                 }}
-                className="flex items-center gap-3 w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
-              >
-                <Edit className="h-4 w-4" />
-                Edit Job
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete();
-                }}
-                disabled={isDeleting}
-                className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-zinc-800 transition-colors disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" />
-                {isDeleting ? 'Deleting...' : 'Delete Job'}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+              />
+              <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-20 py-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit();
+                  }}
+                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit Job
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete();
+                  }}
+                  disabled={isDeleting}
+                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-zinc-800 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {isDeleting ? 'Deleting...' : 'Delete Job'}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Header */}
       <div className="mb-4">

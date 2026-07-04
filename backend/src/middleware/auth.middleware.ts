@@ -6,6 +6,14 @@ import { PermissionHelper } from '../utils/permissions.ts';
 
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || 'your_access_secret';
 
+const extractToken = (req: Request): string | undefined => {
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  return req.cookies?.accessToken;
+};
+
 declare global {
   namespace Express {
     interface Request {
@@ -25,7 +33,7 @@ declare global {
 }
 
 export const authenticateToken = async (req: Request, res: Response, next: NextFunction) => {
-  const token = req.cookies?.accessToken;
+  const token = extractToken(req);
   if (!token) {
     return res.status(401).json({ success: false, message: 'Session unauthorized or expired' });
   }
@@ -62,7 +70,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 };
 
 export const authenticateCompany = async (req: Request, res: Response, next: NextFunction) => {
-  const token = req.cookies?.accessToken;
+  const token = extractToken(req);
   if (!token) {
     return res.status(401).json({ success: false, message: 'Company session unauthorized or expired' });
   }
@@ -216,7 +224,7 @@ export const requireJobSeekerOrCompanyAdmin = (req: Request, res: Response, next
 
 export const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
   console.log('reached optional auth middleware');
-  const token = req.cookies?.accessToken;
+  const token = extractToken(req);
 
   if (!token) {
     req.user = undefined;

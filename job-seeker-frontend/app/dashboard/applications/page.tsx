@@ -759,6 +759,8 @@ export default function ApplicationsPage() {
           isOpen={offerModalOpen}
           onClose={() => setOfferModalOpen(false)}
           offerId={selectedApp.activeOffer.id}
+          position={selectedApp.jobDetails.title}
+          companyName={selectedApp.companyDetails.name}
           onSuccess={fetchApplications}
         />
       )}

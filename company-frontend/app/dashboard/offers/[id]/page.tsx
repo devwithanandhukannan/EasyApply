@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import Link from 'next/link';
+import { useAuth } from '@/app/contexts/AuthContext';
 
 interface OfferDetails {
   id: string;
@@ -58,6 +59,7 @@ interface OfferDetails {
 }
 
 export default function OfferDetailsPage() {
+  const { isAdmin, isHR } = useAuth();
   const { showToast } = useGlassToast();
   const params = useParams();
   const router = useRouter();
@@ -227,87 +229,91 @@ export default function OfferDetailsPage() {
                 )}
               </div>
 
-              {!showNegotiationResponse ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      setNegotiationAction('accept_negotiation');
-                      setShowNegotiationResponse(true);
-                    }}
-                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    Accept & Revise Offer
-                  </button>
-                  <button
-                    onClick={() => {
-                      setNegotiationAction('reject_negotiation');
-                      setShowNegotiationResponse(true);
-                    }}
-                    className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-                  >
-                    <XCircle className="w-3.5 h-3.5" />
-                    Reject Negotiation
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3 bg-black/50 border border-amber-900/50 rounded-lg p-4">
-                  {negotiationAction === 'accept_negotiation' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(isAdmin || isHR) && (
+                <>
+                  {!showNegotiationResponse ? (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setNegotiationAction('accept_negotiation');
+                          setShowNegotiationResponse(true);
+                        }}
+                        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Accept & Revise Offer
+                      </button>
+                      <button
+                        onClick={() => {
+                          setNegotiationAction('reject_negotiation');
+                          setShowNegotiationResponse(true);
+                        }}
+                        className="px-4 py-2 bg-red-500 hover:bg-red-400 text-white font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        Reject Negotiation
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 bg-black/50 border border-amber-900/50 rounded-lg p-4">
+                      {negotiationAction === 'accept_negotiation' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="space-y-2">
+                            <label className="text-xs font-semibold text-amber-400 uppercase">
+                              Updated Salary
+                            </label>
+                            <input
+                              type="number"
+                              value={updatedSalary}
+                              onChange={(e) => setUpdatedSalary(e.target.value)}
+                              className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-semibold text-amber-400 uppercase">
+                              Updated Start Date
+                            </label>
+                            <input
+                              type="date"
+                              value={updatedStartDate}
+                              onChange={(e) => setUpdatedStartDate(e.target.value)}
+                              className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="space-y-2">
                         <label className="text-xs font-semibold text-amber-400 uppercase">
-                          Updated Salary
+                          Response Note
                         </label>
-                        <input
-                          type="number"
-                          value={updatedSalary}
-                          onChange={(e) => setUpdatedSalary(e.target.value)}
+                        <textarea
+                          value={responseNote}
+                          onChange={(e) => setResponseNote(e.target.value)}
+                          rows={3}
                           className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
+                          placeholder="Add a structural justification note to the candidate..."
                         />
                       </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold text-amber-400 uppercase">
-                          Updated Start Date
-                        </label>
-                        <input
-                          type="date"
-                          value={updatedStartDate}
-                          onChange={(e) => setUpdatedStartDate(e.target.value)}
-                          className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
-                        />
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleNegotiationResponse}
+                          disabled={isSubmitting}
+                          className="px-4 py-2 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-xs transition-colors disabled:opacity-50"
+                        >
+                          {isSubmitting ? 'Submitting...' : 'Submit Response'}
+                        </button>
+                        <button
+                          onClick={() => setShowNegotiationResponse(false)}
+                          className="px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   )}
-                  
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-amber-400 uppercase">
-                      Response Note
-                    </label>
-                    <textarea
-                      value={responseNote}
-                      onChange={(e) => setResponseNote(e.target.value)}
-                      rows={3}
-                      className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-mono"
-                      placeholder="Add a structural justification note to the candidate..."
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleNegotiationResponse}
-                      disabled={isSubmitting}
-                      className="px-4 py-2 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-xs transition-colors disabled:opacity-50"
-                    >
-                      {isSubmitting ? 'Submitting...' : 'Submit Response'}
-                    </button>
-                    <button
-                      onClick={() => setShowNegotiationResponse(false)}
-                      className="px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
           </div>
@@ -551,7 +557,7 @@ export default function OfferDetailsPage() {
   </button>
 
   {/* SIGN OFFER ACTION: Shows up if the company signature block is completely missing or not yet executed */}
-  {offer.status === 'pending' && !offer.companySignature && (
+  {(isAdmin || isHR) && offer.status === 'pending' && !offer.companySignature && (
     <Link
       href={`/dashboard/offers/${offer.id}/sign`}
       className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-sm transition-colors flex items-center gap-2 font-mono uppercase tracking-tight shadow-lg shadow-blue-950/20"
@@ -562,7 +568,7 @@ export default function OfferDetailsPage() {
   )}
 
   {/* EDIT ACTION: Available for Draft layouts */}
-  {offer.status === 'draft' && (
+  {(isAdmin || isHR) && offer.status === 'draft' && (
     <Link
       href={`/dashboard/offers/${offer.id}/edit`}
       className="px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 font-mono uppercase tracking-tight"

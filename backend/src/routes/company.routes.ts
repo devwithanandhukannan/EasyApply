@@ -100,14 +100,14 @@ router.post('/notification/send', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.
 // ─── 5. JOB OPERATIONS & EXPLICIT PATHS FIRST ────────────────────────────
 router.post('/jobs/generate-description', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), generateAIDescription);
 router.post('/jobs', requireCompanyRole(ROLES.COMPANY_ADMIN), createJob);
-router.get('/jobs', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getAllCompanyJobs);
+router.get('/jobs', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getAllCompanyJobs);
 
 // Explicit sub-resource routes must sit ABOVE dynamic dynamic wildcards
-router.get('/jobs/:jobId/applications', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getJobApplications);
+router.get('/jobs/:jobId/applications', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getJobApplications);
 router.post('/jobs/:jobId/ai-filter', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), aiFilterCandidates);
 
 // Dynamic wildcards placed at bottom of the Job block
-router.get('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getJobDetails);
+router.get('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getJobDetails);
 router.put('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateJob);
 router.delete('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN), deleteJob);
 

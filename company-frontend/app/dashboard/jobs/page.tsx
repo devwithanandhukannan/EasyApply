@@ -8,8 +8,10 @@ import {
 import JobPostingModal from '@/app/components/JobPostingModal';
 import JobCard from '@/app/components/JobCard';
 import api from '@/app/lib/axios';
+import { useAuth } from '@/app/contexts/AuthContext';
 
 export default function JobsPage() {
+  const { isAdmin, isHR } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<any>(null);
   const [jobs, setJobs] = useState([]);
@@ -112,13 +114,15 @@ export default function JobsPage() {
           <h1 className="text-2xl font-bold tracking-tight text-white">Job Postings</h1>
           <p className="text-sm text-zinc-500 mt-1">Manage and create job opportunities for candidates</p>
         </div>
-        <button
-          onClick={handleNewJob}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-black rounded-lg font-medium text-sm hover:bg-zinc-200 transition-colors shadow-sm"
-        >
-          <Plus size={16} />
-          Post New Job
-        </button>
+        {(isAdmin || isHR) && (
+          <button
+            onClick={handleNewJob}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-black rounded-lg font-medium text-sm hover:bg-zinc-200 transition-colors shadow-sm"
+          >
+            <Plus size={16} />
+            Post New Job
+          </button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -245,7 +249,7 @@ export default function JobsPage() {
               ? 'Try adjusting your search or filters'
               : 'Get started by posting your first job'}
           </p>
-          {!searchQuery && filters.jobType === 'all' && filters.location === 'all' && (
+          {!searchQuery && filters.jobType === 'all' && filters.location === 'all' && (isAdmin || isHR) && (
             <button
               onClick={handleNewJob}
               className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black rounded-lg font-medium text-sm hover:bg-zinc-200 transition-colors"

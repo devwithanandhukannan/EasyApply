@@ -13,6 +13,7 @@ import JobPostingModal from '@/app/components/JobPostingModal';
 import AIFilterModal from '@/app/components/AIFilterModal';
 import ScheduleInterviewsModal from '@/app/components/ScheduleInterviewsModal';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
+import { useAuth } from '@/app/contexts/AuthContext';
 
 const STATUS_STYLES: Record<string, string> = {
   active:      'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
@@ -38,6 +39,7 @@ const STAGE_COLUMNS = [
 ];
 
 export default function JobDetailsPage() {
+  const { isAdmin, isHR } = useAuth();
   const { showToast } = useGlassToast();
   const params = useParams();
   const router = useRouter();
@@ -224,14 +226,18 @@ export default function JobDetailsPage() {
             <span className={`px-3 py-1 rounded-full text-xs font-medium border ${STATUS_STYLES[job.status] || STATUS_STYLES.active}`}>
               {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
             </span>
-            <button onClick={() => setEditOpen(true)}
-              className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white transition-colors">
-              <Edit size={16} />
-            </button>
-            <button onClick={handleDelete} disabled={isDeleting}
-              className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors disabled:opacity-50">
-              <Trash2 size={16} />
-            </button>
+            {(isAdmin || isHR) && (
+              <>
+                <button onClick={() => setEditOpen(true)}
+                  className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white transition-colors">
+                  <Edit size={16} />
+                </button>
+                <button onClick={handleDelete} disabled={isDeleting}
+                  className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors disabled:opacity-50">
+                  <Trash2 size={16} />
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -373,11 +379,13 @@ export default function JobDetailsPage() {
               <Filter size={14} />
               {showFilters ? 'Hide Filters' : 'Show Filters'}
             </button>
-            <button onClick={() => setAiFilterOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg text-xs font-medium text-white hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm">
-              <Sparkles size={14} />
-              AI Match
-            </button>
+            {(isAdmin || isHR) && (
+              <button onClick={() => setAiFilterOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg text-xs font-medium text-white hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm">
+                <Sparkles size={14} />
+                AI Match
+              </button>
+            )}
           </div>
 
           {/* Advanced filters (collapsible) */}
@@ -427,14 +435,18 @@ export default function JobDetailsPage() {
             <div className="space-y-3">
               {displayedApplications.length > 1 && (
                 <div className="bg-zinc-900/50 rounded-lg px-4 py-2 flex justify-between items-center text-xs border border-zinc-800">
-                  <button onClick={toggleSelectAllVisible} className="flex items-center gap-2 text-zinc-400 hover:text-white">
-                    {selectedApplicationIds.length === displayedApplications.length ? (
-                      <CheckSquare size={14} />
-                    ) : (
-                      <Square size={14} />
-                    )}
-                    {selectedApplicationIds.length === displayedApplications.length ? 'Deselect all' : 'Select all'}
-                  </button>
+                  {(isAdmin || isHR) ? (
+                    <button onClick={toggleSelectAllVisible} className="flex items-center gap-2 text-zinc-400 hover:text-white">
+                      {selectedApplicationIds.length === displayedApplications.length ? (
+                        <CheckSquare size={14} />
+                      ) : (
+                        <Square size={14} />
+                      )}
+                      {selectedApplicationIds.length === displayedApplications.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                  ) : (
+                    <div />
+                  )}
                   <span className="text-zinc-500">{displayedApplications.length} of {totalApps} shown</span>
                 </div>
               )}
@@ -449,15 +461,17 @@ export default function JobDetailsPage() {
                       className={`bg-zinc-900 border rounded-xl p-4 cursor-pointer transition-all group flex items-center gap-4 ${
                         isSelected ? 'border-zinc-600 bg-zinc-800/60' : 'border-zinc-800 hover:border-zinc-700'
                       }`}>
-                      <div onClick={(e) => toggleSelectCandidate(targetId, e)} className="flex-shrink-0">
-                        {isSelected ? (
-                          <div className="w-4 h-4 rounded bg-white flex items-center justify-center">
-                            <Check size={12} className="text-black" />
-                          </div>
-                        ) : (
-                          <div className="w-4 h-4 rounded border border-zinc-600 group-hover:border-zinc-400" />
-                        )}
-                      </div>
+                      {(isAdmin || isHR) && (
+                        <div onClick={(e) => toggleSelectCandidate(targetId, e)} className="flex-shrink-0">
+                          {isSelected ? (
+                            <div className="w-4 h-4 rounded bg-white flex items-center justify-center">
+                              <Check size={12} className="text-black" />
+                            </div>
+                          ) : (
+                            <div className="w-4 h-4 rounded border border-zinc-600 group-hover:border-zinc-400" />
+                          )}
+                        </div>
+                      )}
                       <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
                         {profile.fullName?.charAt(0)?.toUpperCase() || '?'}
                       </div>
@@ -492,8 +506,8 @@ export default function JobDetailsPage() {
                 const columnCards = kanbanData[col.key] || [];
                 return (
                   <div key={col.key}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => handleDrop(e, col.key)}
+                    onDragOver={(e) => (isAdmin || isHR) && e.preventDefault()}
+                    onDrop={(e) => (isAdmin || isHR) && handleDrop(e, col.key)}
                     className="w-80 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col flex-shrink-0 max-h-[70vh]">
                     <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center rounded-t-xl">
                       <span className="font-medium text-sm text-white">{col.label}</span>
@@ -510,8 +524,8 @@ export default function JobDetailsPage() {
                           const profile = card.jobSeekerProfile || card.candidate || {};
                           return (
                             <div key={cardId}
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, cardId, col.key)}
+                              draggable={isAdmin || isHR}
+                              onDragStart={(e) => (isAdmin || isHR) ? handleDragStart(e, cardId, col.key) : e.preventDefault()}
                               onClick={() => router.push(`/dashboard/jobs/${params.id}/applicants/${cardId}`)}
                               className="p-3 bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 rounded-lg cursor-grab active:cursor-grabbing transition-colors group">
                               <div className="flex justify-between items-start gap-2">

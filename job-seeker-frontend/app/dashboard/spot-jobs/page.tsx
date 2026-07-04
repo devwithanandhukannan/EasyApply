@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import axiosInstance from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 import { 
   Zap, 
   MapPin, 
@@ -46,6 +47,7 @@ interface Invitation {
 }
 
 export default function JobSeekerSpotWorkspace() {
+  const { showToast } = useGlassToast();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -121,7 +123,7 @@ export default function JobSeekerSpotWorkspace() {
         }
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Error configuring backend availability matrix context.');
+      showToast('Availability Error', err.response?.data?.message || 'Error configuring backend availability matrix context.', 'danger');
     } finally {
       setUpdatingAvailability(false);
     }
@@ -135,11 +137,11 @@ export default function JobSeekerSpotWorkspace() {
       if (response.data?.success) {
         setInvitations(prev => prev.filter(inv => inv.id !== bookingId));
         if (action === 'ACCEPT') {
-          alert('Gig position locked successfully! Check your dashboard for company coordinator touchpoints.');
+          showToast('Success', 'Gig position locked successfully! Check your dashboard for company coordinator touchpoints.', 'success');
         }
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'This spot position could no longer be locked or has expired.');
+      showToast('Lock Error', err.response?.data?.message || 'This spot position could no longer be locked or has expired.', 'danger');
     } finally {
       setProcessingId(null);
     }

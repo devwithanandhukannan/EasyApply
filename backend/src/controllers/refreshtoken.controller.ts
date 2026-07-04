@@ -15,8 +15,8 @@ export const refreshSessionToken = async (req: Request, res: Response) => {
 
     jwt.verify(currentRefreshToken, REFRESH_TOKEN_SECRET, async (err: any, decoded: any) => {
       if (err) {
-        res.clearCookie('accessToken');
-        res.clearCookie('refreshToken');
+        res.clearCookie('accessToken', { path: '/' });
+        res.clearCookie('refreshToken', { path: '/api/auth/refresh' });
         return res.status(401).json({ success: false, message: 'Invalid or expired refresh token.' });
       }
       const user = await prisma.user.findUnique({
@@ -27,9 +27,9 @@ export const refreshSessionToken = async (req: Request, res: Response) => {
         return res.status(401).json({ success: false, message: 'User context not found.' });
       }
 
-      issueSessionCookies(res, { userId: user.id, globalRoles: user.globalRoles });
+      const accessToken = issueSessionCookies(res, { userId: user.id, globalRoles: user.globalRoles });
 
-      return res.status(200).json({ success: true, message: 'Session successfully extended.' });
+      return res.status(200).json({ success: true, message: 'Session successfully extended.', accessToken });
     });
   } catch (error) {
     console.error('refreshSessionToken error:', error);

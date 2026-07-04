@@ -131,11 +131,20 @@ export const applyToJob = async (req: Request, res: Response) => {
         return res.status(404).json({ success: false, message: 'Selected resume not found' });
       }
       const contentData = (existingResume.content as any) ?? {};
-      if (!contentData.parsedData || !contentData.rawText) {
+      let rawText = contentData.rawText;
+      let parsedData = contentData.parsedData;
+
+      if (!rawText && contentData.htmlContent) {
+        // Strip HTML tags to form plain text rawText fallback for older built resumes
+        rawText = contentData.htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        parsedData = contentData.parsedData || {};
+      }
+
+      if (!rawText) {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(422).json({ success: false, message: 'Selected resume is corrupted. Please upload a new one.' });
       }
-      const reanalysis = await analyzeResume(contentData.rawText, jobPosting.description);
+      const reanalysis = await analyzeResume(rawText, jobPosting.description);
       await prisma.resume.update({
         where: { id: resumeId },
         data: {
@@ -315,7 +324,18 @@ export const getTimelineDashboardView = async (req: Request, res: Response) => {
     const applications = await prisma.application.findMany({
       where: { jobSeekerProfileId: profileId },
       include: {
-        jobPosting: { include: { company: true } },
+        jobPosting: {
+          include: {
+            company: {
+              select: {
+                id: true,
+                name: true,
+                logoUrl: true,
+                industry: true
+              }
+            }
+          }
+        },
         resume: true,
         statusHistory: { orderBy: { createdAt: 'desc' } },
         interviews: {

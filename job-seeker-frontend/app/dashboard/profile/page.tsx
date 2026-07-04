@@ -192,14 +192,20 @@ export default function ProfilePage() {
         bio:       basicInfo.bio,
         profilePic: profileImage,
         preferences: {
-          roles:                  preferences.roles,
-          industries:             preferences.industries,
+          roles:                  preferences.roles.map(r => r.trim()).filter(Boolean),
+          industries:             preferences.industries.map(i => i.trim()).filter(Boolean),
           jobType:                preferences.jobType,
           experience:             preferences.experience,
           expectedSalary:         preferences.expectedSalary,
           workLocationPreference: preferences.workLocationPreference,
         },
-        skills, education, experience, projects, certifications, languages, achievements,
+        skills, 
+        education, 
+        experience: experience.map(exp => ({ ...exp, skills: exp.skills.map(s => s.trim()).filter(Boolean) })), 
+        projects: projects.map(proj => ({ ...proj, technologies: proj.technologies.map(t => t.trim()).filter(Boolean) })), 
+        certifications, 
+        languages, 
+        achievements,
       };
       const formData = new FormData();
       formData.append('profileData', JSON.stringify(profileData));
@@ -374,12 +380,12 @@ export default function ProfilePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Target Roles</label>
-                  <input type="text" placeholder="Software Engineer, Product Manager" value={preferences.roles.join(', ')} onChange={e => setPreferences({ ...preferences, roles: e.target.value.split(',').map(s => s.trim()).filter(s => s) })} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  <input type="text" placeholder="Software Engineer, Product Manager" value={preferences.roles.join(',')} onChange={e => setPreferences({ ...preferences, roles: e.target.value.split(',') })} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
                   <p className="text-zinc-600 text-[10px] mt-1">Split items via comma separations.</p>
                 </div>
                 <div>
                   <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Preferred Industries</label>
-                  <input type="text" placeholder="Technology, Healthcare, Finance" value={preferences.industries.join(', ')} onChange={e => setPreferences({ ...preferences, industries: e.target.value.split(',').map(s => s.trim()).filter(s => s) })} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
+                  <input type="text" placeholder="Technology, Healthcare, Finance" value={preferences.industries.join(',')} onChange={e => setPreferences({ ...preferences, industries: e.target.value.split(',') })} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700" />
                 </div>
                 <div>
                   <label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Contract Architecture</label>
@@ -468,7 +474,7 @@ export default function ProfilePage() {
                       <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Commencement *</label><div className="grid grid-cols-2 gap-2"><select value={exp.startMonth} onChange={e => updateExperience(exp.id, 'startMonth', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={exp.startYear} onChange={e => updateExperience(exp.id, 'startYear', e.target.value)} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
                       <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Termination Sequence</label><div className="grid grid-cols-2 gap-2"><select value={exp.endMonth} onChange={e => updateExperience(exp.id, 'endMonth', e.target.value)} disabled={exp.current} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 disabled:opacity-35"><option value="">Month</option>{months.map(m => <option key={m} value={m}>{m}</option>)}</select><select value={exp.endYear} onChange={e => updateExperience(exp.id, 'endYear', e.target.value)} disabled={exp.current} className="w-full px-3 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 disabled:opacity-35"><option value="">Year</option>{years.map(y => <option key={y} value={y}>{y}</option>)}</select></div></div>
                       <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Scope Manifest & Performance Metrics</label><textarea value={exp.description} onChange={e => updateExperience(exp.id, 'description', e.target.value)} placeholder="Describe core execution metrics..." rows={3} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 resize-none leading-relaxed" /></div>
-                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Applied Tech Vector Array</label><input type="text" value={exp.skills.join(', ')} onChange={e => updateExperience(exp.id, 'skills', e.target.value.split(',').map(s => s.trim()).filter(s => s))} placeholder="React, Node.js (comma separated)" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Applied Tech Vector Array</label><input type="text" value={exp.skills.join(',')} onChange={e => updateExperience(exp.id, 'skills', e.target.value.split(','))} placeholder="React, Node.js (comma separated)" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
                     </div>
                   </div>
                 ))}
@@ -493,7 +499,7 @@ export default function ProfilePage() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Project Identifier *</label><input type="text" value={proj.name} onChange={e => updateProject(proj.id, 'name', e.target.value)} placeholder="e.g. Distributed Ledger Platform" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
                       <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Architecture Summary *</label><textarea value={proj.description} onChange={e => updateProject(proj.id, 'description', e.target.value)} placeholder="Explain project runtime patterns..." rows={3} className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 resize-none leading-relaxed" /></div>
-                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Engine & Platform Context</label><input type="text" value={proj.technologies.join(', ')} onChange={e => updateProject(proj.id, 'technologies', e.target.value.split(',').map(s => s.trim()).filter(s => s))} placeholder="Next.js, Go, Redis (comma separated)" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
+                      <div className="sm:col-span-2"><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Engine & Platform Context</label><input type="text" value={proj.technologies.join(',')} onChange={e => updateProject(proj.id, 'technologies', e.target.value.split(','))} placeholder="Next.js, Go, Redis (comma separated)" className="w-full px-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div>
                       <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Source Repository URI</label><div className="relative"><Code size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" /><input type="url" value={proj.githubLink} onChange={e => updateProject(proj.id, 'githubLink', e.target.value)} placeholder="https://github.com/..." className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div></div>
                       <div><label className="block text-zinc-400 text-[11px] font-medium mb-1.5">Production Endpoint Link</label><div className="relative"><LinkIcon size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" /><input type="url" value={proj.liveLink} onChange={e => updateProject(proj.id, 'liveLink', e.target.value)} placeholder="https://..." className="w-full pl-8 pr-3 py-1.5 bg-zinc-950/50 border border-zinc-800 rounded-lg text-zinc-200 text-xs focus:outline-none focus:border-zinc-500 placeholder-zinc-700 transition-colors" /></div></div>
                     </div>

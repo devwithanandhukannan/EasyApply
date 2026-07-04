@@ -58,7 +58,10 @@ export class PermissionHelper {
     const names: string[] = [];
     Object.entries(ROLES).forEach(([_, value]) => {
       if (this.hasRole(userRoles, value)) {
-        names.push(ROLE_NAMES[value]);
+        const roleName = ROLE_NAMES[value];
+        if (roleName) {
+          names.push(roleName);
+        }
       }
     });
     return names;

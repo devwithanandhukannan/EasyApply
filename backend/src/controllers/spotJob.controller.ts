@@ -392,7 +392,7 @@ export const SpotJobController = {
           bookings: {
             include: {
               jobSeekerProfile: {
-                select: { fullName: true, phone: true, email: true, location: true, profilePhotoUrl: true }
+                select: { fullName: true, phone: true, email: true, location: true }
               }
             }
           }
@@ -438,7 +438,7 @@ export const SpotJobController = {
         where: { spotJobId: id },
         include: {
           jobSeekerProfile: {
-            select: { fullName: true, email: true, phone: true, profilePhotoUrl: true }
+            select: { fullName: true, email: true, phone: true }
           }
         },
         orderBy: { createdAt: 'desc' }
@@ -546,7 +546,7 @@ export const SpotJobController = {
 
       const targetStatus = enabled 
         ? AvailabilityStatus.spot_available 
-        : AvailabilityStatus.immutable; 
+        : AvailabilityStatus.available; 
 
       const updatedProfile = await prisma.jobSeekerProfile.update({
         where: { userId },
