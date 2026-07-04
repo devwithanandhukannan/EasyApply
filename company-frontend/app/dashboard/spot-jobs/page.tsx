@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import axiosInstance from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 import { 
   Zap, 
   Plus, 
@@ -49,6 +50,7 @@ interface SpotJob {
 }
 
 export default function SpotJobsDashboard() {
+  const { showToast } = useGlassToast();
   const [spotJobs, setSpotJobs] = useState<SpotJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export default function SpotJobsDashboard() {
         fetchSpotDashboard();
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Submission error caught on matching service.');
+      showToast('Submission Error', err.response?.data?.message || 'Submission error caught on matching service.', 'danger');
     } finally {
       setSubmitting(false);
     }
@@ -136,7 +138,7 @@ export default function SpotJobsDashboard() {
         fetchSpotDashboard();
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to mutate state indices.');
+      showToast('Status Update Error', err.response?.data?.message || 'Failed to mutate state indices.', 'danger');
     }
   };
 

@@ -9,7 +9,7 @@ import {
   useTracks,
   RoomAudioRenderer,
   useRoomContext,
-  TrackRef,
+  TrackReference,
   useDataChannel,
 } from '@livekit/components-react';
 
@@ -60,7 +60,7 @@ export default function LiveKitMeetingRoom({
             multipleFaces: 'Multiple faces detected.',
             lookingAway: 'Please look at the screen.',
           };
-          showToast('Attention', messages[type], 'error');
+          showToast('Attention', messages[type], 'danger');
         }
       } else {
         setAlertType((prev) => (prev === type ? null : prev));
@@ -447,7 +447,7 @@ function AdaptiveMeetingGrid({ alertActive }: { alertActive: boolean }) {
         </div>
 
         <div className="w-full lg:w-44 shrink-0 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-y-auto max-h-[110px] lg:max-h-full min-h-0">
-          {cameraTracks.map((track: TrackRef) => (
+          {cameraTracks.map((track: any) => (
             <div
               key={`${track.participant.identity}-${track.source}`}
               className="w-36 lg:w-full h-24 lg:h-28 shrink-0 rounded-xl overflow-hidden relative group"

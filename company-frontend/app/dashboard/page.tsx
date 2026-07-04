@@ -27,7 +27,7 @@ interface DashboardSummary {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, company } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary>({ totalJobs: 0, activeJobs: 0, totalApplications: 0 });
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +85,7 @@ export default function DashboardPage() {
       <div className="border-b border-zinc-800/60 pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-zinc-50 tracking-tight sm:text-2xl">
-            Welcome back, {user?.company?.name || 'Workspace Leader'}
+            Welcome back, {company?.name || 'Workspace Leader'}
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-zinc-400 font-medium">
             Review your dynamic team metrics and platform pipeline logs.

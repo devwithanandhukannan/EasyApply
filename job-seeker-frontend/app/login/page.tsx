@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Smartphone, MessageCircle, ArrowRight, Shield, User, Mail } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import api from '@/app/lib/axios';
@@ -16,6 +16,11 @@ function LoginPageComponent() {
   // Local state vectors for custom structural data updates
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  
+  const [showFullName, setShowFullName] = useState(true);
+  const [showEmail, setShowEmail] = useState(true);
+  const [emailError, setEmailError] = useState('');
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
 
   const { login, isLoading: authLoading } = useAuth();
 
@@ -70,6 +75,10 @@ function LoginPageComponent() {
       // ✅ FIXED: Rely strictly on our clean backend flags instead of heavy extra profile queries
       if (!user.hasEmail || !user.hasFullName) {
         console.log('⚠️ Profile incomplete, redirecting to setup');
+        setFullName(user.fullName || '');
+        setEmail(user.email || '');
+        setShowFullName(!user.hasFullName);
+        setShowEmail(!user.hasEmail);
         setStep('profile_setup');
       } else {
         console.log('✅ Profile complete, logging in');
@@ -82,6 +91,32 @@ function LoginPageComponent() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (!showEmail || !email) {
+      setEmailError('');
+      return;
+    }
+    
+    const checkEmail = async () => {
+      setIsCheckingEmail(true);
+      try {
+        const response = await api.post('/auth/check-email', { email });
+        if (response.data.exists) {
+          setEmailError('This email is already in use.');
+        } else {
+          setEmailError('');
+        }
+      } catch (error) {
+        console.error('Email check error:', error);
+      } finally {
+        setIsCheckingEmail(false);
+      }
+    };
+
+    const timeoutId = setTimeout(checkEmail, 500);
+    return () => clearTimeout(timeoutId);
+  }, [email, showEmail]);
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -280,47 +315,59 @@ function LoginPageComponent() {
 
           {step === 'profile_setup' && (
             <form onSubmit={handleProfileSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
-                    <User size={18} />
+              {showFullName && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                      <User size={18} />
+                    </div>
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="Anandhu Kannan"
+                      className="w-full pl-12 pr-4 py-3.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
+                      required
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Anandhu Kannan"
-                    className="w-full pl-12 pr-4 py-3.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
-                    required
-                  />
                 </div>
-              </div>
+              )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
-                    <Mail size={18} />
+              {showEmail && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                      <Mail size={18} />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="name@example.com"
+                      className={`w-full pl-12 pr-4 py-3.5 bg-[#000000] border ${emailError ? 'border-red-500' : 'border-[#2c2c2e]'} rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm`}
+                      required
+                    />
+                    {isCheckingEmail && (
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-400"></div>
+                      </div>
+                    )}
                   </div>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="name@example.com"
-                    className="w-full pl-12 pr-4 py-3.5 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
-                    required
-                  />
+                  {emailError && (
+                    <p className="text-red-500 text-xs mt-1">{emailError}</p>
+                  )}
                 </div>
-              </div>
+              )}
 
               <button
                 type="submit"
-                disabled={isSubmitting || !fullName || !email}
+                disabled={isSubmitting || (showFullName && !fullName) || (showEmail && !email) || !!emailError || isCheckingEmail}
                 className="w-full bg-white text-black py-3.5 rounded-xl font-medium hover:bg-gray-100 disabled:bg-[#2c2c2e] disabled:text-gray-600 disabled:cursor-not-allowed transition-colors flex items-center justify-center space-x-2 text-sm"
               >
                 <span>{isSubmitting ? 'Saving Profile...' : 'Complete Registration'}</span>

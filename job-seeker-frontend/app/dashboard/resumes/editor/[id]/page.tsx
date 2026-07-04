@@ -2,7 +2,7 @@
 'use client';
 
 import { useEditor, EditorContent, Extension } from '@tiptap/react';
-import { type Editor } from '@tiptap/core';
+import { type Editor, Mark, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
@@ -94,6 +94,47 @@ const Indent = Extension.create({
   },
 });
 
+const FloatRight = Mark.create({
+  name: 'floatRight',
+  parseHTML() {
+    return [{ style: 'float' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { style: 'float: right;' }), 0];
+  },
+});
+
+const getSuggestionColors = (type: string | null) => {
+  switch (type) {
+    case 'grammar': return { mark: 'bg-blue-500/20 border-blue-500 hover:bg-blue-500/40 text-blue-900', text: 'text-blue-400', border: 'border-blue-500/30', bg: 'bg-blue-500' };
+    case 'strengthen': return { mark: 'bg-red-500/20 border-red-500 hover:bg-red-500/40 text-red-900', text: 'text-red-400', border: 'border-red-500/30', bg: 'bg-red-500' };
+    case 'quantify': return { mark: 'bg-emerald-500/20 border-emerald-500 hover:bg-emerald-500/40 text-emerald-900', text: 'text-emerald-400', border: 'border-emerald-500/30', bg: 'bg-emerald-500' };
+    case 'keyword': return { mark: 'bg-purple-500/20 border-purple-500 hover:bg-purple-500/40 text-purple-900', text: 'text-purple-400', border: 'border-purple-500/30', bg: 'bg-purple-500' };
+    default: return { mark: 'bg-amber-500/20 border-amber-500 hover:bg-amber-500/40 text-amber-900', text: 'text-amber-400', border: 'border-amber-500/30', bg: 'bg-amber-500' };
+  }
+};
+
+const AISuggestionMark = Mark.create({
+  name: 'aiSuggestion',
+  addAttributes() {
+    return {
+      suggestionId: { default: null },
+      suggestionType: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-suggestion-id]' }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    const colors = getSuggestionColors(HTMLAttributes.suggestionType);
+    return ['span', mergeAttributes(HTMLAttributes, { 
+      'data-suggestion-id': HTMLAttributes.suggestionId,
+      'data-suggestion-type': HTMLAttributes.suggestionType,
+      class: `border-b-2 cursor-pointer transition-colors ${colors.mark}`
+    }), 0];
+  },
+});
+
 // ══════════════════════════════════════════════════════════════════════════
 // Types
 // ══════════════════════════════════════════════════════════════════════════
@@ -105,6 +146,12 @@ interface InlineSuggestion {
   suggestion: string;
   replacement: string;
   priority: 'high' | 'medium' | 'low';
+}
+
+interface ActiveSuggestion {
+  id: string;
+  x: number;
+  y: number;
 }
 
 interface SelectionToolbar {
@@ -214,6 +261,7 @@ function Toolbar({ editor }: { editor: Editor }) {
       <Btn onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} title="Italic"><Italic size={14} /></Btn>
       <Btn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title="Underline"><UIUnderline size={14} /></Btn>
       <Btn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title="Strike"><Strikethrough size={14} /></Btn>
+      <Btn onClick={() => editor.chain().focus().toggleMark('floatRight').run()} active={editor.isActive('floatRight')} title="Float Right"><ChevronRight size={14} /></Btn>
       <Divider />
       <ColorPicker label="Text Color" icon={Type} currentColor={textColor} onSelect={c => { setTextColor(c); editor.chain().focus().setColor(c).run(); }} />
       <ColorPicker label="Highlight" icon={Highlighter} currentColor={hlColor} onSelect={c => { setHlColor(c); editor.chain().focus().toggleHighlight({ color: c }).run(); }} />
@@ -408,22 +456,26 @@ function SelectionToolbarUI({ toolbar, onAction, onClose }: {
   }, [mode]);
 
   const ACTIONS = [
-    { id: 'grammar' as const, icon: SpellCheck, label: 'Fix Grammar', color: 'hover:text-yellow-400' },
-    { id: 'rewrite' as const, icon: RefreshCw, label: 'Rewrite', color: 'hover:text-blue-400' },
-    { id: 'custom' as const, icon: MessageSquare, label: 'Ask AI', color: 'hover:text-purple-400' },
+    { id: 'grammar' as const, action: 'grammar' as const, icon: SpellCheck, label: 'Fix Grammar', color: 'hover:text-yellow-400', prompt: 'Fix grammar, spelling, and phrasing errors while maintaining the original tone and context.' },
+    { id: 'rewrite' as const, action: 'rewrite' as const, icon: RefreshCw, label: 'Rewrite', color: 'hover:text-blue-400', prompt: 'Rewrite the selected text to sound more professional, active, and impactful.' },
+    { id: 'custom' as const, action: 'custom' as const, icon: MessageSquare, label: 'Ask AI', color: 'hover:text-purple-400', prompt: '' },
   ];
 
   return (
     <div
       style={{ position: 'fixed', left: toolbar.x, top: toolbar.y - 8, zIndex: 1000, transform: 'translate(-50%, -100%)' }}
       className="selection-toolbar"
-      onMouseDown={e => e.preventDefault()}
+      onMouseDown={e => {
+        if ((e.target as HTMLElement).tagName !== 'INPUT') {
+          e.preventDefault();
+        }
+      }}
     >
       {mode === 'main' && (
         <div className="bg-[#1e1e1e] border border-[#333] rounded-xl shadow-2xl shadow-black/50 flex items-center gap-1 px-2 py-1.5 animate-in fade-in slide-in-from-bottom-1 duration-150">
-          {ACTIONS.map(({ id, icon: Icon, label, color }) => (
+          {ACTIONS.map(({ id, action, icon: Icon, label, color, prompt }) => (
             <button key={id} title={label}
-              onClick={() => id === 'custom' ? setMode('custom') : handleAction(id)}
+              onClick={() => id === 'custom' ? setMode('custom') : handleAction(action, prompt)}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-300 ${color} transition-colors text-xs font-medium hover:bg-white/8`}>
               <Icon size={13} />{label}
             </button>
@@ -603,7 +655,7 @@ function SuggestionsPanel({ resumeId, suggestions, loading, onFetch, onAccept, o
   suggestions: InlineSuggestion[];
   loading: boolean;
   onFetch: () => void;
-  onAccept: (s: InlineSuggestion) => void;
+  onAccept: (sId: string) => void;
   onDismiss: (id: string) => void;
 }) {
   const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -661,7 +713,7 @@ function SuggestionsPanel({ resumeId, suggestions, loading, onFetch, onAccept, o
             </div>
 
             <div className="flex gap-2 px-3 pb-3">
-              <button onClick={() => onAccept(s)}
+              <button onClick={() => onAccept(s.id)}
                 className="flex-1 bg-blue-500/15 border border-blue-500/25 text-blue-300 text-xs py-1.5 rounded-lg hover:bg-blue-500/25 transition-colors font-medium flex items-center justify-center gap-1">
                 <CheckCircle size={11} />Apply
               </button>
@@ -700,6 +752,45 @@ function VersionsPanel({ versions, onRestore }: { versions: ResumeVersion[]; onR
   );
 }
 
+function SuggestionPopupUI({ activeId, x, y, suggestions, onAccept, onReject }: {
+  activeId: string;
+  x: number; y: number;
+  suggestions: InlineSuggestion[];
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  const suggestion = suggestions.find(s => s.id === activeId);
+  if (!suggestion) return null;
+
+  const colors = getSuggestionColors(suggestion.type);
+
+  return (
+    <div style={{ position: 'fixed', left: x, top: y + 8, zIndex: 1000, transform: 'translateX(-50%)' }}
+         className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-4 w-80 animate-in fade-in slide-in-from-top-2">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-1.5">
+          <Sparkles size={14} className={colors.text} />
+          <span className={`text-xs font-bold uppercase tracking-wider ${colors.text}`}>{suggestion.type}</span>
+        </div>
+        <button onClick={() => onReject(suggestion.id)} className="text-gray-400 hover:text-white transition-colors bg-white/5 rounded-full p-1"><X size={12}/></button>
+      </div>
+      <p className="text-gray-200 text-sm mb-4 leading-relaxed">{suggestion.suggestion}</p>
+      
+      <div className={`bg-black/40 p-3 rounded-xl border ${colors.border} mb-4 relative overflow-hidden`}>
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${colors.bg}`} />
+        <p className="text-gray-400 line-through text-xs mb-2 pl-2">{suggestion.originalSnippet}</p>
+        <p className="text-white text-sm font-medium pl-2">{suggestion.replacement}</p>
+      </div>
+      
+      <div className="flex gap-2">
+        <button onClick={() => onAccept(suggestion.id)} className="flex-1 bg-white/10 hover:bg-white/20 border border-white/5 text-white text-xs font-semibold py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm">
+          <CheckCheck size={14} className="text-emerald-400" /> Accept Fix
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // Main Editor Page
 // ══════════════════════════════════════════════════════════════════════════
@@ -711,9 +802,11 @@ export default function ResumeEditorPage() {
   const [resumeName, setResumeName] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loading, setLoading] = useState(true);
+
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [converting, setConverting] = useState(false);
   const [zoom, setZoom] = useState(100);
-  const [margins, setMargins] = useState({ top: 60, right: 72, bottom: 60, left: 72 });
+  const [margins, setMargins] = useState({ top: 48, right: 48, bottom: 48, left: 48 });
   const [activePanel, setActivePanel] = useState<LeftPanel>(null);
   const [keywordGaps, setKeywordGaps] = useState<string[]>([]);
   const [versions, setVersions] = useState<ResumeVersion[]>([]);
@@ -721,7 +814,7 @@ export default function ResumeEditorPage() {
   // Inline suggestions state
   const [inlineSuggestions, setInlineSuggestions] = useState<InlineSuggestion[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [activeSuggestion, setActiveSuggestion] = useState<{ suggestion: InlineSuggestion; x: number; y: number } | null>(null);
+  const [activeSuggestion, setActiveSuggestion] = useState<ActiveSuggestion | null>(null);
 
   // Selection toolbar state
   const [selectionToolbar, setSelectionToolbar] = useState<SelectionToolbar | null>(null);
@@ -730,10 +823,19 @@ export default function ResumeEditorPage() {
     from: number; to: number; position: { x: number; y: number };
   } | null>(null);
 
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout>>();
   const canvasRef = useRef<HTMLDivElement>(null);
+  const styleRef = useRef<HTMLStyleElement | null>(null);
   const PAGE_W = 794;
   const PAGE_H = 1123;
+
+  const [contentHeight, setContentHeight] = useState(PAGE_H);
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    document.head.appendChild(style);
+    styleRef.current = style;
+    return () => { document.head.removeChild(style); };
+  }, []);
 
   // ─── Wheel zoom ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -751,16 +853,63 @@ export default function ResumeEditorPage() {
   // ─── TipTap ──────────────────────────────────────────────────────────
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: { depth: 100 } }),
+      StarterKit.configure({ history: { depth: 100 } } as any),
       TextStyle, Color, FontFamily, FontSize, Underline, LineHeight, Indent,
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      HorizontalRule,
+      HorizontalRule, FloatRight, AISuggestionMark,
     ],
     content: '',
-    editorProps: { attributes: { class: 'outline-none min-h-full', style: 'min-height: 900px;' } },
+    editorProps: { attributes: { class: 'outline-none' } },
   });
+
+  // ─── Suggestion click & hover handling ───────────────────────────────
+  useEffect(() => {
+    if (!editor) return;
+    const el = editor.view.dom;
+    
+    const handleEvent = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const mark = target.closest('[data-suggestion-id]');
+      if (mark) {
+        const id = mark.getAttribute('data-suggestion-id');
+        const rect = mark.getBoundingClientRect();
+        if (id) setActiveSuggestion({ id, x: rect.left + rect.width / 2, y: rect.bottom });
+      }
+    };
+    
+    // We only clear the suggestion if they click outside. If they move their mouse away, it stays until they click it away or accept/reject.
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-suggestion-id]')) {
+        setActiveSuggestion(null);
+      } else {
+        handleEvent(e);
+      }
+    };
+
+    el.addEventListener('click', onClick);
+    el.addEventListener('mouseover', handleEvent);
+    
+    return () => {
+      el.removeEventListener('click', onClick);
+      el.removeEventListener('mouseover', handleEvent);
+    };
+  }, [editor]);
+
+  // Track content height to render correct number of A4 pages
+  useEffect(() => {
+    if (!editor) return;
+    const el = editor.view.dom;
+    const observer = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        setContentHeight(Math.max(PAGE_H, entry.contentRect.height));
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [editor]);
 
   // ─── Selection detection ─────────────────────────────────────────────
   useEffect(() => {
@@ -842,6 +991,80 @@ export default function ResumeEditorPage() {
     setAiResult(null);
   }, [aiResult, editor]);
 
+  // ─── Auto Pagination ──────────────────────────────────────────────────
+  const updatePagination = useCallback(() => {
+    if (!canvasRef.current || !styleRef.current) return;
+    const pm = canvasRef.current.querySelector('.ProseMirror') as HTMLElement;
+    const overlay = canvasRef.current.querySelector('.editor-overlay') as HTMLElement;
+    if (!pm || !overlay) return;
+
+    const children = Array.from(pm.children) as HTMLElement[];
+    const PAGE_FULL_H = PAGE_H + 32; // 32 is the GAP
+    
+    // Clear injected styles to read the purely natural layout
+    styleRef.current.innerHTML = '';
+    
+    // Force a synchronous reflow to ensure natural positions are calculated
+    void pm.offsetHeight;
+    
+    const overlayRect = overlay.getBoundingClientRect();
+    const scale = zoom / 100;
+    
+    let cumulativePush = 0;
+    let cssRules = '';
+    
+    const mTop = Number(margins.top) || 60;
+    const mBottom = Number(margins.bottom) || 60;
+
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const childRect = child.getBoundingClientRect();
+      
+      // Calculate true visual top relative to the overlay without any scaling
+      const naturalTop = (childRect.top - overlayRect.top) / scale;
+      const childHeight = childRect.height / scale;
+
+      const simulatedTop = naturalTop + cumulativePush;
+      const simulatedBottom = simulatedTop + childHeight;
+
+      const pageIndex = Math.floor(simulatedTop / PAGE_FULL_H);
+      const bottomMarginY = pageIndex * PAGE_FULL_H + PAGE_H - mBottom;
+
+      if (simulatedBottom > bottomMarginY) {
+        const nextPageTopMarginY = (pageIndex + 1) * PAGE_FULL_H + mTop;
+        const pushAmount = Math.max(0, nextPageTopMarginY - simulatedTop);
+        
+        if (pushAmount > 0) {
+          cumulativePush += pushAmount;
+          
+          const naturalMarginTop = parseFloat(window.getComputedStyle(child).marginTop) || 0;
+          const prevChild = i > 0 ? children[i - 1] : null;
+          const prevMarginBottom = prevChild ? parseFloat(window.getComputedStyle(prevChild).marginBottom) || 0 : 0;
+          
+          // Compensate for CSS margin collapsing to ensure exact physical push
+          const currentCollapsedMargin = Math.max(naturalMarginTop, prevMarginBottom);
+          const targetMarginTop = currentCollapsedMargin + pushAmount;
+          
+          cssRules += `.ProseMirror > *:nth-child(${i + 1}) { margin-top: ${targetMarginTop}px !important; }\n`;
+        }
+      }
+    }
+    
+    styleRef.current.innerHTML = cssRules;
+  }, [margins, zoom]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const handler = () => updatePagination();
+    editor.on('update', handler);
+    return () => { editor.off('update', handler); }
+  }, [editor, updatePagination]);
+
+  useEffect(() => {
+    const timer = setTimeout(updatePagination, 50);
+    return () => clearTimeout(timer);
+  }, [updatePagination, contentHeight]);
+
   // ─── Load resume ─────────────────────────────────────────────────────
   const loadResume = useCallback(async () => {
     if (!editor) return;
@@ -860,11 +1083,59 @@ export default function ResumeEditorPage() {
       setResumeName(data.name);
       setKeywordGaps(data.aiSuggestions?.keywordGaps ?? []);
       setVersions(data.content?.versions ?? []);
-      const savedMargins = data.content?.margins ?? { top: 60, right: 72, bottom: 60, left: 72 };
+      const savedMargins = data.content?.margins ?? { top: 48, right: 48, bottom: 48, left: 48 };
+      if (savedMargins.left === 72 && savedMargins.right === 72) {
+        savedMargins.left = 48;
+        savedMargins.right = 48;
+        if (savedMargins.top === 60) savedMargins.top = 48;
+        if (savedMargins.bottom === 60) savedMargins.bottom = 48;
+      }
       setMargins(savedMargins);
 
-      const html = data.content?.htmlContent;
-      if (html) editor.commands.setContent(html);
+      let html = data.content?.htmlContent;
+      if (html) {
+        // Robust DOM parsing to find and auto-float dates without breaking HTML tags
+        try {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, 'text/html');
+
+          // Strip old AI suggestion marks saved in HTML
+          const aiMarks = doc.querySelectorAll('span[data-suggestion-id]');
+          aiMarks.forEach(mark => {
+            const parent = mark.parentNode;
+            while (mark.firstChild) parent?.insertBefore(mark.firstChild, mark);
+            parent?.removeChild(mark);
+          });
+
+          const dateRegex = /(?:\s|—|-|–)*\(?((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}|\d{4})\s*(?:-|—|–|to)\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s*\d{4}|\d{4}|Present|In Progress))\)?\s*$/i;
+          
+          const walk = document.createTreeWalker(doc.body, 4 /* NodeFilter.SHOW_TEXT */, null);
+          let node;
+          const replacements = [];
+          while ((node = walk.nextNode())) {
+            if (dateRegex.test(node.textContent || '')) replacements.push(node);
+          }
+          
+          replacements.forEach(n => {
+            const text = n.textContent || '';
+            const match = text.match(dateRegex);
+            if (match && n.parentNode) {
+               const span = doc.createElement('span');
+               span.style.float = 'right';
+               span.textContent = match[1];
+               n.textContent = text.replace(dateRegex, '');
+               n.parentNode.insertBefore(span, n.nextSibling);
+            }
+          });
+          html = doc.body.innerHTML;
+          
+          // Auto-fix contact info style to match new design (dots instead of pipes, no hr)
+          html = html.replace(/ \| /g, ' &nbsp;&middot;&nbsp; ');
+          html = html.replace(/<\/p><hr>/g, '</p>');
+        } catch(e) { console.error('Auto-format failed', e); }
+        
+        editor.commands.setContent(html);
+      }
       else if (data.content?.autoCorrectedText) {
         editor.commands.setContent(`<p>${data.content.autoCorrectedText.replace(/\n/g, '</p><p>')}</p>`);
       }
@@ -902,30 +1173,107 @@ export default function ResumeEditorPage() {
     setLoadingSuggestions(true);
     try {
       const res = await getInlineSuggestions(id);
-      setInlineSuggestions(res.data.data.suggestions ?? []);
-      setActivePanel('suggestions');
-    } catch {} finally { setLoadingSuggestions(false); }
-  }, [id]);
+      const suggestions: InlineSuggestion[] = res.data.data.suggestions ?? [];
+      
+      if (editor && suggestions.length > 0) {
+        const { tr } = editor.state;
+        suggestions.forEach(s => {
+          const escaped = s.originalSnippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(escaped, 'i'); // Removed 'g' to match only the first occurrence
+          let matched = false;
 
-  const handleAcceptSuggestion = useCallback((suggestion: InlineSuggestion) => {
+          editor.state.doc.descendants((node, pos) => {
+            if (matched) return false; // Stop searching if already found
+            
+            if (node.isTextblock) {
+              let text = '';
+              const posMap: number[] = [];
+              node.forEach((child, offset) => {
+                if (child.isText && child.text) {
+                  for (let i = 0; i < child.text.length; i++) {
+                    text += child.text[i];
+                    posMap.push(pos + 1 + offset + i);
+                  }
+                } else {
+                  text += ' '; // Represent inline nodes (e.g. <br>) as space
+                  posMap.push(pos + 1 + offset);
+                }
+              });
+
+              const match = regex.exec(text);
+              if (match) {
+                const startIdx = match.index;
+                const endIdx = match.index + match[0].length - 1;
+                if (startIdx < posMap.length && endIdx < posMap.length) {
+                  const from = posMap[startIdx];
+                  const to = posMap[endIdx] + 1;
+                  tr.addMark(from, to, editor.schema.marks.aiSuggestion.create({ suggestionId: s.id, suggestionType: s.type }));
+                  matched = true;
+                }
+              }
+            }
+          });
+        });
+        editor.view.dispatch(tr);
+      }
+      setInlineSuggestions(suggestions);
+      setActivePanel(null);
+    } catch {} finally { setLoadingSuggestions(false); }
+  }, [id, editor]);
+
+  const clearInlineSuggestions = useCallback(() => {
     if (!editor) return;
-    const html = editor.getHTML();
-    // Try to find and replace the snippet in the HTML
-    const escapedSnippet = suggestion.originalSnippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(escapedSnippet, 'i');
-    if (regex.test(editor.getText())) {
-      // Use TipTap content replacement
-      const newHtml = html.replace(regex, suggestion.replacement);
-      editor.commands.setContent(newHtml);
-    }
-    setInlineSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
+    const { tr } = editor.state;
+    editor.state.doc.descendants((node, pos) => {
+      node.marks.forEach(mark => {
+        if (mark.type.name === 'aiSuggestion') {
+          tr.removeMark(pos, pos + node.nodeSize, mark);
+        }
+      });
+    });
+    editor.view.dispatch(tr);
+    setInlineSuggestions([]);
     setActiveSuggestion(null);
   }, [editor]);
 
-  const handleDismissSuggestion = useCallback((id: string) => {
-    setInlineSuggestions(prev => prev.filter(s => s.id !== id));
+  const handleAcceptSuggestion = useCallback((sId: string) => {
+    if (!editor) return;
+    const suggestion = inlineSuggestions.find(s => s.id === sId);
+    if (!suggestion) return;
+
+    let from = -1;
+    let to = -1;
+    
+    // Find contiguous range of this specific suggestion mark
+    editor.state.doc.descendants((node, pos) => {
+       const mark = node.marks.find(m => m.type.name === 'aiSuggestion' && m.attrs.suggestionId === sId);
+       if (mark) {
+          if (from === -1) from = pos;
+          to = pos + node.nodeSize;
+       }
+    });
+    
+    if (from !== -1 && to !== -1) {
+       editor.view.dispatch(editor.state.tr.replaceWith(from, to, editor.schema.text(suggestion.replacement)));
+    }
+    
+    setInlineSuggestions(prev => prev.filter(s => s.id !== sId));
     setActiveSuggestion(null);
-  }, []);
+  }, [editor, inlineSuggestions]);
+
+  const handleDismissSuggestion = useCallback((sId: string) => {
+    if (!editor) return;
+    const { tr } = editor.state;
+    editor.state.doc.descendants((node, pos) => {
+       const mark = node.marks.find(m => m.type.name === 'aiSuggestion' && m.attrs.suggestionId === sId);
+       if (mark) {
+          tr.removeMark(pos, pos + node.nodeSize, editor.schema.marks.aiSuggestion);
+       }
+    });
+    editor.view.dispatch(tr);
+    setInlineSuggestions(prev => prev.filter(s => s.id !== sId));
+    setActiveSuggestion(null);
+  }, [editor]);
 
   // ─── Margin handlers ─────────────────────────────────────────────────
   const handleHorizontalMarginChange = useCallback((l: number, r: number) => {
@@ -960,8 +1308,12 @@ export default function ResumeEditorPage() {
     if (!editor) return;
     const win = window.open('', '_blank')!;
     win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${resumeName}</title><style>
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:Georgia,serif;font-size:12px;color:#1a1a1a;padding:${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px;max-width:${PAGE_W}px;margin:0 auto}
-h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:center}h2{font-size:15px;font-weight:700;color:#1a1a1a;margin-top:18px;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #ddd}h3{font-size:13px;font-weight:600;color:#1a1a1a;margin-top:10px}p{margin-bottom:5px}ul,ol{margin-left:18px;margin-bottom:6px}li{margin-bottom:3px}a{color:#1a1a1a;text-decoration:underline}hr{border:none;border-top:1px solid #ddd;margin:10px 0}strong{font-weight:700}em{font-style:italic}@media print{body{padding:20px}@page{margin:15mm}}
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Times New Roman",Times,serif;font-size:13.5px;line-height:1.35;color:#000;padding:${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px;max-width:${PAGE_W}px;margin:0 auto}
+h1{font-size:24px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#000;margin-bottom:2px;text-align:center}
+h2{font-size:14.5px;font-weight:700;color:#000;margin-top:10px;margin-bottom:2px;padding-bottom:2px;border-bottom:1px solid #000}
+p{margin-bottom:2px}ul,ol{margin-left:20px;margin-bottom:2px}li{margin-bottom:1px;padding-left:2px}
+a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margin:6px 0}strong{font-weight:700}em{font-style:italic}
+@media print{body{padding:20px}@page{margin:15mm}}
 </style></head><body>${editor.getHTML()}</body></html>`);
     win.document.close();
     setTimeout(() => { win.focus(); win.print(); }, 400);
@@ -980,23 +1332,25 @@ h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:cen
   ];
 
   const EDITOR_CSS = `
-    .ProseMirror { font-family: Georgia, serif; font-size: 12px; color: #1a1a1a; }
-    .ProseMirror h1 { font-size: 26px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; text-align: center; }
-    .ProseMirror h2 { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-top: 18px; margin-bottom: 6px; padding-bottom: 3px; border-bottom: 1px solid #ddd; }
-    .ProseMirror h3 { font-size: 13px; font-weight: 600; color: #1a1a1a; margin-top: 10px; }
-    .ProseMirror p { margin-bottom: 5px; color: #1a1a1a; }
-    .ProseMirror ul { list-style-type: disc; margin-left: 18px; margin-bottom: 6px; }
-    .ProseMirror ol { list-style-type: decimal; margin-left: 18px; margin-bottom: 6px; }
-    .ProseMirror li { margin-bottom: 3px; color: #1a1a1a; }
-    .ProseMirror a { color: #1a1a1a; text-decoration: underline; }
-    .ProseMirror hr { border: none; border-top: 1px solid #ddd; margin: 10px 0; }
+    .ProseMirror { font-family: "Times New Roman", Times, serif; font-size: 13.5px; line-height: 1.35; color: #000; }
+    .ProseMirror:focus { outline: none; }
+    .ProseMirror ::selection { background: rgba(59,130,246,0.25); }
+    .ProseMirror a { color: inherit; text-decoration: none; }
     .ProseMirror strong { font-weight: 700; }
     .ProseMirror em { font-style: italic; }
     .ProseMirror u { text-decoration: underline; }
     .ProseMirror s { text-decoration: line-through; }
     .ProseMirror mark { border-radius: 2px; padding: 0 2px; }
-    .ProseMirror:focus { outline: none; }
-    .ProseMirror ::selection { background: rgba(59,130,246,0.25); }
+    
+    .ProseMirror h1 { font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #000; margin-bottom: 2px; text-align: center; }
+    .ProseMirror h2 { font-size: 14.5px; font-weight: 700; color: #000; margin-top: 10px; margin-bottom: 2px; padding-bottom: 2px; border-bottom: 1px solid #000; }
+    .ProseMirror h3 { font-size: 13.5px; font-weight: 700; color: #000; margin-top: 6px; margin-bottom: 2px; }
+    .ProseMirror p { margin-bottom: 2px; color: #000; }
+    .ProseMirror ul { list-style-type: disc; margin-left: 20px; margin-bottom: 2px; }
+    .ProseMirror ol { list-style-type: decimal; margin-left: 20px; margin-bottom: 2px; }
+    .ProseMirror li { margin-bottom: 1px; color: #000; padding-left: 2px; }
+    .ProseMirror hr { border: none; border-top: 1px solid #000; margin: 6px 0; }
+
     @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
     .animate-in { animation: slideDown 0.15s ease; }
   `;
@@ -1016,16 +1370,25 @@ h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:cen
           placeholder="Untitled Resume" />
 
         {/* Analyse button */}
-        <button onClick={fetchInlineSuggestions} disabled={loadingSuggestions || loading}
-          className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-500/15 border border-blue-500/25 text-blue-300 rounded-lg hover:bg-blue-500/25 transition-colors disabled:opacity-40 flex-shrink-0">
-          {loadingSuggestions ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-          {loadingSuggestions ? 'Analysing…' : 'Analyse'}
+        <div className="flex items-center gap-1">
+          <button onClick={fetchInlineSuggestions} disabled={loadingSuggestions || loading}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-500/15 border border-blue-500/25 text-blue-300 rounded-lg hover:bg-blue-500/25 transition-colors disabled:opacity-40 flex-shrink-0">
+            {loadingSuggestions ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+            {loadingSuggestions ? 'Analysing…' : 'Analyse'}
+            {inlineSuggestions.length > 0 && (
+              <span className="bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-semibold">
+                {inlineSuggestions.length}
+              </span>
+            )}
+          </button>
+          
           {inlineSuggestions.length > 0 && (
-            <span className="bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-semibold">
-              {inlineSuggestions.length}
-            </span>
+            <button onClick={clearInlineSuggestions} title="Clear AI Suggestions"
+              className="p-1.5 text-gray-400 hover:text-red-400 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg transition-colors">
+              <X size={14} />
+            </button>
           )}
-        </button>
+        </div>
 
         {/* Zoom */}
         <div className="flex items-center gap-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-1 py-1">
@@ -1118,7 +1481,7 @@ h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:cen
           ) : (
             <div className="flex py-8" style={{ minHeight: '100%', justifyContent: 'center' }}>
               <VerticalRuler
-                height={Math.round(PAGE_H * zoom / 100)}
+                height={Math.round((Math.max(1, Math.ceil(contentHeight / PAGE_H)) * PAGE_H + Math.max(0, Math.ceil(contentHeight / PAGE_H) - 1) * 32) * zoom / 100)}
                 marginTop={Math.round(margins.top * zoom / 100)}
                 marginBottom={Math.round(margins.bottom * zoom / 100)}
                 onMarginChange={handleVerticalMarginChange}
@@ -1132,18 +1495,49 @@ h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:cen
                   onMarginChange={handleHorizontalMarginChange}
                 />
 
-                <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', marginBottom: `${(zoom / 100 - 1) * PAGE_H}px` }}>
-                  <div style={{
-                    width: PAGE_W, minHeight: PAGE_H,
-                    backgroundColor: '#ffffff',
-                    paddingTop: margins.top, paddingRight: margins.right,
-                    paddingBottom: margins.bottom, paddingLeft: margins.left,
-                    boxShadow: '0 8px 60px rgba(0,0,0,0.6)',
-                    borderRadius: 2, position: 'relative',
-                  }}>
-                    <div style={{ position: 'absolute', top: margins.top, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.25) 10%, rgba(59,130,246,0.25) 90%, transparent)', pointerEvents: 'none' }} />
-                    <div style={{ position: 'absolute', bottom: margins.bottom, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.25) 10%, rgba(59,130,246,0.25) 90%, transparent)', pointerEvents: 'none' }} />
-                    {editor && <EditorContent editor={editor} />}
+                <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', marginBottom: `${(zoom / 100 - 1) * (Math.max(1, Math.ceil(contentHeight / PAGE_H)) * PAGE_H + Math.max(0, Math.ceil(contentHeight / PAGE_H) - 1) * 32)}px` }}>
+                  <div 
+                    onClick={() => { if (editor && !editor.isFocused) editor.commands.focus('end'); }}
+                    style={{
+                      width: PAGE_W, 
+                      minHeight: Math.max(1, Math.ceil(contentHeight / PAGE_H)) * PAGE_H + Math.max(0, Math.ceil(contentHeight / PAGE_H) - 1) * 32,
+                      position: 'relative',
+                      cursor: 'text'
+                    }}
+                  >
+                    {/* Render Page Backgrounds and Margin Guides */}
+                    <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+                      {Array.from({ length: Math.max(1, Math.ceil(contentHeight / PAGE_H)) }).map((_, i) => (
+                        <div key={i} style={{
+                          position: 'absolute',
+                          top: i * (PAGE_H + 32),
+                          left: 0,
+                          width: PAGE_W,
+                          height: PAGE_H,
+                          backgroundColor: '#ffffff',
+                          boxShadow: '0 8px 60px rgba(0,0,0,0.15)',
+                          boxSizing: 'border-box'
+                        }}>
+                          <div style={{ position: 'absolute', top: margins.top, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.25) 10%, rgba(59,130,246,0.25) 90%, transparent)' }} />
+                          <div style={{ position: 'absolute', bottom: margins.bottom, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.25) 10%, rgba(59,130,246,0.25) 90%, transparent)' }} />
+                          {/* Page Number Indicator */}
+                          <div style={{ position: 'absolute', bottom: 12, right: margins.right, fontSize: 10, color: '#9ca3af', fontWeight: 500 }}>
+                            Page {i + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Editor Content Overlay */}
+                    <div className="editor-overlay" style={{ 
+                      position: 'relative', 
+                      zIndex: 10,
+                      paddingTop: margins.top, paddingRight: margins.right,
+                      paddingBottom: margins.bottom, paddingLeft: margins.left,
+                      minHeight: Math.max(1, Math.ceil(contentHeight / PAGE_H)) * PAGE_H
+                    }}>
+                      {editor && <EditorContent editor={editor} />}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1158,6 +1552,16 @@ h1{font-size:26px;font-weight:700;color:#1a1a1a;margin-bottom:4px;text-align:cen
           toolbar={selectionToolbar}
           onAction={handleTextAction}
           onClose={() => setSelectionToolbar(null)}
+        />
+      )}
+      {activeSuggestion && (
+        <SuggestionPopupUI
+          activeId={activeSuggestion.id}
+          x={activeSuggestion.x}
+          y={activeSuggestion.y}
+          suggestions={inlineSuggestions}
+          onAccept={handleAcceptSuggestion}
+          onReject={handleDismissSuggestion}
         />
       )}
 

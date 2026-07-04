@@ -10,6 +10,7 @@ import {
 import api from '@/app/lib/axios';
 import FeedbackModal from '@/app/components/FeedbackModal';
 import AddToTalentPoolModal from '@/app/components/AddToTalentPoolModal'; // NEW
+import { useAuth } from '@/app/contexts/AuthContext';
 
 interface FeedbackRecord {
   id: string;
@@ -72,6 +73,7 @@ const PRIORITY_CONFIG: Record<number, { label: string; color: string }> = {
 const STATUS_OPTIONS = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'];
 
 export default function CompanyInterviewsPage() {
+  const { isAdmin, isHR, isViewer } = useAuth();
   const router = useRouter();
   const [interviews, setInterviews] = useState<InterviewRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -423,14 +425,16 @@ export default function CompanyInterviewsPage() {
                           }`}
                         >
                           {/* Top row */}
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-3 min-w-0">
-                              <button
-                                onClick={(e) => handleToggleStar(interview.application.id, interview.application.isStarred, e)}
-                                className="flex-shrink-0 text-zinc-600 hover:text-amber-400 transition-colors"
-                              >
-                                <Star size={14} className={interview.application.isStarred ? 'fill-amber-400 text-amber-400' : ''} />
-                              </button>
+                              {(isAdmin || isHR) && (
+                                <button
+                                  onClick={(e) => handleToggleStar(interview.application.id, interview.application.isStarred, e)}
+                                  className="flex-shrink-0 text-zinc-600 hover:text-amber-400 transition-colors"
+                                >
+                                  <Star size={14} className={interview.application.isStarred ? 'fill-amber-400 text-amber-400' : ''} />
+                                </button>
+                              )}
                               <div className="flex items-center gap-2">
                                 {candidateProfile.profilePhotoUrl ? (
                                   <img
@@ -446,13 +450,15 @@ export default function CompanyInterviewsPage() {
                                   <span className="text-zinc-600 font-normal text-[11px] font-mono hidden md:inline">// {candidateProfile.email}</span>
                                   
                                   {/* NEW: Direct Link to Pool Modal */}
-                                  <button
-                                    onClick={(e) => openTalentPoolModal(interview.application.jobSeekerProfileId || candidateProfile.id, candidateProfile.fullName, e)}
-                                    className="p-1 text-zinc-500 hover:text-blue-400 rounded hover:bg-zinc-900/60 transition-colors ml-1"
-                                    title="Add to Talent Pool"
-                                  >
-                                    <FolderPlus size={13} />
-                                  </button>
+                                  {(isAdmin || isHR) && (
+                                    <button
+                                      onClick={(e) => openTalentPoolModal(interview.application.jobSeekerProfileId || candidateProfile.id, candidateProfile.fullName, e)}
+                                      className="p-1 text-zinc-500 hover:text-blue-400 rounded hover:bg-zinc-900/60 transition-colors ml-1"
+                                      title="Add to Talent Pool"
+                                    >
+                                      <FolderPlus size={13} />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -496,21 +502,27 @@ export default function CompanyInterviewsPage() {
                                 <p className="text-[11px]">Proposed Window: <span className="text-zinc-300 font-bold">{new Date(pendingReschedule.proposedTime).toLocaleString()}</span></p>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
-                                <button
-                                  onClick={(e) => handleRescheduleAction(interview.id, 'decline', e)}
-                                  disabled={processingId !== null}
-                                  className="p-1.5 border border-zinc-800 hover:border-red-900 bg-zinc-900 hover:bg-red-950/20 text-zinc-500 hover:text-red-400 rounded-lg transition-all"
-                                >
-                                  <X size={14} />
-                                </button>
-                                <button
-                                  onClick={(e) => handleRescheduleAction(interview.id, 'approve', e)}
-                                  disabled={processingId !== null}
-                                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg text-[11px] transition-colors flex items-center gap-1"
-                                >
-                                  <Check size={13} className="stroke-[3]" />
-                                  Accept Window
-                                </button>
+                                {(isAdmin || isHR) ? (
+                                  <>
+                                    <button
+                                      onClick={(e) => handleRescheduleAction(interview.id, 'decline', e)}
+                                      disabled={processingId !== null}
+                                      className="p-1.5 border border-zinc-800 hover:border-red-900 bg-zinc-900 hover:bg-red-950/20 text-zinc-500 hover:text-red-400 rounded-lg transition-all"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                    <button
+                                      onClick={(e) => handleRescheduleAction(interview.id, 'approve', e)}
+                                      disabled={processingId !== null}
+                                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg text-[11px] transition-colors flex items-center gap-1"
+                                    >
+                                      <Check size={13} className="stroke-[3]" />
+                                      Accept Window
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Contact HR/Admin</span>
+                                )}
                               </div>
                             </div>
                           )}
@@ -537,55 +549,63 @@ export default function CompanyInterviewsPage() {
 
                           {/* Lower Action bar */}
                           <div className="border-t border-zinc-900/60 pt-3 flex flex-wrap items-center justify-between gap-3">
-                            {/* Override Dropdown Engine */}
-                            <div className="relative font-mono" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveDropdownId(activeDropdownId === interview.id ? null : interview.id);
-                                }}
-                                disabled={processingId === interview.id}
-                                className={`px-3 py-1.5 border rounded-lg text-[11px] uppercase font-semibold flex items-center gap-2 transition-all min-w-[140px] justify-between ${statusConfig.color}`}
-                              >
-                                <span>{statusConfig.label}</span>
-                                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeDropdownId === interview.id ? 'rotate-180' : ''}`} />
-                              </button>
+                            {/* Override Dropdown Engine or Static Badge */}
+                            {(isAdmin || isHR) ? (
+                              <div className="relative font-mono" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveDropdownId(activeDropdownId === interview.id ? null : interview.id);
+                                  }}
+                                  disabled={processingId === interview.id}
+                                  className={`px-3 py-1.5 border rounded-lg text-[11px] uppercase font-semibold flex items-center gap-2 transition-all min-w-[140px] justify-between ${statusConfig.color}`}
+                                >
+                                  <span>{statusConfig.label}</span>
+                                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeDropdownId === interview.id ? 'rotate-180' : ''}`} />
+                                </button>
 
-                              {activeDropdownId === interview.id && (
-                                <>
-                                  <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdownId(null); }} />
-                                  <div className="absolute left-0 bottom-full mb-1 z-20 w-44 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl p-1 space-y-0.5">
-                                    <div className="text-[9px] text-zinc-600 px-2 py-1 uppercase tracking-wider font-bold">Override Stage</div>
-                                    {STATUS_OPTIONS.map((opt) => (
-                                      <button
-                                        key={opt}
-                                        onClick={(e) => handleStatusUpdate(interview.id, opt, e)}
-                                        className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] uppercase font-mono transition-colors block ${
-                                          interview.status === opt
-                                            ? 'bg-zinc-900 text-white font-bold'
-                                            : 'text-zinc-400 hover:bg-zinc-900/60 hover:text-white'
-                                        }`}
-                                      >
-                                        {opt.replace('_', ' ')}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-                            </div>
+                                {activeDropdownId === interview.id && (
+                                  <>
+                                    <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdownId(null); }} />
+                                    <div className="absolute left-0 bottom-full mb-1 z-20 w-44 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl p-1 space-y-0.5">
+                                      <div className="text-[9px] text-zinc-600 px-2 py-1 uppercase tracking-wider font-bold">Override Stage</div>
+                                      {STATUS_OPTIONS.map((opt) => (
+                                        <button
+                                          key={opt}
+                                          onClick={(e) => handleStatusUpdate(interview.id, opt, e)}
+                                          className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] uppercase font-mono transition-colors block ${
+                                            interview.status === opt
+                                              ? 'bg-zinc-900 text-white font-bold'
+                                              : 'text-zinc-400 hover:bg-zinc-900/60 hover:text-white'
+                                          }`}
+                                        >
+                                          {opt.replace('_', ' ')}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            ) : (
+                              <span className={`px-3 py-1.5 border rounded-lg text-[11px] uppercase font-semibold select-none ${statusConfig.color}`}>
+                                {statusConfig.label}
+                              </span>
+                            )}
 
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={(e) => openFeedbackModal(interview.id, existingFeedback, e)}
-                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 border ${
-                                  hasFeedback
-                                    ? 'bg-amber-950/20 border-amber-900/60 text-amber-400 hover:bg-amber-950/40 hover:text-amber-300'
-                                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
-                                }`}
-                              >
-                                {hasFeedback ? <Edit3 size={13} /> : <CheckSquare size={13} />}
-                                {hasFeedback ? 'Update Feedback' : 'Log Feedback'}
-                              </button>
+                              {!isViewer && (
+                                <button
+                                  onClick={(e) => openFeedbackModal(interview.id, existingFeedback, e)}
+                                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 border ${
+                                    hasFeedback
+                                      ? 'bg-amber-950/20 border-amber-900/60 text-amber-400 hover:bg-amber-950/40 hover:text-amber-300'
+                                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                                  }`}
+                                >
+                                  {hasFeedback ? <Edit3 size={13} /> : <CheckSquare size={13} />}
+                                  {hasFeedback ? 'Update Feedback' : 'Log Feedback'}
+                                </button>
+                              )}
 
                               <a
                                 href={`/meet/${interview.id}?role=company`}

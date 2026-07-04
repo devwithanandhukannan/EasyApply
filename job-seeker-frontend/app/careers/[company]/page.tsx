@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import publicAPIService from '@/app/lib/public';
-import { usePublicAuth } from '@/app/contexts/PublicAuthContext';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { 
   Building2, MapPin, Users, Briefcase, Globe, 
   CheckCircle, ExternalLink, Search, 
@@ -56,7 +56,7 @@ interface Job {
 export default function CompanyCareerPage() {
   const params = useParams();
   const router = useRouter();
-  const { isAuthenticated, user, loading: authLoading } = usePublicAuth();
+  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
   const companyIdentifier = params.company as string;
 
   const [loading, setLoading] = useState(true);
@@ -87,7 +87,7 @@ export default function CompanyCareerPage() {
       const [profileRes, jobsRes] = await Promise.all([
         publicAPIService.getCompanyProfile(companyIdentifier),
         publicAPIService.getCompanyJobs(companyIdentifier)
-      ]);
+      ]) as [any, any];
 
       if (profileRes.success) {
         setCompany(profileRes.data);
@@ -155,9 +155,9 @@ export default function CompanyCareerPage() {
     );
   };
 
-  const getDepartments = () => [...new Set(jobs.map(j => j.department).filter(Boolean))];
-  const getJobTypes = () => [...new Set(jobs.map(j => j.jobType))];
-  const getLocationTypes = () => [...new Set(jobs.map(j => j.locationType).filter(Boolean))];
+  const getDepartments = () => [...new Set(jobs.map(j => j.department).filter(Boolean))] as string[];
+  const getJobTypes = () => [...new Set(jobs.map(j => j.jobType).filter(Boolean))] as string[];
+  const getLocationTypes = () => [...new Set(jobs.map(j => j.locationType).filter(Boolean))] as string[];
 
   if (loading || authLoading) {
     return (

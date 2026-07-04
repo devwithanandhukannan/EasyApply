@@ -62,8 +62,8 @@ router.use(authenticateToken);
 router.use(requireJobSeeker);
 
 // ─── PROFILE MANAGEMENT ──────────────────────────────────────────────────
-router.get('/profile', getProfile);
-router.put('/profile', profileUpload.single('profileImage'), updateProfile);
+router.get('/profile', getProfile as any);
+router.put('/profile', profileUpload.single('profileImage'), updateProfile as any);
 
 // ─── RESUME PARSE — uses memoryStorage so req.file.buffer is populated ────
 const parseResumeUpload = multer({

@@ -30,7 +30,7 @@ interface InterviewContext {
   application: {
     id: string;
     status: string;
-    jobSeekerProfile: { fullName: string; email: string };
+    jobSeekerProfile: { id: string; fullName: string; email: string };
     jobPosting: { title: string };
   };
   batch?: {

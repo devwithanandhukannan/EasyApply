@@ -429,7 +429,16 @@ export const updateOfferLetter = async (req: AuthRequest, res: Response) => {
                     include: {
                         jobSeekerProfile: true,
                         jobPosting: {
-                            include: { company: true }
+                            include: {
+                                company: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                        logoUrl: true
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -537,7 +546,16 @@ export const createOfferLetter = async (req: AuthRequest, res: Response) => {
                         include: {
                             jobSeekerProfile: true,
                             jobPosting: {
-                                include: { company: true }
+                                include: {
+                                    company: {
+                                        select: {
+                                            id: true,
+                                            name: true,
+                                            email: true,
+                                            logoUrl: true
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -635,7 +653,16 @@ export const sendOfferLetter = async (req: AuthRequest, res: Response) => {
                     include: {
                         jobSeekerProfile: true,
                         jobPosting: {
-                            include: { company: true }
+                            include: {
+                                company: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                        logoUrl: true
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -744,7 +771,14 @@ export const respondToOffer = async (req: AuthRequest, res: Response) => {
                         jobSeekerProfile: true,
                         jobPosting: {
                             include: {
-                                company: true // ✅ FIXED: Remove nested owner include
+                                company: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                        logoUrl: true
+                                    }
+                                }
                             }
                         }
                     }
@@ -931,7 +965,16 @@ export const getOfferDetails = async (req: AuthRequest, res: Response) => {
                     include: {
                         jobSeekerProfile: true,
                         jobPosting: {
-                            include: { company: true }
+                            include: {
+                                company: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                        logoUrl: true
+                                    }
+                                }
+                            }
                         }
                     }
                 },
@@ -1101,7 +1144,16 @@ export const respondToNegotiation = async (req: AuthRequest, res: Response) => {
                     include: {
                         jobSeekerProfile: true,
                         jobPosting: {
-                            include: { company: true }
+                            include: {
+                                company: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                        logoUrl: true
+                                    }
+                                }
+                            }
                         }
                     }
                 }

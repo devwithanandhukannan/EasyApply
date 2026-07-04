@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import api from '@/app/lib/axios';
+import api, { setAccessToken } from '@/app/lib/axios';
 
 interface AuthContextType {
   isAuthenticated: boolean;

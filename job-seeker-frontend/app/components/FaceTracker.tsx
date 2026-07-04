@@ -21,7 +21,7 @@ export default function FaceTracker({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   
   const [isInitialized, setIsInitialized] = useState(false);

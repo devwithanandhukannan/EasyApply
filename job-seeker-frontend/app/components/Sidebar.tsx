@@ -130,10 +130,10 @@ export default function Sidebar({ user }: SidebarProps) {
               }`}
             >
               <div className="w-8 h-8 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
-                {user?.jobSeekerProfile?.profilePhotoUrl ? (
+                {user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl ? (
                   <img 
-                    src={user.jobSeekerProfile.profilePhotoUrl} 
-                    alt={user?.name || 'User'} 
+                    src={user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl} 
+                    alt={user?.fullName || user?.name || 'User'} 
                     className="w-full h-full object-cover" 
                   />
                 ) : (
@@ -144,10 +144,10 @@ export default function Sidebar({ user }: SidebarProps) {
                 <>
                   <div className="flex-1 text-left min-w-0">
                     <p className="text-zinc-200 text-xs font-semibold truncate tracking-tight">
-                      {user?.jobSeekerProfile?.fullName || user?.name || 'User Profile'}
+                      {user?.fullName || user?.jobSeekerProfile?.fullName || user?.name || 'User Profile'}
                     </p>
                     <p className="text-zinc-500 text-[10px] truncate mt-0.5">
-                      {user?.jobSeekerProfile?.email || user?.email || 'unconfigured@identity.net'}
+                      {user?.email || user?.jobSeekerProfile?.email || 'unconfigured@identity.net'}
                     </p>
                   </div>
                   <ChevronDown className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${showUserMenu ? 'rotate-180 text-zinc-200' : ''}`} />
@@ -208,15 +208,15 @@ export default function Sidebar({ user }: SidebarProps) {
         <div className="p-4 border-b border-zinc-900 flex items-center justify-between bg-zinc-900/10">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-7 h-7 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center overflow-hidden">
-              {user?.jobSeekerProfile?.profilePhotoUrl ? (
-                <img src={user.jobSeekerProfile.profilePhotoUrl} alt="User" className="w-full h-full object-cover" />
+              {user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl ? (
+                <img src={user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl} alt="User" className="w-full h-full object-cover" />
               ) : (
                 <User className="w-3.5 h-3.5 text-zinc-400" />
               )}
             </div>
             <div className="min-w-0">
-              <h2 className="font-semibold text-xs text-zinc-200 truncate">{user?.jobSeekerProfile?.fullName || 'Candidate'}</h2>
-              <p className="text-[10px] text-zinc-500 truncate">{user?.jobSeekerProfile?.email || user?.email}</p>
+              <h2 className="font-semibold text-xs text-zinc-200 truncate">{user?.fullName || user?.jobSeekerProfile?.fullName || 'Candidate'}</h2>
+              <p className="text-[10px] text-zinc-500 truncate">{user?.email || user?.jobSeekerProfile?.email || 'unconfigured@identity.net'}</p>
             </div>
           </div>
           <button 

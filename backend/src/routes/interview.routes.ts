@@ -47,9 +47,19 @@ router.get(
 
 router.post('/:interviewId/reschedule', authenticateToken, requestReschedule);
 // Update existing feedback block
-router.put('/interviews/:interviewId/feedback', updateInterviewFeedback);
+router.put(
+  '/interviews/:interviewId/feedback',
+  authenticateCompany,
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER),
+  updateInterviewFeedback
+);
 
 // Extract feedback using cross-referenced Candidate application keys
-router.get('/candidates/:userId/applications/:applicationId/feedback', getInterviewFeedbackByCandidate);
+router.get(
+  '/candidates/:userId/applications/:applicationId/feedback',
+  authenticateCompany,
+  requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER),
+  getInterviewFeedbackByCandidate
+);
 
 export default router;

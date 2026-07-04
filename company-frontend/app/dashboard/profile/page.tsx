@@ -890,7 +890,7 @@ const loadProfile = async (silent = false) => {
                         <Shield className="w-4 h-4 text-zinc-400" />
                       </div>
                       <div>
-                        <h5 className="font-medium text-zinc-200">{member.user.mobileNumber}</h5>
+                        <h5 className="font-medium text-zinc-200">{member.user?.mobileNumber || 'Pending Link'}</h5>
                         <div className="flex items-center gap-2 text-[11px] text-zinc-500 mt-1">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] uppercase font-semibold ${
                             member.status === 'active' ? 'bg-emerald-950/40 text-emerald-400' : 'bg-amber-950/40 text-amber-400'

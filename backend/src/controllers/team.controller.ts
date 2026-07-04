@@ -352,10 +352,11 @@ export const setTeamMemberPassword = async (req: Request, res: Response) => {
 
     // Issue authentication state cookies injection directly layout configuration
     const { issueSessionCookies } = await import('../utils/cookie.ts');
-    issueSessionCookies(res, { userId: transactionData.user.id, role: transactionData.finalRole });
+    const accessToken = issueSessionCookies(res, { userId: transactionData.user.id, globalRoles: transactionData.finalRole });
 
     return res.status(200).json({
       success: true,
+      accessToken,
       user: { id: transactionData.user.id, email: transactionData.user.mobileNumber },
       company: transactionData.company,
       message: 'Corporate access configured and password set cleanly inside target team layer profile.'
@@ -391,6 +392,11 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
           // Handles cases where an explicit email column is exposed on the User model
           ...( 'email' in prisma.user.fields ? [{ email: normalizedEmail }] : [] )
         ]
+      },
+      include: {
+        jobSeekerProfile: {
+          select: { fullName: true, email: true }
+        }
       }
     });
 
@@ -409,7 +415,7 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
       },
       include: {
         company: {
-          select: { id: true, name: true, isVerified: true }
+          select: { id: true, name: true, email: true, isVerified: true, logoUrl: true }
         }
       },
       orderBy: { createdAt: 'asc' }
@@ -449,23 +455,27 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
       });
     }
 
-    issueSessionCookies(res, { 
+    const accessToken = issueSessionCookies(res, { 
       userId: user.id, 
       globalRoles: user.globalRoles 
     });
 
     return res.status(200).json({
       success: true,
+      accessToken,
       message: 'Team authentication successful.',
       user: { 
         id: user.id, 
-        email: user.mobileNumber, 
+        email: user.jobSeekerProfile?.email || (user.mobileNumber.includes('@') ? user.mobileNumber : memberProfile.company.email),
+        name: user.jobSeekerProfile?.fullName || (user.mobileNumber.includes('@') ? user.mobileNumber.split('@')[0] : 'Admin'), 
         globalRoles: user.globalRoles,
         companyRoles: memberProfile.roles 
       },
       company: { 
         id: memberProfile.company.id, 
-        name: memberProfile.company.name 
+        name: memberProfile.company.name,
+        email: memberProfile.company.email,
+        logoUrl: memberProfile.company.logoUrl || null
       }
     });
 

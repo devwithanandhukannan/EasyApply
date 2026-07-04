@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { teamApi, TeamMember } from '@/app/lib/api/team';
 import { useAuth } from '@/app/contexts/AuthContext';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 import { MoreHorizontal, UserPlus, Trash2, Shield, Mail, Calendar, X, ChevronDown } from 'lucide-react';
 
 // ─── BITWISE SYSTEM ROLE CONSTANTS ───────────────────────────────────────────
@@ -230,6 +231,7 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
 
 // ─── MAIN TEAM PAGE CONFIGURATION ────────────────────────────────────────────
 export default function TeamPage() {
+  const { showToast } = useGlassToast();
   const { user } = useAuth();
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -255,19 +257,19 @@ export default function TeamPage() {
 
   const handleInvite = async () => {
     if (!inviteEmail) {
-      alert('Email is required');
+      showToast('Validation Error', 'Email is required', 'danger');
       return;
     }
     setSubmitting(true);
     try {
       await teamApi.invite({ email: inviteEmail, roleType: inviteRole });
-      alert(`Invitation successfully sent to ${inviteEmail}`);
+      showToast('Success', `Invitation successfully sent to ${inviteEmail}`, 'success');
       setInviteOpen(false);
       setInviteEmail('');
       setInviteRole('hr');
       fetchTeam();
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Invitation failed');
+      showToast('Invitation Failed', error.response?.data?.message || 'Invitation failed', 'danger');
     } finally {
       setSubmitting(false);
     }
@@ -276,10 +278,10 @@ export default function TeamPage() {
   const handleRoleChange = async (memberId: string, calculatedMask: number) => {
     try {
       await teamApi.updateRole(memberId, calculatedMask);
-      alert('Workspace permissions updated successfully');
+      showToast('Success', 'Workspace permissions updated successfully', 'success');
       fetchTeam();
     } catch (error) {
-      alert('Failed to update team member role');
+      showToast('Error', 'Failed to update team member role', 'danger');
     }
   };
 
@@ -287,10 +289,10 @@ export default function TeamPage() {
     if (!confirm(`Revoke workspace privileges for ${name}?`)) return;
     try {
       await teamApi.remove(memberId);
-      alert('Member removed from team');
+      showToast('Success', 'Member removed from team', 'success');
       fetchTeam();
     } catch (error) {
-      alert('Failed to remove member');
+      showToast('Error', 'Failed to remove member', 'danger');
     }
   };
 

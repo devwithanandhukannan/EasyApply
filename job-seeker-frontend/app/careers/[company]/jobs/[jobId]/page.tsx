@@ -43,7 +43,7 @@ interface JobDetails {
 export default function JobDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const { isAuthenticated, user, loading: authLoading } = usePublicAuth();
+  const { isAuthenticated, loading: authLoading } = usePublicAuth();
   const companyIdentifier = params.company as string;
   const jobId = params.jobId as string;
 
@@ -62,8 +62,8 @@ export default function JobDetailsPage() {
     setError(null);
     try {
       const res = await publicAPIService.getJobDetails(jobId);
-      if (res.success) {
-        setJob(res.data);
+      if (res.data?.success) {
+        setJob(res.data.data);
       } else {
         setError('Failed to load job details');
       }

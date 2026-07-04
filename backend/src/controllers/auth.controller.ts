@@ -79,22 +79,27 @@ export const verifyOtp = async (req: Request, res: Response) => {
     }
 
     // 5. Issue secure state variables (Session parameters)
-    issueSessionCookies(res, { userId: user.id, globalRoles: user.globalRoles });
+    const accessToken = issueSessionCookies(res, { userId: user.id, globalRoles: user.globalRoles });
 
     // 6. Check if Profile rules are met
     const profile = user.jobSeekerProfile;
-    const isProfileComplete = !!(profile?.fullName && profile?.email && profile.fullName !== 'Candidate');
+    const hasEmail = !!profile?.email;
+    const hasFullName = !!(profile?.fullName && profile.fullName !== 'Candidate');
 
     // Strip down heavy relations and return a lean payload with structural booleans
     return res.status(200).json({ 
       success: true, 
       message: 'Login successful.', 
+      accessToken,
       user: {
         id: user.id,
         mobileNumber: user.mobileNumber,
         globalRoles: user.globalRoles,
-        hasEmail: isProfileComplete,      
-        hasFullName: isProfileComplete   
+        hasEmail,      
+        hasFullName,
+        email: profile?.email || '',
+        fullName: profile?.fullName === 'Candidate' ? '' : (profile?.fullName || ''),
+        profilePhotoUrl: profile?.profilePhotoUrl || null
       }
     });
 
@@ -110,7 +115,32 @@ export const checkMe = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized.' });
     }
-    return res.status(200).json({ success: true });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { jobSeekerProfile: true }
+    });
+
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'User not found.' });
+    }
+
+    const profile = user.jobSeekerProfile;
+    const hasEmail = !!profile?.email;
+    const hasFullName = !!(profile?.fullName && profile.fullName !== 'Candidate');
+
+    return res.status(200).json({ 
+      success: true,
+      user: {
+        id: user.id,
+        mobileNumber: user.mobileNumber,
+        globalRoles: user.globalRoles,
+        hasEmail,      
+        hasFullName,
+        email: profile?.email || '',
+        fullName: profile?.fullName === 'Candidate' ? '' : (profile?.fullName || ''),
+        profilePhotoUrl: profile?.profilePhotoUrl || null
+      }
+    });
     
   } catch (error) {
     console.error('checkMe error:', error);
@@ -119,7 +149,29 @@ export const checkMe = async (req: Request, res: Response) => {
 };
 
 export const logoutUser = (_req: Request, res: Response) => {
-  res.clearCookie('accessToken');
-  res.clearCookie('refreshToken');
+  res.clearCookie('accessToken', { path: '/' });
+  res.clearCookie('refreshToken', { path: '/api/auth/refresh' });
   return res.status(200).json({ success: true, message: 'Logged out.' });
+};
+
+export const checkEmailExists = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email required.' });
+    }
+    
+    const profile = await prisma.jobSeekerProfile.findFirst({
+      where: { email }
+    });
+    
+    if (profile) {
+      return res.status(200).json({ success: true, exists: true, message: 'Email already exists.' });
+    }
+    
+    return res.status(200).json({ success: true, exists: false });
+  } catch (error) {
+    console.error('checkEmailExists error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error.' });
+  }
 };

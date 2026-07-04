@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Calendar, Clock, Video, Users, CheckCircle2, Search, Layers } from 'lucide-react';
+import { X, Calendar, Clock, Video, Users, CheckCircle2, Search, Layers, Loader2 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { teamApi, TeamMember } from '@/app/lib/api/team';
 

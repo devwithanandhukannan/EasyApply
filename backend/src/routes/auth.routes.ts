@@ -4,7 +4,8 @@ import {
   checkMe, 
   sendOtp, 
   verifyOtp, 
-  logoutUser 
+  logoutUser,
+  checkEmailExists
 } from '../controllers/auth.controller.ts';
 import { authenticateToken } from '../middleware/auth.middleware.ts';
 import { refreshSessionToken } from '../controllers/refreshtoken.controller.ts';
@@ -16,6 +17,7 @@ router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtp);
 router.post('/logout', logoutUser);
 router.post('/refresh', refreshSessionToken);
+router.post('/check-email', checkEmailExists);
 // Protected routes
 router.get('/me', authenticateToken, checkMe);
 

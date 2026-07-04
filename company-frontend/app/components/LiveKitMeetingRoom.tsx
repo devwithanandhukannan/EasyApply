@@ -260,8 +260,8 @@ function MeetingBody() {
 
 function MeetingVideoGrid() {
   const tracks = useTracks([
-    { source: Track.Source.Camera },
-    { source: Track.Source.ScreenShare },
+    { source: Track.Source.Camera, withPlaceholder: true },
+    { source: Track.Source.ScreenShare, withPlaceholder: false },
   ]);
   return (
     <GridLayout tracks={tracks} className="h-full w-full gap-4">

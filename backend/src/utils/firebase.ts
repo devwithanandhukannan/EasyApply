@@ -15,5 +15,5 @@ try {
   console.error('Firebase Admin initialization failure context:', error);
 }
 
-export const fcm = admin.messaging();
+export const fcm: any = admin.messaging();
 export default admin;
