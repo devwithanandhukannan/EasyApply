@@ -583,7 +583,13 @@ export default function MeetPage() {
       }
     } catch (err: any) {
       console.error('Code execution error:', err);
-      setConsoleLogs([`[error] ${err.message || 'Execution failed'}`]);
+      if (err.response?.status === 403) {
+        setConsoleLogs([`[error] 403 Forbidden: Judge0 API Key is invalid or expired. Please update NEXT_PUBLIC_JUDGE0_API_KEY.`]);
+      } else if (err.response?.status === 429) {
+        setConsoleLogs([`[error] 429 Too Many Requests: Judge0 API rate limit exceeded.`]);
+      } else {
+        setConsoleLogs([`[error] ${err.message || 'Execution failed'}`]);
+      }
     } finally {
       setIsRunning(false);
     }

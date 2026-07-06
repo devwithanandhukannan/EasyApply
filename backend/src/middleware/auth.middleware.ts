@@ -65,7 +65,7 @@ export const authenticateToken = async (req: Request, res: Response, next: NextF
 
     return next();
   } catch (error) {
-    return res.status(403).json({ success: false, message: 'Invalid or expired session token' });
+    return res.status(401).json({ success: false, message: 'Invalid or expired session token' });
   }
 };
 
@@ -145,7 +145,7 @@ export const authenticateCompany = async (req: Request, res: Response, next: Nex
     return next();
   } catch (error) {
     console.error('Company Authentication Error:', error);
-    return res.status(403).json({ success: false, message: 'Invalid or expired company session token' });
+    return res.status(401).json({ success: false, message: 'Invalid or expired company session token' });
   }
 };
 

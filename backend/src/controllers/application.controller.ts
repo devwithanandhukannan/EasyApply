@@ -2,10 +2,10 @@ import type { Request, Response } from 'express';
 import fs from 'fs';
 import { prisma } from '../utils/prisma.ts';
 import { extractText } from '../utils/textExtractor.ts';
-import { analyzeResume } from '../services/groq.service.ts';
 import { ROLES } from '../constants/roles.ts';
 import { PermissionHelper } from '../utils/permissions.ts';
 import { ApplicationStatus } from '@prisma/client';
+import { processApplicationMatchAsync } from '../services/applicationProcessor.service.ts';
 
 const getProfileId = async (userId: string) => {
   const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
@@ -84,24 +84,23 @@ export const applyToJob = async (req: Request, res: Response) => {
           });
         }
 
-        const analysis = await analyzeResume(rawText, jobPosting.description);
         const contentData = {
           rawText,
-          parsedData: analysis.parsedData ?? {},
-          atsBreakdown: analysis.atsBreakdown ?? {},
-          autoCorrectedText: analysis.autoCorrectedText ?? null,
+          parsedData: {},
+          atsBreakdown: {},
+          autoCorrectedText: null,
           htmlContent: null,
           margins: { top: 60, right: 72, bottom: 60, left: 72 },
           template: 'default',
           versions: [],
         };
         const aiData = {
-          scores: analysis.scores ?? {},
-          strengths: analysis.strengths ?? [],
-          improvements: analysis.improvements ?? {},
-          missingSections: analysis.missingSections ?? [],
-          keywordGaps: analysis.keywordGaps ?? [],
-          jdOptimizationNotes: analysis.jdOptimizationNotes ?? '',
+          scores: {},
+          strengths: [],
+          improvements: {},
+          missingSections: [],
+          keywordGaps: [],
+          jdOptimizationNotes: '',
         };
 
         const newResume = await prisma.resume.create({
@@ -110,7 +109,7 @@ export const applyToJob = async (req: Request, res: Response) => {
             name: `Resume for ${jobPosting.title} at ${jobPosting.company.name}`,
             source: 'uploaded',
             filePath: req.file.path,
-            atsScore: analysis.scores?.ats ?? null,
+            atsScore: null,
             content: contentData,
             aiSuggestions: aiData,
             isPrimary: false,
@@ -144,21 +143,7 @@ export const applyToJob = async (req: Request, res: Response) => {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(422).json({ success: false, message: 'Selected resume is corrupted. Please upload a new one.' });
       }
-      const reanalysis = await analyzeResume(rawText, jobPosting.description);
-      await prisma.resume.update({
-        where: { id: resumeId },
-        data: {
-          aiSuggestions: {
-            scores: reanalysis.scores ?? {},
-            strengths: reanalysis.strengths ?? [],
-            improvements: reanalysis.improvements ?? {},
-            missingSections: reanalysis.missingSections ?? [],
-            keywordGaps: reanalysis.keywordGaps ?? [],
-            jdOptimizationNotes: reanalysis.jdOptimizationNotes ?? '',
-          },
-          atsScore: reanalysis.scores?.ats ?? existingResume.atsScore,
-        }
-      });
+      
       finalResumeId = resumeId;
     } else {
       if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -198,6 +183,9 @@ export const applyToJob = async (req: Request, res: Response) => {
 
       return app;
     });
+
+    // Fire and forget background LLM processing
+    processApplicationMatchAsync(application.id, finalResumeId, jobPostingId);
 
     return res.status(201).json({
       success: true,
