@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import publicAPIService from '@/app/lib/public';
-import { usePublicAuth } from '@/app/contexts/PublicAuthContext';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { 
   Building2, MapPin, Briefcase, Clock, DollarSign, 
   Calendar, Users, ChevronLeft, CheckCircle, ExternalLink,
@@ -38,12 +38,16 @@ interface JobDetails {
     tagline: string | null;
     verificationBadge: string;
   };
+  _count?: {
+    applications: number;
+  };
+  appliedStatus?: string | false;
 }
 
 export default function JobDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const { isAuthenticated, loading: authLoading } = usePublicAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const companyIdentifier = params.company as string;
   const jobId = params.jobId as string;
 
@@ -61,9 +65,9 @@ export default function JobDetailsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await publicAPIService.getJobDetails(jobId);
-      if (res.data?.success) {
-        setJob(res.data.data);
+      const res: any = await publicAPIService.getJobDetails(jobId);
+      if (res?.success) {
+        setJob(res.data);
       } else {
         setError('Failed to load job details');
       }
@@ -176,7 +180,9 @@ export default function JobDetailsPage() {
     );
   }
 
-  const skills = job.requiredSkills?.skills || [];
+  const skills = Array.isArray(job.requiredSkills) 
+    ? job.requiredSkills 
+    : (job.requiredSkills?.skills || []);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 antialiased font-sans">
@@ -193,7 +199,7 @@ export default function JobDetailsPage() {
           </button>
 
           {/* Application Status Banner */}
-          {job.hasApplied && isAuthenticated && (
+          {!!job.appliedStatus && isAuthenticated && (
             <div className="mb-6 bg-emerald-500/[0.02] backdrop-blur-md border border-emerald-500/20 rounded-2xl p-4 flex items-center gap-3.5 shadow-lg">
               <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-400">
                 <Check className="w-4 h-4" />
@@ -321,7 +327,7 @@ export default function JobDetailsPage() {
           <div className="space-y-5">
             
             {/* Direct Link Action Hub */}
-            {job.hasApplied && isAuthenticated ? (
+            {!!job.appliedStatus && isAuthenticated ? (
               <div className="w-full p-5 bg-zinc-950/40 backdrop-blur-md border border-zinc-900 rounded-2xl text-center shadow-xl">
                 <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm mb-1">
                   <Check className="w-4 h-4" />
@@ -390,7 +396,7 @@ export default function JobDetailsPage() {
                   <Users className="w-4 h-4 text-zinc-600 mt-0.5" />
                   <div className="flex-1">
                     <div className="text-zinc-500 text-[10px] uppercase font-semibold tracking-wider mb-0.5">Active Applicants</div>
-                    <div className="text-zinc-200">{job.applicationsCount} nodes processing</div>
+                    <div className="text-zinc-200">{job._count?.applications || 0} nodes processing</div>
                   </div>
                 </div>
 

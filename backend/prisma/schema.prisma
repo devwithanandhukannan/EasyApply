@@ -461,6 +461,9 @@ model Application {
   updatedAt          DateTime          @updatedAt
   lastActivityAt     DateTime          @default(now())
 
+  matchScore         Int?
+  matchAnalysis      Json?
+
   interviews    Interview[]
   offerLetters  OfferLetter[]
   statusHistory ApplicationHistory[]

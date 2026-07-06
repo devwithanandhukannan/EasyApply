@@ -31,7 +31,15 @@ export const getPublicCompanyProfile = async (req: Request, res: Response) => {
         createdAt: true,
         _count: {
           select: {
-            jobPostings: { where: { status: 'active' } },
+            jobPostings: { 
+              where: { 
+                status: 'active',
+                OR: [
+                  { deadline: null },
+                  { deadline: { gte: new Date() } }
+                ]
+              } 
+            },
             teamMembers: { where: { status: 'active' } }
           }
         }
@@ -63,7 +71,15 @@ export const getPublicCompanyProfile = async (req: Request, res: Response) => {
           createdAt: true,
           _count: {
             select: {
-              jobPostings: { where: { status: 'active' } },
+              jobPostings: { 
+                where: { 
+                  status: 'active',
+                  OR: [
+                    { deadline: null },
+                    { deadline: { gte: new Date() } }
+                  ]
+                } 
+              },
               teamMembers: { where: { status: 'active' } }
             }
           }
@@ -129,12 +145,20 @@ export const getPublicCompanyJobs = async (req: Request, res: Response) => {
       ...(department && { department: { equals: department as string, mode: 'insensitive' } }),
       ...(jobType && { jobType: { equals: jobType as string, mode: 'insensitive' } }),
       ...(locationType && { locationType: { equals: locationType as string, mode: 'insensitive' } }),
-      ...(search && {
-        OR: [
-          { title: { contains: search as string, mode: 'insensitive' } },
-          { description: { contains: search as string, mode: 'insensitive' } }
-        ]
-      })
+      AND: [
+        {
+          OR: [
+            { deadline: null },
+            { deadline: { gte: new Date() } }
+          ]
+        },
+        ...(search ? [{
+          OR: [
+            { title: { contains: search as string, mode: 'insensitive' } },
+            { description: { contains: search as string, mode: 'insensitive' } }
+          ]
+        }] : [])
+      ]
     };
 
     const jobs = await prisma.jobPosting.findMany({
@@ -328,7 +352,17 @@ export const getAllPublicCompanies = async (req: Request, res: Response) => {
         tagline: true,
         verificationBadge: true,
         _count: {
-          select: { jobPostings: { where: { status: 'active' } } }
+          select: { 
+            jobPostings: { 
+              where: { 
+                status: 'active',
+                OR: [
+                  { deadline: null },
+                  { deadline: { gte: new Date() } }
+                ]
+              } 
+            } 
+          }
         }
       },
       orderBy: { createdAt: 'desc' },
@@ -375,12 +409,20 @@ export const searchAllJobs = async (req: Request, res: Response) => {
       ...(locationType && { locationType: { equals: locationType as string, mode: 'insensitive' } }),
       ...(location && { location: { contains: location as string, mode: 'insensitive' } }),
       ...(experienceRequired && { experienceRequired: experienceRequired as string }),
-      ...(search && {
-        OR: [
-          { title: { contains: search as string, mode: 'insensitive' } },
-          { description: { contains: search as string, mode: 'insensitive' } }
-        ]
-      })
+      AND: [
+        {
+          OR: [
+            { deadline: null },
+            { deadline: { gte: new Date() } }
+          ]
+        },
+        ...(search ? [{
+          OR: [
+            { title: { contains: search as string, mode: 'insensitive' } },
+            { description: { contains: search as string, mode: 'insensitive' } }
+          ]
+        }] : [])
+      ]
     };
 
     const [jobs, total] = await Promise.all([

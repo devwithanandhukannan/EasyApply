@@ -21,6 +21,11 @@ const router = Router();
 router.post('/:id/token/company', authenticateCompany, getCompanyToken);
 router.post('/:id/token/jobseeker', authenticateToken, requireJobSeeker, getJobSeekerToken);
 
+// Accept security logs from proctored frontend
+router.post('/:id/security-logs', (req, res) => {
+  res.status(200).json({ success: true });
+});
+
 // Feedback submit — Admin, HR, Interviewer only (Viewer blocked in controller too)
 router.post(
   '/:interviewId/feedback',

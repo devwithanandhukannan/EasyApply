@@ -1,5 +1,5 @@
-// app/lib/public.ts
 import axios from 'axios';
+import { getAccessToken } from './axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -10,6 +10,17 @@ const publicAPI = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+publicAPI.interceptors.request.use(
+  (config) => {
+    const token = getAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 // Add response interceptor for better error handling
 publicAPI.interceptors.response.use(
