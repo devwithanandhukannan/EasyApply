@@ -99,7 +99,7 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
 
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────── */}
       <aside
-        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-zinc-900/80 transition-all duration-300 fixed left-0 top-0 z-30 select-none ${
+        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-zinc-900/80 transition-all duration-300 shrink-0 select-none ${
           isCollapsed ? 'w-[70px]' : 'w-64'
         }`}
       >

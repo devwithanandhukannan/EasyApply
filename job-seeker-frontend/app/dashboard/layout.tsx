@@ -13,15 +13,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <ToastProvider>
       <FcmProvider>
-        <div className="min-h-screen bg-black text-zinc-200 font-sans antialiased flex">
+        <div className="flex h-screen bg-black text-zinc-200 font-sans antialiased overflow-hidden">
           {/* Structural Nav Layer */}
           <Sidebar user={user} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
           
           {/* Content Stream Pipeline */}
-          <main className={`flex-1 min-w-0 overflow-y-auto transition-all duration-300 pt-14 md:pt-0 ${
-            isCollapsed ? 'md:pl-20' : 'md:pl-64'
-          }`}>
-            <div className="p-5 sm:p-8 max-w-5xl mx-auto w-full min-h-screen">
+          <main className="flex-1 min-w-0 overflow-y-auto pt-14 md:pt-0">
+            <div className="p-5 sm:p-8 max-w-5xl mx-auto w-full">
               {children}
             </div>
           </main>
