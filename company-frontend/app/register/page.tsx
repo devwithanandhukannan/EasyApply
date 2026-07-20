@@ -461,7 +461,7 @@ function RegisterPageComponent() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Mobile Number *
+                  WhatsApp / Mobile Number *
                 </label>
                 <div className="relative">
                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
@@ -471,7 +471,7 @@ function RegisterPageComponent() {
                     type="tel"
                     value={formData.mobileNumber}
                     onChange={(e) => updateFormData('mobileNumber', e.target.value)}
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="Enter number (e.g. +91 9999999999)"
                     className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
                     required
                   />
@@ -481,9 +481,9 @@ function RegisterPageComponent() {
               <div className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4 flex items-start space-x-3">
                 <MessageCircle className="text-green-500 flex-shrink-0 mt-0.5" size={18} />
                 <div>
-                  <p className="text-sm font-medium text-white">WhatsApp Verification</p>
+                  <p className="text-sm font-medium text-white">WhatsApp Verification (Default OTP: 000000)</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    We&apos;ll send a 6-digit OTP to verify your mobile number
+                    WhatsApp service is pending. Use default code <strong>000000</strong> to verify.
                   </p>
                 </div>
               </div>
