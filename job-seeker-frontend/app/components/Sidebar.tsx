@@ -22,10 +22,15 @@ import { useAuth } from '@/app/contexts/AuthContext';
 
 interface SidebarProps {
   user?: any;
+  isCollapsed?: boolean;
+  setIsCollapsed?: (collapsed: boolean) => void;
 }
 
-export default function Sidebar({ user }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsCollapsed: propSetIsCollapsed }: SidebarProps) {
+  const [localIsCollapsed, setLocalIsCollapsed] = useState(false);
+  const isCollapsed = propIsCollapsed !== undefined ? propIsCollapsed : localIsCollapsed;
+  const setIsCollapsed = propSetIsCollapsed !== undefined ? propSetIsCollapsed : setLocalIsCollapsed;
+
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
