@@ -10,8 +10,10 @@ export const getAccessToken = () => {
   return accessToken;
 };
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -38,7 +40,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       try {
         const refreshResponse = await axios.post(
-          'http://localhost:8000/api/auth/refresh',
+          `${API_URL}/auth/refresh`,
           {},
           { withCredentials: true }
         );
