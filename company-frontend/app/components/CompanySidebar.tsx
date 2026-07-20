@@ -146,7 +146,7 @@ export default function CompanySidebar({
     <>
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────── */}
       <aside 
-        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-r-zinc-900 transition-all duration-300 relative z-30 select-none ${
+        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-r-zinc-900 transition-all duration-300 relative z-30 select-none shrink-0 ${
           isCollapsed ? 'w-[70px]' : 'w-64'
         }`}
       >
