@@ -180,12 +180,14 @@ ${MIGRATE_CMD}npm run build
 echo "→ Building Job Seeker Frontend"
 cd ../job-seeker-frontend
 npm install
-NEXT_PUBLIC_API_URL=https://api.interviewer.stibe.in npm run build
+rm -rf .next
+NEXT_PUBLIC_API_URL=https://api.interviewer.stibe.in/api npm run build
 
 echo "→ Building Company Frontend"
 cd ../company-frontend
 npm install
-NEXT_PUBLIC_API_URL=https://api.interviewer.stibe.in npm run build
+rm -rf .next
+NEXT_PUBLIC_API_URL=https://api.interviewer.stibe.in/api npm run build
 
 echo "→ Reload PM2 configuration"
 cd ..
