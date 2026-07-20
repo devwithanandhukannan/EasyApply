@@ -87,7 +87,7 @@ export const verifyOtp = async (req: Request, res: Response) => {
     }
 
     // 4. Trace-back OTP correlation
-    if (!latestOtp.userId) {
+    if (latestOtp && !latestOtp.userId) {
       await prisma.otp.update({ where: { id: latestOtp.id }, data: { userId: user.id } });
     }
 
