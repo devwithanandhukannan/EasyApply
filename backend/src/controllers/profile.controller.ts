@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../utils/prisma.ts';
 
 interface AuthRequest extends Request {
@@ -389,5 +390,60 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
       success: false, 
       error: 'Internal server error' 
     });
+  }
+};
+
+export const updatePassword = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized.' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!newPassword) {
+      return res.status(400).json({ success: false, message: 'New password required.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters.' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { password: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // If the user already has a password set, they must provide and verify the current password
+    if (user.password) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, message: 'Current password is required.' });
+      }
+      const isValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isValid) {
+        return res.status(401).json({ success: false, message: 'Current password incorrect.' });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password updated successfully.'
+    });
+
+  } catch (error) {
+    console.error('updatePassword error:', error);
+    return res.status(500).json({ success: false, message: 'Password update failed.' });
   }
 };
