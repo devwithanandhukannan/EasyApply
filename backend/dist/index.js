@@ -4078,6 +4078,37 @@ var sendVerificationEmail = async (email, token) => {
     html: htmlTemplate
   });
 };
+var sendPasswordResetEmail = async (email, token) => {
+  const clientAppUrl = process.env.COMPANY_URL || "http://localhost:3001";
+  const completeResetUrl = `${clientAppUrl}/reset-password?token=${token}`;
+  const htmlTemplate = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <h2 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Reset Your Password</h2>
+      <p style="color: #334155; font-size: 16px; line-height: 1.5;">
+        We received a request to reset the password for your WorkBridge company account. Click the button below to set a new password.
+      </p>
+      <div style="margin: 32px 0;">
+        <a href="${completeResetUrl}" 
+           style="background-color: #000000; color: #ffffff; padding: 12px 24px; font-weight: 500; text-decoration: none; border-radius: 8px; display: inline-block;">
+          Reset Password
+        </a>
+      </div>
+      <p style="color: #64748b; font-size: 14px;">
+        This reset link will expire automatically in 1 hour. If you did not request this password reset, you can safely ignore this email.
+      </p>
+      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+      <p style="color: #94a3b8; font-size: 12px;">
+        Secure link raw context fallback: <br/>
+        <a href="${completeResetUrl}" style="color: #2563eb;">${completeResetUrl}</a>
+      </p>
+    </div>
+  `;
+  await sendEmail({
+    to: email,
+    subject: "Action Required: Reset Your Password",
+    html: htmlTemplate
+  });
+};
 var sendTeamInviteEmail = async (email, inviteLink, role, companyName) => {
   const roleLabels = {
     hr_manager: "HR Hiring Manager",
@@ -7150,6 +7181,92 @@ var verifyEmailChangeOtp = async (req, res) => {
     return res.status(500).json({ success: false, message: "Email update failed." });
   }
 };
+var forgotCompanyPassword = async (req, res) => {
+  try {
+    const { email, type } = req.body;
+    if (!email || !type) {
+      return res.status(400).json({ success: false, message: "Email and portal type are required." });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (type === "admin") {
+      const company = await prisma.company.findUnique({ where: { email: normalizedEmail } });
+      if (company) {
+        const token = jwt4.sign(
+          { companyId: company.id, purpose: "reset-password" },
+          JWT_SECRET,
+          { expiresIn: "1h" }
+        );
+        await sendPasswordResetEmail(normalizedEmail, token);
+      }
+    } else if (type === "team") {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { mobileNumber: normalizedEmail },
+            ..."email" in prisma.user.fields ? [{ email: normalizedEmail }] : []
+          ]
+        }
+      });
+      if (user) {
+        const member = await prisma.teamMember.findFirst({
+          where: { userId: user.id, status: "active" }
+        });
+        if (member) {
+          const token = jwt4.sign(
+            { teamMemberId: member.id, userId: user.id, purpose: "reset-password" },
+            JWT_SECRET,
+            { expiresIn: "1h" }
+          );
+          await sendPasswordResetEmail(normalizedEmail, token);
+        }
+      }
+    } else {
+      return res.status(400).json({ success: false, message: "Invalid portal type." });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "If the email address is associated with an active account, a password reset link has been sent."
+    });
+  } catch (error) {
+    console.error("forgotCompanyPassword error:", error);
+    return res.status(500).json({ success: false, message: "An internal error occurred while processing request." });
+  }
+};
+var resetCompanyPassword = async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ success: false, message: "Token and new password are required." });
+    }
+    let decoded;
+    try {
+      decoded = jwt4.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: "Reset token is invalid or has expired." });
+    }
+    if (decoded.purpose !== "reset-password") {
+      return res.status(400).json({ success: false, message: "Invalid token purpose." });
+    }
+    const hashedPassword = await bcrypt3.hash(newPassword, 10);
+    if (decoded.companyId) {
+      await prisma.company.update({
+        where: { id: decoded.companyId },
+        data: { password: hashedPassword }
+      });
+    } else if (decoded.teamMemberId) {
+      await prisma.teamMember.update({
+        where: { id: decoded.teamMemberId },
+        data: { password: hashedPassword }
+      });
+    } else {
+      return res.status(400).json({ success: false, message: "Invalid token content." });
+    }
+    return res.status(200).json({ success: true, message: "Password has been reset successfully." });
+  } catch (error) {
+    console.error("resetCompanyPassword error:", error);
+    return res.status(500).json({ success: false, message: "An internal error occurred." });
+  }
+};
 
 // src/routes/companyAuth.routes.ts
 var router4 = express4.Router();
@@ -7189,6 +7306,8 @@ router4.post("/register", handleLogoUpload, registerCompany);
 router4.post("/login", companyLogin);
 router4.get("/verify-email", verifyCompanyEmail);
 router4.post("/resend-verification", resendCompanyVerificationEmail);
+router4.post("/forgot-password", forgotCompanyPassword);
+router4.post("/reset-password", resetCompanyPassword);
 router4.get("/session", authenticateCompany, checkCompanySession);
 var companyAuth_routes_default = router4;
 

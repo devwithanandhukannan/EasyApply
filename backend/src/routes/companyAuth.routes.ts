@@ -9,7 +9,9 @@ import {
   verifyCompanyEmail, 
   checkCompanySession,
   companyLogin,
-  resendCompanyVerificationEmail 
+  resendCompanyVerificationEmail,
+  forgotCompanyPassword,
+  resetCompanyPassword
 } from '../controllers/companyAuth.controller.ts';
 import { authenticateCompany } from '../middleware/auth.middleware.ts';
 
@@ -54,6 +56,8 @@ router.post('/register', handleLogoUpload, registerCompany);
 router.post('/login', companyLogin);
 router.get('/verify-email', verifyCompanyEmail);
 router.post('/resend-verification', resendCompanyVerificationEmail);
+router.post('/forgot-password', forgotCompanyPassword);
+router.post('/reset-password', resetCompanyPassword);
 
 // ─── PROTECTED ROUTES ────────────────────────────────────────────────────
 router.get('/session', authenticateCompany, checkCompanySession);

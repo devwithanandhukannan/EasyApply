@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma.ts';
 import { generateOTP } from '../utils/generateOtp.ts';
 import { issueSessionCookies } from '../utils/cookie.ts';
-import { sendVerificationEmail } from '../utils/email.ts';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/email.ts';
 import { ROLES } from '../constants/roles.ts';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_fallback_secret';
@@ -941,5 +941,103 @@ export const verifyEmailChangeOtp = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('verifyEmailChangeOtp error:', error);
     return res.status(500).json({ success: false, message: 'Email update failed.' });
+  }
+};
+
+export const forgotCompanyPassword = async (req: Request, res: Response) => {
+  try {
+    const { email, type } = req.body;
+    if (!email || !type) {
+      return res.status(400).json({ success: false, message: 'Email and portal type are required.' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (type === 'admin') {
+      const company = await prisma.company.findUnique({ where: { email: normalizedEmail } });
+      if (company) {
+        const token = jwt.sign(
+          { companyId: company.id, purpose: 'reset-password' },
+          JWT_SECRET,
+          { expiresIn: '1h' }
+        );
+        await sendPasswordResetEmail(normalizedEmail, token);
+      }
+    } else if (type === 'team') {
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { mobileNumber: normalizedEmail },
+            ...( 'email' in prisma.user.fields ? [{ email: normalizedEmail }] : [] )
+          ]
+        }
+      });
+
+      if (user) {
+        const member = await prisma.teamMember.findFirst({
+          where: { userId: user.id, status: 'active' }
+        });
+        if (member) {
+          const token = jwt.sign(
+            { teamMemberId: member.id, userId: user.id, purpose: 'reset-password' },
+            JWT_SECRET,
+            { expiresIn: '1h' }
+          );
+          await sendPasswordResetEmail(normalizedEmail, token);
+        }
+      }
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid portal type.' });
+    }
+
+    // Always return success for security/privacy (prevent account enumeration)
+    return res.status(200).json({
+      success: true,
+      message: 'If the email address is associated with an active account, a password reset link has been sent.'
+    });
+  } catch (error) {
+    console.error('forgotCompanyPassword error:', error);
+    return res.status(500).json({ success: false, message: 'An internal error occurred while processing request.' });
+  }
+};
+
+export const resetCompanyPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Token and new password are required.' });
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ success: false, message: 'Reset token is invalid or has expired.' });
+    }
+
+    if (decoded.purpose !== 'reset-password') {
+      return res.status(400).json({ success: false, message: 'Invalid token purpose.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    if (decoded.companyId) {
+      await prisma.company.update({
+        where: { id: decoded.companyId },
+        data: { password: hashedPassword }
+      });
+    } else if (decoded.teamMemberId) {
+      await prisma.teamMember.update({
+        where: { id: decoded.teamMemberId },
+        data: { password: hashedPassword }
+      });
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid token content.' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Password has been reset successfully.' });
+  } catch (error) {
+    console.error('resetCompanyPassword error:', error);
+    return res.status(500).json({ success: false, message: 'An internal error occurred.' });
   }
 };

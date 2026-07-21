@@ -93,6 +93,40 @@ export const sendVerificationEmail = async (email: string, token: string): Promi
   });
 };
 
+export const sendPasswordResetEmail = async (email: string, token: string): Promise<void> => {
+  const clientAppUrl = process.env.COMPANY_URL || 'http://localhost:3001';
+  const completeResetUrl = `${clientAppUrl}/reset-password?token=${token}`;
+
+  const htmlTemplate = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+      <h2 style="color: #0f172a; font-size: 24px; margin-bottom: 16px;">Reset Your Password</h2>
+      <p style="color: #334155; font-size: 16px; line-height: 1.5;">
+        We received a request to reset the password for your WorkBridge company account. Click the button below to set a new password.
+      </p>
+      <div style="margin: 32px 0;">
+        <a href="${completeResetUrl}" 
+           style="background-color: #000000; color: #ffffff; padding: 12px 24px; font-weight: 500; text-decoration: none; border-radius: 8px; display: inline-block;">
+          Reset Password
+        </a>
+      </div>
+      <p style="color: #64748b; font-size: 14px;">
+        This reset link will expire automatically in 1 hour. If you did not request this password reset, you can safely ignore this email.
+      </p>
+      <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+      <p style="color: #94a3b8; font-size: 12px;">
+        Secure link raw context fallback: <br/>
+        <a href="${completeResetUrl}" style="color: #2563eb;">${completeResetUrl}</a>
+      </p>
+    </div>
+  `;
+
+  await sendEmail({
+    to: email,
+    subject: 'Action Required: Reset Your Password',
+    html: htmlTemplate,
+  });
+};
+
 export const sendTeamInviteEmail = async (
   email: string, 
   inviteLink: string, 
