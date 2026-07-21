@@ -20,6 +20,7 @@ export default function UnifiedLiveKitMeetPage() {
 
   const [token, setToken] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
+  const [iceServers, setIceServers] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   
@@ -40,8 +41,9 @@ export default function UnifiedLiveKitMeetPage() {
         
         if (response.data?.success && response.data?.token) {
           // Commit to state variables simultaneously
-          setServerUrl('http://localhost:7880');
+          setServerUrl(response.data.livekitUrl || 'http://localhost:7880');
           setToken(response.data.token);
+          setIceServers(response.data.iceServers || null);
           
           console.log('✅ Stream pipeline authorization successful.');
         } else {
@@ -102,6 +104,7 @@ export default function UnifiedLiveKitMeetPage() {
     <LiveKitMeetingRoom 
       token={token} 
       serverUrl={serverUrl} 
+      iceServers={iceServers || undefined}
       interviewId={interviewId as string} // 🎯 Passed down so the call engine can use it if needed
       onDisconnected={handleDisconnected} 
     />

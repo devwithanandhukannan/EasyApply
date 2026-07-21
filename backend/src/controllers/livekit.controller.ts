@@ -23,6 +23,45 @@ const generateLiveKitToken = async (roomName: string, participantIdentity: strin
   return await token.toJwt();
 };
 
+const getCloudflareTurnCredentials = async () => {
+  const turnKeyId = process.env.CLOUDFLARE_TURN_KEY_ID;
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  if (!turnKeyId || !apiToken) return null;
+
+  try {
+    const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${turnKeyId}/credentials/generate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ttl: 86400 })
+    });
+
+    if (!response.ok) {
+      console.error(`Cloudflare TURN API error: ${response.status} ${response.statusText}`);
+      return null;
+    }
+    const data = (await response.json()) as any;
+    
+    return [
+      {
+        urls: [
+          "stun:stun.cloudflare.com:3478",
+          "turn:turn.cloudflare.com:3478?transport=udp",
+          "turn:turn.cloudflare.com:3478?transport=tcp",
+          "turns:turn.cloudflare.com:5349?transport=tcp"
+        ],
+        username: data.username,
+        credential: data.credential
+      }
+    ];
+  } catch (e) {
+    console.error("Failed to fetch Cloudflare TURN credentials:", e);
+    return null;
+  }
+};
+
 export const getCompanyToken = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -58,12 +97,14 @@ export const getCompanyToken = async (req: Request, res: Response) => {
     console.log(roomName, `member_${userId}`, hostLabel);
     
     const tokenString = await generateLiveKitToken(roomName, `member_${userId}`, hostLabel);
+    const iceServers = await getCloudflareTurnCredentials();
     
     return res.status(200).json({
       success: true,
       token: tokenString,
       roomName,
-      livekitUrl: process.env.LIVEKIT_API_URL || 'http://localhost:7880'
+      livekitUrl: process.env.LIVEKIT_API_URL || 'http://localhost:7880',
+      iceServers: iceServers || undefined
     });
   } catch (error) {
     console.error('getCompanyToken exception trace:', error);
@@ -116,12 +157,14 @@ export const getJobSeekerToken = async (req: Request, res: Response) => {
     }
 
     const tokenString = await generateLiveKitToken(roomName, `candidate_${userId}`, candidateLabel);
+    const iceServers = await getCloudflareTurnCredentials();
 
     return res.status(200).json({
       success: true,
       token: tokenString, 
       roomName,
-      livekitUrl: process.env.LIVEKIT_API_URL
+      livekitUrl: process.env.LIVEKIT_API_URL,
+      iceServers: iceServers || undefined
     });
   } catch (error) {
     console.error('getJobSeekerToken exception trace:', error);

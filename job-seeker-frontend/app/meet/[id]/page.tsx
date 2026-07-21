@@ -43,7 +43,7 @@ export default function MeetPage() {
   const router = useRouter();
   const roleType = searchParams.get('role') === 'candidate' ? 'jobseeker' : 'company';
 
-  const [credentials, setCredentials] = useState<{ token: string; serverUrl: string } | null>(null);
+  const [credentials, setCredentials] = useState<{ token: string; serverUrl: string; iceServers?: any[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('video_only');
@@ -444,7 +444,8 @@ export default function MeetPage() {
         if (res.data?.success && res.data?.token) {
           setCredentials({ 
             token: res.data.token, 
-            serverUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || 'http://localhost:7880' 
+            serverUrl: res.data.livekitUrl || process.env.NEXT_PUBLIC_LIVEKIT_URL || 'http://localhost:7880',
+            iceServers: res.data.iceServers || undefined
           });
         } else {
           setError(res.data?.message || 'Failed to get room token.');
@@ -1046,6 +1047,7 @@ export default function MeetPage() {
             <LiveKitMeetingRoom
               token={credentials.token}
               serverUrl={credentials.serverUrl}
+              iceServers={credentials.iceServers}
               onDisconnected={handleDisconnected}
               screenShareActive={screenShareActive}
               debugMode={false}

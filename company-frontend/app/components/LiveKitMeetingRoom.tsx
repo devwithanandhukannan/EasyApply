@@ -24,6 +24,7 @@ interface LiveKitMeetingRoomProps {
   serverUrl: string;
   interviewId: string;
   onDisconnected?: () => void;
+  iceServers?: any[];
 }
 
 export default function LiveKitMeetingRoom({
@@ -31,6 +32,7 @@ export default function LiveKitMeetingRoom({
   serverUrl,
   interviewId,
   onDisconnected,
+  iceServers,
 }: LiveKitMeetingRoomProps) {
   const [connectionError, setConnectionError] = useState<Error | null>(null);
   const router = useRouter();
@@ -54,7 +56,10 @@ export default function LiveKitMeetingRoom({
           console.error('❌ LiveKit error:', error);
           setConnectionError(error);
         }}
-        connectOptions={{ autoSubscribe: true }}
+        connectOptions={{
+          autoSubscribe: true,
+          rtcConfig: { iceServers: iceServers }
+        }}
         className="flex flex-col h-full"
       >
         {connectionError && (

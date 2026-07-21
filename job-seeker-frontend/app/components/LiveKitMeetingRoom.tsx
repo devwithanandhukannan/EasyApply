@@ -26,6 +26,7 @@ interface LiveKitMeetingRoomProps {
   onDisconnected: () => void;
   screenShareActive: boolean;
   debugMode?: boolean;
+  iceServers?: any[];
 }
 
 export default function LiveKitMeetingRoom({
@@ -34,6 +35,7 @@ export default function LiveKitMeetingRoom({
   onDisconnected,
   screenShareActive,
   debugMode = false,
+  iceServers,
 }: LiveKitMeetingRoomProps) {
   const [connectionError, setConnectionError] = useState<Error | null>(null);
   const [attentionScore, setAttentionScore] = useState(100);
@@ -117,7 +119,10 @@ export default function LiveKitMeetingRoom({
         onDisconnected={handleDisconnected}
         onConnected={handleConnected}
         onError={handleError}
-        connectOptions={{ autoSubscribe: true }}
+        connectOptions={{
+          autoSubscribe: true,
+          rtcConfig: { iceServers: iceServers }
+        }}
         className="flex flex-col h-full relative"
       >
         {connectionError && (
