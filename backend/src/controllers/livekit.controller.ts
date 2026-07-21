@@ -44,18 +44,10 @@ const getCloudflareTurnCredentials = async () => {
     }
     const data = (await response.json()) as any;
     
-    return [
-      {
-        urls: [
-          "stun:stun.cloudflare.com:3478",
-          "turn:turn.cloudflare.com:3478?transport=udp",
-          "turn:turn.cloudflare.com:3478?transport=tcp",
-          "turns:turn.cloudflare.com:5349?transport=tcp"
-        ],
-        username: data.username,
-        credential: data.credential
-      }
-    ];
+    if (data.iceServers) {
+      return [data.iceServers];
+    }
+    return null;
   } catch (e) {
     console.error("Failed to fetch Cloudflare TURN credentials:", e);
     return null;
