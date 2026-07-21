@@ -95,7 +95,7 @@ export const getCompanyToken = async (req: Request, res: Response) => {
       success: true,
       token: tokenString,
       roomName,
-      livekitUrl: process.env.LIVEKIT_API_URL || 'http://localhost:7880',
+      livekitUrl: process.env.LIVEKIT_PUBLIC_URL || process.env.LIVEKIT_API_URL || 'http://localhost:7880',
       iceServers: iceServers || undefined
     });
   } catch (error) {
@@ -155,7 +155,7 @@ export const getJobSeekerToken = async (req: Request, res: Response) => {
       success: true,
       token: tokenString, 
       roomName,
-      livekitUrl: process.env.LIVEKIT_API_URL,
+      livekitUrl: process.env.LIVEKIT_PUBLIC_URL || process.env.LIVEKIT_API_URL || 'http://localhost:7880',
       iceServers: iceServers || undefined
     });
   } catch (error) {
