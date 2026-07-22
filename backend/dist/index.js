@@ -1709,15 +1709,63 @@ Rules:
 - strengths: 3-5 items.
 - keywordGaps: missing IT keywords.
 - CRITICAL URL RULE: Every URL field (linkedin, github, portfolio, githubLink, liveLink, credentialUrl) MUST start with https://. Examples: "linkedin.com/in/john" \u2192 "https://linkedin.com/in/john", "github.com/user" \u2192 "https://github.com/user", "mysite.com" \u2192 "https://mysite.com". Never return a URL without https://.`;
-  const completion = await groq.chat.completions.create({
-    messages: [{ role: "user", content: prompt }],
-    model: MODEL,
-    temperature: 0.2,
-    max_tokens: 4096,
-    response_format: { type: "json_object" }
-  });
-  const result = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
-  if (result.scores) {
+  let result = {};
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: MODEL,
+      temperature: 0.2,
+      max_tokens: 4096,
+      response_format: { type: "json_object" }
+    });
+    result = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+  } catch (aiErr) {
+    console.error("Groq AI analyzeResume call failed, running heuristic fallback:", aiErr);
+    result = {};
+  }
+  if (!result.parsedData || Object.keys(result.parsedData).length === 0) {
+    const lines = rawText.split("\n").map((l) => l.trim()).filter(Boolean);
+    const emailMatch = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+    const nameCandidate = lines[0] && lines[0].length < 40 ? lines[0] : "Candidate";
+    result.parsedData = {
+      name: nameCandidate,
+      email: emailMatch ? emailMatch[0] : "",
+      phone: phoneMatch ? phoneMatch[0] : "",
+      location: "",
+      summary: lines.slice(1, 4).join(" "),
+      skills: [],
+      experience: [],
+      education: [],
+      projects: [],
+      certifications: [],
+      languages: [],
+      achievements: []
+    };
+  }
+  if (!result.scores || !result.scores.ats || result.scores.ats === 0) {
+    let score = 65;
+    if (jobDescription && rawText) {
+      const jdWords = new Set(jobDescription.toLowerCase().match(/\b[a-z]{3,}\b/g) || []);
+      const resumeWords = new Set(rawText.toLowerCase().match(/\b[a-z]{3,}\b/g) || []);
+      if (jdWords.size > 0) {
+        let matches = 0;
+        jdWords.forEach((w) => {
+          if (resumeWords.has(w)) matches++;
+        });
+        const ratio = matches / jdWords.size;
+        score = Math.min(95, Math.max(45, Math.round(ratio * 100)));
+      }
+    }
+    result.scores = {
+      ats: score,
+      formatting: Math.min(90, score + 5),
+      keywords: score,
+      grammar: 85,
+      readability: 85,
+      impact: Math.max(50, score - 5)
+    };
+  } else {
     result.scores = normalizeScores(result.scores);
   }
   const ensureHttps = (url) => {
@@ -2430,23 +2478,24 @@ var applyToJob = async (req, res) => {
             message: "Could not extract text from resume. Please ensure it's a valid PDF or DOCX file."
           });
         }
+        const analysis = await analyzeResume(rawText, jobPosting.description);
         const contentData = {
           rawText,
-          parsedData: {},
-          atsBreakdown: {},
-          autoCorrectedText: null,
+          parsedData: analysis.parsedData ?? {},
+          atsBreakdown: analysis.atsBreakdown ?? {},
+          autoCorrectedText: analysis.autoCorrectedText ?? null,
           htmlContent: null,
           margins: { top: 60, right: 72, bottom: 60, left: 72 },
           template: "default",
           versions: []
         };
         const aiData = {
-          scores: {},
-          strengths: [],
-          improvements: {},
-          missingSections: [],
-          keywordGaps: [],
-          jdOptimizationNotes: ""
+          scores: analysis.scores ?? {},
+          strengths: analysis.strengths ?? [],
+          improvements: analysis.improvements ?? {},
+          missingSections: analysis.missingSections ?? [],
+          keywordGaps: analysis.keywordGaps ?? [],
+          jdOptimizationNotes: analysis.jdOptimizationNotes ?? ""
         };
         const newResume = await prisma.resume.create({
           data: {
@@ -2454,7 +2503,7 @@ var applyToJob = async (req, res) => {
             name: `Resume for ${jobPosting.title} at ${jobPosting.company.name}`,
             source: "uploaded",
             filePath: req.file.path,
-            atsScore: null,
+            atsScore: analysis.scores?.ats ?? null,
             content: contentData,
             aiSuggestions: aiData,
             isPrimary: false
@@ -2476,14 +2525,34 @@ var applyToJob = async (req, res) => {
       }
       const contentData = existingResume.content ?? {};
       let rawText = contentData.rawText;
-      let parsedData = contentData.parsedData;
       if (!rawText && contentData.htmlContent) {
         rawText = contentData.htmlContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-        parsedData = contentData.parsedData || {};
       }
       if (!rawText) {
         if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
         return res.status(422).json({ success: false, message: "Selected resume is corrupted. Please upload a new one." });
+      }
+      try {
+        const reanalysis = await analyzeResume(rawText, jobPosting.description);
+        const newAtsScore = reanalysis.scores?.ats ?? existingResume.atsScore;
+        const currentAiData = existingResume.aiSuggestions ?? {};
+        await prisma.resume.update({
+          where: { id: resumeId },
+          data: {
+            atsScore: newAtsScore,
+            aiSuggestions: {
+              ...currentAiData,
+              scores: reanalysis.scores ?? currentAiData.scores,
+              strengths: reanalysis.strengths ?? currentAiData.strengths,
+              improvements: reanalysis.improvements ?? currentAiData.improvements,
+              missingSections: reanalysis.missingSections ?? currentAiData.missingSections,
+              keywordGaps: reanalysis.keywordGaps ?? currentAiData.keywordGaps,
+              jdOptimizationNotes: reanalysis.jdOptimizationNotes ?? currentAiData.jdOptimizationNotes
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Error re-analyzing existing resume for application:", err);
       }
       finalResumeId = resumeId;
     } else {

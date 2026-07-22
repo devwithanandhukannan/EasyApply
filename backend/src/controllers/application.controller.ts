@@ -6,6 +6,7 @@ import { ROLES } from '../constants/roles.ts';
 import { PermissionHelper } from '../utils/permissions.ts';
 import { ApplicationStatus } from '@prisma/client';
 import { processApplicationMatchAsync } from '../services/applicationProcessor.service.ts';
+import { analyzeResume } from '../services/groq.service.ts';
 
 const getProfileId = async (userId: string) => {
   const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
@@ -84,23 +85,24 @@ export const applyToJob = async (req: Request, res: Response) => {
           });
         }
 
+        const analysis = await analyzeResume(rawText, jobPosting.description);
         const contentData = {
           rawText,
-          parsedData: {},
-          atsBreakdown: {},
-          autoCorrectedText: null,
+          parsedData: analysis.parsedData ?? {},
+          atsBreakdown: analysis.atsBreakdown ?? {},
+          autoCorrectedText: analysis.autoCorrectedText ?? null,
           htmlContent: null,
           margins: { top: 60, right: 72, bottom: 60, left: 72 },
           template: 'default',
           versions: [],
         };
         const aiData = {
-          scores: {},
-          strengths: [],
-          improvements: {},
-          missingSections: [],
-          keywordGaps: [],
-          jdOptimizationNotes: '',
+          scores: analysis.scores ?? {},
+          strengths: analysis.strengths ?? [],
+          improvements: analysis.improvements ?? {},
+          missingSections: analysis.missingSections ?? [],
+          keywordGaps: analysis.keywordGaps ?? [],
+          jdOptimizationNotes: analysis.jdOptimizationNotes ?? '',
         };
 
         const newResume = await prisma.resume.create({
@@ -109,7 +111,7 @@ export const applyToJob = async (req: Request, res: Response) => {
             name: `Resume for ${jobPosting.title} at ${jobPosting.company.name}`,
             source: 'uploaded',
             filePath: req.file.path,
-            atsScore: null,
+            atsScore: analysis.scores?.ats ?? null,
             content: contentData,
             aiSuggestions: aiData,
             isPrimary: false,
@@ -131,17 +133,39 @@ export const applyToJob = async (req: Request, res: Response) => {
       }
       const contentData = (existingResume.content as any) ?? {};
       let rawText = contentData.rawText;
-      let parsedData = contentData.parsedData;
 
       if (!rawText && contentData.htmlContent) {
         // Strip HTML tags to form plain text rawText fallback for older built resumes
         rawText = contentData.htmlContent.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        parsedData = contentData.parsedData || {};
       }
 
       if (!rawText) {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(422).json({ success: false, message: 'Selected resume is corrupted. Please upload a new one.' });
+      }
+
+      try {
+        const reanalysis = await analyzeResume(rawText, jobPosting.description);
+        const newAtsScore = reanalysis.scores?.ats ?? existingResume.atsScore;
+        const currentAiData = (existingResume.aiSuggestions as any) ?? {};
+
+        await prisma.resume.update({
+          where: { id: resumeId },
+          data: {
+            atsScore: newAtsScore,
+            aiSuggestions: {
+              ...currentAiData,
+              scores: reanalysis.scores ?? currentAiData.scores,
+              strengths: reanalysis.strengths ?? currentAiData.strengths,
+              improvements: reanalysis.improvements ?? currentAiData.improvements,
+              missingSections: reanalysis.missingSections ?? currentAiData.missingSections,
+              keywordGaps: reanalysis.keywordGaps ?? currentAiData.keywordGaps,
+              jdOptimizationNotes: reanalysis.jdOptimizationNotes ?? currentAiData.jdOptimizationNotes,
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Error re-analyzing existing resume for application:', err);
       }
       
       finalResumeId = resumeId;
