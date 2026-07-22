@@ -500,26 +500,59 @@ export default function MeetPage() {
       rust: 73,
     };
 
-    const COMPILER_API_KEY = process.env.NEXT_PUBLIC_JUDGE0_API_KEY || 'a3dde5427emshec7c45862006035p16e126jsnd102eff61b2b';
-    const headers = {
-      'x-rapidapi-key': COMPILER_API_KEY,
-      'x-rapidapi-host': 'judge029.p.rapidapi.com',
-      'Content-Type': 'application/json',
-    };
+    const apiKey = process.env.NEXT_PUBLIC_JUDGE0_API_KEY;
+    const isCustomKey = Boolean(apiKey);
+    
+    const primaryUrl = isCustomKey ? 'https://judge029.p.rapidapi.com' : 'https://ce.judge0.com';
+    const primaryHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (isCustomKey && apiKey) {
+      primaryHeaders['x-rapidapi-key'] = apiKey;
+      primaryHeaders['x-rapidapi-host'] = 'judge029.p.rapidapi.com';
+    }
+
+    const fallbackUrl = 'https://ce.judge0.com';
+    const fallbackHeaders = { 'Content-Type': 'application/json' };
 
     try {
       const encoded = btoa(unescape(encodeURIComponent(codeValue)));
-      const sub = await axios.request({
-        method: 'POST',
-        url: 'https://judge029.p.rapidapi.com/submissions',
-        params: { base64_encoded: 'true', wait: 'false', fields: '*' },
-        headers,
-        data: JSON.stringify({ 
-          language_id: langMap[editorLanguage], 
-          source_code: encoded, 
-          stdin: '' 
-        }),
-      });
+      let sub;
+      let activeUrl = primaryUrl;
+      let activeHeaders = primaryHeaders;
+
+      try {
+        sub = await axios.request({
+          method: 'POST',
+          url: `${primaryUrl}/submissions`,
+          params: { base64_encoded: 'true', wait: 'false', fields: '*' },
+          headers: primaryHeaders,
+          data: JSON.stringify({ 
+            language_id: langMap[editorLanguage], 
+            source_code: encoded, 
+            stdin: '' 
+          }),
+          timeout: 6000,
+        });
+      } catch (err: any) {
+        if (primaryUrl !== fallbackUrl) {
+          console.warn('Primary RapidAPI Judge0 endpoint failed, falling back to ce.judge0.com:', err);
+          activeUrl = fallbackUrl;
+          activeHeaders = fallbackHeaders;
+          sub = await axios.request({
+            method: 'POST',
+            url: `${fallbackUrl}/submissions`,
+            params: { base64_encoded: 'true', wait: 'false', fields: '*' },
+            headers: fallbackHeaders,
+            data: JSON.stringify({ 
+              language_id: langMap[editorLanguage], 
+              source_code: encoded, 
+              stdin: '' 
+            }),
+            timeout: 6000,
+          });
+        } else {
+          throw err;
+        }
+      }
 
       const token = sub.data?.token;
       if (!token) throw new Error('No execution token returned.');
@@ -529,12 +562,13 @@ export default function MeetPage() {
       const maxAttempts = 20;
 
       while (attempts < maxAttempts) {
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, 1200));
         const poll = await axios.request({
           method: 'GET',
-          url: `https://judge029.p.rapidapi.com/submissions/${token}`,
+          url: `${activeUrl}/submissions/${token}`,
           params: { base64_encoded: 'true', fields: '*' },
-          headers,
+          headers: activeHeaders,
+          timeout: 6000,
         });
         result = poll.data;
         
@@ -587,7 +621,7 @@ export default function MeetPage() {
     } catch (err: any) {
       console.error('Code execution error:', err);
       if (err.response?.status === 403) {
-        setConsoleLogs([`[error] 403 Forbidden: Judge0 API Key is invalid or expired. Please update NEXT_PUBLIC_JUDGE0_API_KEY.`]);
+        setConsoleLogs([`[error] 403 Forbidden: Judge0 API Key is invalid or expired.`]);
       } else if (err.response?.status === 429) {
         setConsoleLogs([`[error] 429 Too Many Requests: Judge0 API rate limit exceeded.`]);
       } else {
