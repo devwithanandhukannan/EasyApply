@@ -4,7 +4,8 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Loader2, AlertTriangle, Code2, Monitor, Square, Tv, Layers,
-  Trash2, Pencil, Play, Terminal, SquareSquare, Circle, Eraser, Video, ShieldAlert
+  Trash2, Pencil, Play, Terminal, SquareSquare, Circle, Eraser, Video, ShieldAlert,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import axios from 'axios';
@@ -52,6 +53,7 @@ export default function MeetPage() {
   // Security Monitoring States
   const [securityViolations, setSecurityViolations] = useState<string[]>([]);
   const [audioCoachingWarning, setAudioCoachingWarning] = useState(false);
+  const [isSecurityMinimized, setIsSecurityMinimized] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -1058,15 +1060,35 @@ export default function MeetPage() {
 
       {/* Security Violations Overlay */}
       {roleType === 'jobseeker' && (securityViolations.length > 0 || audioCoachingWarning) && (
-        <div className="absolute bottom-5 left-5 z-50 max-w-md rounded-xl bg-red-950/90 border border-red-500/40 p-4 backdrop-blur-md shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-300">
-          <div className="flex gap-3 items-start">
-            <ShieldAlert size={18} className="text-red-400 mt-0.5 shrink-0 animate-pulse" />
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-red-200 mb-1">Security Monitoring Active</p>
+        <div className="absolute bottom-5 right-5 z-50 max-w-sm rounded-xl bg-red-950/95 border border-red-500/40 p-3.5 backdrop-blur-md shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-300">
+          {isSecurityMinimized ? (
+            <button
+              onClick={() => setIsSecurityMinimized(false)}
+              className="flex items-center gap-2 text-xs font-semibold text-red-200 hover:text-white transition-colors"
+            >
+              <ShieldAlert size={15} className="text-red-400 animate-pulse shrink-0" />
+              <span>Security Monitoring ({securityViolations.length + (audioCoachingWarning ? 1 : 0)})</span>
+              <ChevronUp size={14} className="text-red-300 ml-1" />
+            </button>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-red-500/20">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-red-400 shrink-0 animate-pulse" />
+                  <p className="text-xs font-semibold text-red-200">Security Monitoring Active</p>
+                </div>
+                <button
+                  onClick={() => setIsSecurityMinimized(true)}
+                  className="p-1 rounded hover:bg-white/10 text-red-300 hover:text-white transition-colors"
+                  title="Minimize overlay"
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </div>
               <p className="text-[10px] text-red-300/80 leading-relaxed mb-2">
                 All violations are logged and reviewed. Please maintain assessment integrity.
               </p>
-              <div className="space-y-1 font-mono text-[9px] text-red-300/70 max-h-32 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#ef4444 transparent' }}>
+              <div className="space-y-1 font-mono text-[9px] text-red-300/70 max-h-28 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#ef4444 transparent' }}>
                 {audioCoachingWarning && (
                   <div className="flex items-start gap-1.5 text-amber-300 font-semibold mb-1">
                     <span className="shrink-0">⚠</span>
@@ -1081,7 +1103,7 @@ export default function MeetPage() {
                 ))}
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
