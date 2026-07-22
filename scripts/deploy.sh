@@ -193,6 +193,9 @@ echo "→ Reload PM2 configuration"
 cd ..
 pm2 startOrReload deploy/ecosystem.config.cjs --update-env
 
+echo "→ Test and reload Nginx configuration"
+nginx -t && systemctl reload nginx
+
 echo "→ PM2 status check"
 pm2 status interviewer-backend interviewer-job-seeker interviewer-company
 
