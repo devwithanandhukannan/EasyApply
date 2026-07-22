@@ -3604,6 +3604,7 @@ var scheduleBulkInterviews = async (req, res) => {
       selectedApplicationIds.map(async (applicationId, index) => {
         const scheduledTime = new Date(new Date(startTime).getTime() + index * slotDuration * 6e4);
         const roomName = `interview_${uuidv4()}`;
+        const jobseekerBaseUrl = process.env.JOBSEEKER_URL || (process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",")[0].trim() : "http://localhost:3000");
         return prisma.interview.create({
           data: {
             applicationId,
@@ -3612,7 +3613,7 @@ var scheduleBulkInterviews = async (req, res) => {
             durationMinutes: parseInt(slotDuration, 10),
             format: normalizedFormat,
             livekitRoomName: roomName,
-            joinLink: `${process.env.FRONTEND_URL ?? "http://localhost:3000"}/interview/${roomName}`,
+            joinLink: `${jobseekerBaseUrl}/meet/${roomName}?role=candidate`,
             status: "scheduled",
             interviewers: interviewerIds?.length ? {
               create: interviewerIds.map((teamMemberId) => ({ teamMemberId }))

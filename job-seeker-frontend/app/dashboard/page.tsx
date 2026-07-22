@@ -272,14 +272,12 @@ export default function DashboardPage() {
                           </p>
                         </div>
                         
-                        <a
-                          href={i.joinLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <Link
+                          href={`/meet/${i.interviewId || i.id}?role=candidate`}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-lg text-xs font-medium hover:bg-purple-500/20 transition-colors shrink-0"
                         >
                           <Video size={12} /> Join Interview
-                        </a>
+                        </Link>
                       </div>
                     ))}
                   </div>
