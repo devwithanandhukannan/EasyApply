@@ -15,7 +15,7 @@ import {
 } from '@/app/lib/resumeApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────
-type ModalType = 'upload' | 'generate' | 'regional' | null;
+type ModalType = 'upload' | 'generate' | null;
 
 // ─── Score Ring ───────────────────────────────────────────────────────────
 function ScoreRing({ score, size = 120, label }: { score: number; size?: number; label?: string }) {
@@ -596,7 +596,6 @@ export default function ResumesPage() {
   const CREATE_OPTIONS = [
     { key: 'upload' as ModalType, icon: Upload, label: 'Upload', desc: 'PDF or DOCX · AI scores instantly', color: 'border-[#2c2c2e] hover:border-white' },
     { key: 'generate' as ModalType, icon: Sparkles, label: 'Generate', desc: 'From profile · ATS-optimised', color: 'border-[#2c2c2e] hover:border-white' },
-    { key: 'regional' as ModalType, icon: Globe, label: 'International', desc: 'DE, FR, UK, JP + 5 more', color: 'border-purple-500/30 hover:border-purple-400/60' },
   ];
 
   return (
@@ -608,7 +607,7 @@ export default function ResumesPage() {
             <h2 className="text-white font-semibold text-sm">My Resumes</h2>
             <span className="text-gray-600 text-xs bg-[#1e1e1e] px-2 py-0.5 rounded-full">{resumes.length}</span>
           </div>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-2 gap-2">
             {CREATE_OPTIONS.map(({ key, icon: Icon, label, desc, color }) => (
               <button key={String(key)} onClick={() => setModal(key)}
                 className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border transition-all text-center group ${color}`}>
@@ -653,11 +652,10 @@ export default function ResumesPage() {
               <p className="text-gray-500 text-sm">Build, optimise, and manage your resumes with AI</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
               {[
                 { icon: Upload, label: 'Upload Resume', desc: 'Analyse an existing PDF or DOCX. Get instant ATS score and improvement suggestions.', modal: 'upload' as ModalType, badge: null },
                 { icon: Sparkles, label: 'Generate with AI', desc: 'Pull your profile data and build a polished, ATS-optimised CV in seconds.', modal: 'generate' as ModalType, badge: 'Popular' },
-                { icon: Globe, label: 'International Format', desc: 'Region-specific resumes for Germany, UK, France, Japan and 4 more countries.', modal: 'regional' as ModalType, badge: 'New' },
               ].map(({ icon: Icon, label, desc, modal: m, badge }) => (
                 <button key={label} onClick={() => setModal(m)}
                   className="group bg-[#111] border border-[#222] hover:border-[#444] rounded-2xl p-6 text-left transition-all relative overflow-hidden">
@@ -682,7 +680,6 @@ export default function ResumesPage() {
               {[
                 { icon: BarChart3, label: '6 AI Scores', desc: 'Deep analysis' },
                 { icon: Target, label: 'Keyword Gaps', desc: 'ATS terms' },
-                { icon: Globe, label: '8 Countries', desc: 'Region formats' },
                 { icon: Lightbulb, label: 'Inline Fixes', desc: 'In-editor AI' },
               ].map(({ icon: Icon, label, desc }) => (
                 <div key={label} className="flex flex-col items-center gap-1 text-center">
@@ -698,7 +695,6 @@ export default function ResumesPage() {
 
       {modal === 'upload' && <UploadModal onClose={() => setModal(null)} onSuccess={handleSuccess} />}
       {modal === 'generate' && <GenerateModal onClose={() => setModal(null)} onSuccess={handleSuccess} />}
-      {modal === 'regional' && <RegionalModal onClose={() => setModal(null)} onSuccess={handleSuccess} />}
     </div>
   );
 }
