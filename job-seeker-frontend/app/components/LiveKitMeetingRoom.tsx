@@ -439,15 +439,7 @@ function AdaptiveMeetingGrid({ alertActive }: { alertActive: boolean }) {
               : '1px solid rgba(255,255,255,0.07)',
           }}
         >
-          {isLocalScreenShare ? (
-            <div className="flex flex-col items-center justify-center text-white/50 h-full w-full">
-              <Monitor className="w-12 h-12 mb-3 opacity-50 text-blue-400" />
-              <p className="text-sm font-medium">You are sharing your screen</p>
-              <p className="text-[10px] mt-1 text-white/30 uppercase tracking-widest">Preview disabled for performance</p>
-            </div>
-          ) : (
-            <ParticipantTile trackRef={primary} className="h-full w-full object-contain" />
-          )}
+          <ParticipantTile trackRef={primary} className="h-full w-full object-contain" />
           <div
             className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-[9px] uppercase tracking-widest font-semibold"
             style={{
