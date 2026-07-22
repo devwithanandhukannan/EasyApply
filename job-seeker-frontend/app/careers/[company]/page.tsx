@@ -9,7 +9,7 @@ import {
   CheckCircle, ExternalLink, Search, 
   Calendar, Clock, ChevronRight, Target,
   Check, Lock, ArrowLeft, ShieldCheck, HelpCircle, 
-  Sparkles, Layers, DollarSign
+  Sparkles, Layers, DollarSign, Filter
 } from 'lucide-react';
 
 interface CompanyProfile {
@@ -137,19 +137,19 @@ export default function CompanyCareerPage() {
 
   const getStatusBadge = (status: string | null) => {
     const statusConfig: any = {
-      applied: { text: 'Applied', className: 'bg-blue-50 border-blue-100 text-blue-700' },
-      screened: { text: 'Under Review', className: 'bg-purple-50 border-purple-100 text-purple-700' },
-      technical_round: { text: 'Technical Round', className: 'bg-amber-50 border-amber-100 text-amber-700' },
-      hr_round: { text: 'HR Round', className: 'bg-orange-50 border-orange-100 text-orange-700' },
-      offer_sent: { text: 'Offer Sent', className: 'bg-emerald-50 border-emerald-100 text-emerald-700 font-semibold ring-1 ring-emerald-500/30' },
-      hired: { text: 'Hired', className: 'bg-green-50 border-green-200 text-green-700 font-semibold' },
-      rejected: { text: 'Not Selected', className: 'bg-gray-50/80 border-gray-200 text-gray-500' }
+      applied: { text: 'Applied', className: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
+      screened: { text: 'Under Review', className: 'bg-purple-500/10 border-purple-500/20 text-purple-400' },
+      technical_round: { text: 'Technical Round', className: 'bg-amber-500/10 border-amber-500/20 text-amber-400' },
+      hr_round: { text: 'HR Round', className: 'bg-orange-500/10 border-orange-500/20 text-orange-400' },
+      offer_sent: { text: 'Offer Sent', className: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 font-semibold' },
+      hired: { text: 'Hired', className: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300 font-semibold' },
+      rejected: { text: 'Not Selected', className: 'bg-zinc-800/80 border-zinc-700 text-zinc-400' }
     };
 
     const config = statusConfig[status || ''] || statusConfig.applied;
 
     return (
-      <span className={`px-3 py-1.5 border rounded-xl text-[11px] font-semibold tracking-wide backdrop-blur-md ${config.className}`}>
+      <span className={`px-3 py-1.5 border rounded-xl text-xs font-medium backdrop-blur-md ${config.className}`}>
         {config.text}
       </span>
     );
@@ -161,14 +161,14 @@ export default function CompanyCareerPage() {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(243,244,246,0.8)_0%,transparent_70%)]" />
+      <div className="min-h-screen bg-[#09090b] flex flex-col items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.05)_0%,transparent_70%)] pointer-events-none" />
         <div className="flex flex-col items-center gap-4 relative z-10">
-          <div className="relative w-12 h-12">
-            <div className="absolute inset-0 border-2 border-gray-200 rounded-full"></div>
-            <div className="absolute inset-0 border-2 border-t-gray-900 rounded-full animate-spin"></div>
+          <div className="relative w-10 h-10">
+            <div className="absolute inset-0 border-2 border-zinc-800 rounded-full" />
+            <div className="absolute inset-0 border-2 border-t-emerald-500 rounded-full animate-spin" />
           </div>
-          <p className="text-gray-500 text-xs tracking-widest uppercase font-medium">Syncing profile data...</p>
+          <p className="text-zinc-400 text-xs tracking-wider uppercase font-medium">Loading company profile...</p>
         </div>
       </div>
     );
@@ -176,20 +176,20 @@ export default function CompanyCareerPage() {
 
   if (!company) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 relative">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(239,68,68,0.05)_0%,transparent_50%)]" />
-        <div className="text-center max-w-sm relative z-10">
-          <div className="w-16 h-16 bg-white border border-gray-200 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
-            <Building2 className="w-8 h-8 text-gray-400" />
+      <div className="min-h-screen bg-[#09090b] text-white flex items-center justify-center p-6 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(239,68,68,0.05)_0%,transparent_60%)] pointer-events-none" />
+        <div className="text-center max-w-md relative z-10">
+          <div className="w-16 h-16 bg-zinc-900 border border-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+            <Building2 className="w-8 h-8 text-zinc-500" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-2">Company Workspace Not Found</h1>
-          <p className="text-gray-500 text-sm leading-relaxed mb-8">The route directory might have changed or this business hub dashboard is temporarily set to private.</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight mb-2">Company Not Found</h1>
+          <p className="text-zinc-400 text-sm leading-relaxed mb-8">The requested company profile could not be found or may be private.</p>
           <button 
             onClick={() => router.push('/companies')}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition font-medium text-sm shadow-md"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 bg-white text-black rounded-xl hover:bg-zinc-200 transition font-semibold text-sm shadow-lg"
           >
             <ArrowLeft className="w-4 h-4" />
-            Browse Corporate Index
+            Explore Companies
           </button>
         </div>
       </div>
@@ -197,134 +197,129 @@ export default function CompanyCareerPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 text-gray-900 antialiased font-sans overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#09090b] text-white antialiased font-sans overflow-hidden relative">
       
+      {/* Ambient background glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-96 bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.08)_0%,transparent_60%)] pointer-events-none z-0" />
+
       {/* FIXED HERO HEADER */}
-      <header className="flex-shrink-0 relative border-b border-gray-200 bg-gray-50">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(243,244,246,0.6)_0%,transparent_50%)] pointer-events-none" />
-        
+      <header className="flex-shrink-0 relative border-b border-zinc-800/80 bg-[#09090b]/80 backdrop-blur-xl z-10">
         <div className="max-w-7xl mx-auto px-6 pt-5 pb-0 space-y-4">
           
-          {/* PREMIUM BACK BUTTON ACTION ENTRY */}
-          <div className="flex items-center">
+          {/* Back Button & Auth Notification Bar */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <button
               onClick={() => router.push('/companies')}
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-white backdrop-blur-md border border-gray-200 hover:border-gray-300 rounded-xl text-[11px] font-semibold tracking-wider text-gray-500 hover:text-gray-800 transition-all shadow-md group"
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-medium text-zinc-300 hover:text-white transition-all group"
             >
               <ArrowLeft className="w-3.5 h-3.5 transform group-hover:-translate-x-0.5 transition-transform" />
-              
+              <span>Back to Companies</span>
             </button>
+
+            {/* Auth status banner */}
+            {!isAuthenticated ? (
+              <div className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-3.5 py-1.5 flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-2 text-zinc-400">
+                  <Lock className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>Sign in to apply directly</span>
+                </div>
+                <button
+                  onClick={() => router.push(`/login?redirect=/careers/${companyIdentifier}`)}
+                  className="px-3 py-1 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg transition text-xs"
+                >
+                  Sign In
+                </button>
+              </div>
+            ) : (
+              user && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3.5 py-1.5 flex items-center gap-2.5 text-xs text-emerald-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Signed in as <strong className="text-white">{user.fullName || 'Candidate'}</strong></span>
+                </div>
+              )
+            )}
           </div>
 
-          {/* Auth Notifications */}
-          {!isAuthenticated && (
-            <div className="bg-white/50 backdrop-blur-md border border-gray-200/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm group">
-              <div className="flex items-center gap-3.5">
-                <div className="p-2 bg-gray-50/80 rounded-xl border border-gray-200 text-gray-500">
-                  <Lock className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800 tracking-tight">Personalized Applications System Offline</p>
-                  <p className="text-xs text-gray-400">Authenticate your engineer profile to access direct job pipelines.</p>
-                </div>
-              </div>
-              <button
-                onClick={() => router.push(`/login?redirect=/careers/${companyIdentifier}`)}
-                className="w-full sm:w-auto px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-xl transition text-xs font-bold tracking-tight shadow-md"
-              >
-                Sign In to Pipeline
-              </button>
-            </div>
-          )}
-
-          {isAuthenticated && user && (
-            <div className="bg-emerald-50/50 backdrop-blur-md border border-emerald-100 rounded-2xl p-4 flex items-center justify-between shadow-sm">
-              <div className="flex items-center gap-3.5">
-                <div className="p-2 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-400">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-800 tracking-tight">Pipeline Authenticated</p>
-                  <p className="text-xs text-gray-400">Session verified for <span className="text-emerald-400 font-medium">{user.fullName || 'your account'}</span>.</p>
-                </div>
-              </div>
-              <span className="hidden sm:inline-flex w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            </div>
-          )}
-
-          {/* Company Branding Section */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pb-5">
-            <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-50/80 backdrop-blur-md border border-gray-200 rounded-2xl overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm relative group">
+          {/* Company Brand Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 pb-4">
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex items-center justify-center flex-shrink-0 shadow-lg relative group">
               {company.logoUrl ? (
-                <img src={company.logoUrl} alt={company.name} className="w-full h-full object-cover relative z-0 transition group-hover:scale-105 duration-300" />
+                <img src={company.logoUrl} alt={company.name} className="w-full h-full object-cover transition group-hover:scale-105 duration-300" />
               ) : (
-                <Building2 className="w-8 h-8 text-gray-400 relative z-0" />
+                <Building2 className="w-8 h-8 text-zinc-600" />
               )}
             </div>
 
             <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2.5 mb-1">
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-gray-900">{company.name}</h1>
+              <div className="flex flex-wrap items-center gap-3 mb-1.5">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white">{company.name}</h1>
                 {company.verificationBadge !== 'none' && (
-                  <div className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full">
-                    <span className="w-1 h-1 rounded-full bg-emerald-400" />
-                    <span className="text-[9px] uppercase font-bold text-emerald-400 tracking-wider">Verified Hub</span>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="text-[10px] uppercase font-semibold text-emerald-400 tracking-wider">Verified Company</span>
                   </div>
                 )}
               </div>
 
               {company.tagline && (
-                <p className="text-gray-500 text-xs md:text-sm max-w-2xl truncate mb-3 font-normal">{company.tagline}</p>
+                <p className="text-zinc-400 text-xs md:text-sm max-w-2xl truncate mb-3">{company.tagline}</p>
               )}
 
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-gray-500 font-medium">
-                <div className="flex items-center gap-1">
-                  <Briefcase className="w-3 h-3 text-gray-400" />
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-zinc-400 font-medium">
+                <div className="flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-zinc-500" />
                   <span>{company.industry}</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Users className="w-3 h-3 text-gray-400" />
-                  <span>{company.size} Team Members</span>
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>{company.size} employees</span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Layers className="w-3 h-3 text-gray-400" />
-                  <span>{company.activeJobsCount} Active Tracks</span>
+                <div className="flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>{company.activeJobsCount} Open Position{company.activeJobsCount !== 1 ? 's' : ''}</span>
                 </div>
                 {company.corporateLink && (
                   <a 
                     href={company.corporateLink} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-gray-500 hover:text-gray-900 transition-colors border-b border-gray-200 hover:border-zinc-500 pb-0.5"
+                    className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 transition-colors"
                   >
-                    <Globe className="w-3 h-3 text-gray-400" />
-                    <span>HQ Portal</span>
-                    <ExternalLink className="w-2.5 h-2.5 text-gray-300" />
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Website</span>
+                    <ExternalLink className="w-3 h-3 ml-0.5" />
                   </a>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Sub Tab Navigation */}
-          <div className="flex gap-2 border-b border-gray-200 overflow-x-auto no-scrollbar">
+          {/* Tab Navigation */}
+          <div className="flex gap-1 border-b border-zinc-800/80 overflow-x-auto no-scrollbar">
             {[
-              { id: 'jobs', label: 'Open Openings', count: jobs.length },
-              { id: 'about', label: 'Company Profile' },
-              { id: 'overview', label: 'Hub Intelligence' }
+              { id: 'jobs', label: 'Open Positions', count: jobs.length },
+              { id: 'about', label: 'About Company' },
+              { id: 'overview', label: 'Company Overview' }
             ].map((tab) => {
               const isSelected = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`px-4 py-3 text-[11px] uppercase tracking-wider font-semibold transition-all relative flex-shrink-0 border-b-2 -mb-[2px] ${
+                  className={`px-4 py-3 text-xs font-semibold tracking-wide transition-all relative flex-shrink-0 border-b-2 -mb-[2px] ${
                     isSelected 
-                      ? 'border-white text-gray-900 font-bold' 
-                      : 'border-transparent text-gray-400 hover:text-gray-700'
+                      ? 'border-emerald-400 text-white font-bold' 
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
-                  {tab.label} {tab.count !== undefined && <span className={`ml-1.5 px-1.5 py-0.5 rounded-md text-[10px] ${isSelected ? 'bg-gray-100 text-gray-800' : 'bg-gray-50/80 text-gray-400'}`}>{tab.count}</span>}
+                  {tab.label} 
+                  {tab.count !== undefined && (
+                    <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] ${
+                      isSelected ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -333,18 +328,21 @@ export default function CompanyCareerPage() {
         </div>
       </header>
 
-      {/* VIEWPORT BOUNDED SCROLLABLE MAIN LAYOUT */}
-      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-6 py-6 overflow-hidden">
+      {/* SCROLLABLE MAIN BODY */}
+      <main className="flex-1 min-h-0 w-full max-w-7xl mx-auto px-6 py-6 overflow-hidden z-10">
         
-        {/* JOBS DASHBOARD */}
+        {/* JOBS TAB */}
         {activeTab === 'jobs' && (
           <div className="h-full flex flex-col md:flex-row gap-6 items-start overflow-hidden">
             
-            {/* FIXED SIDEBAR FILTERS */}
+            {/* SEARCH & FILTERS SIDEBAR */}
             {jobs.length > 0 && (
-              <div className="w-full md:w-64 flex-shrink-0 space-y-4 bg-white/80 backdrop-blur-md border border-gray-200 rounded-2xl p-4 shadow-sm">
-                <div className="flex items-center justify-between pb-2 border-b border-gray-200">
-                  <h2 className="text-xs uppercase font-bold tracking-widest text-gray-400">Search Filters</h2>
+              <div className="w-full md:w-64 flex-shrink-0 space-y-4 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/80 rounded-2xl p-4 shadow-xl">
+                <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                    <Filter className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Search Filters</span>
+                  </div>
                   {(searchQuery || departmentFilter || jobTypeFilter || locationTypeFilter) && (
                     <button 
                       onClick={() => {
@@ -353,36 +351,36 @@ export default function CompanyCareerPage() {
                         setJobTypeFilter('');
                         setLocationTypeFilter('');
                       }}
-                      className="text-[11px] text-gray-500 hover:text-gray-800 transition underline underline-offset-4"
+                      className="text-xs text-emerald-400 hover:text-emerald-300 transition"
                     >
-                      Reset All
+                      Clear
                     </button>
                   )}
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Keyword Lookup</label>
+                  <label className="text-xs font-medium text-zinc-400">Search Jobs</label>
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
                     <input
                       type="text"
-                      placeholder="Role, tech stack..."
+                      placeholder="Role, keyword, skill..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-zinc-600 focus:outline-none focus:border-gray-300 focus:bg-gray-50/80 transition"
+                      className="w-full pl-9 pr-3 py-2 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50 transition"
                     />
                   </div>
                 </div>
 
                 {getDepartments().length > 0 && (
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Department</label>
+                    <label className="text-xs font-medium text-zinc-400">Department</label>
                     <select
                       value={departmentFilter}
                       onChange={(e) => setDepartmentFilter(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-gray-300 focus:bg-gray-50/80 transition"
+                      className="w-full px-3 py-2 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-emerald-500/50 transition"
                     >
-                      <option value="">All Scopes</option>
+                      <option value="">All Departments</option>
                       {getDepartments().map(dept => (
                         <option key={dept} value={dept}>{dept}</option>
                       ))}
@@ -392,11 +390,11 @@ export default function CompanyCareerPage() {
 
                 {getJobTypes().length > 0 && (
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Employment Model</label>
+                    <label className="text-xs font-medium text-zinc-400">Employment Type</label>
                     <select
                       value={jobTypeFilter}
                       onChange={(e) => setJobTypeFilter(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-gray-300 focus:bg-gray-50/80 transition"
+                      className="w-full px-3 py-2 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-emerald-500/50 transition"
                     >
                       <option value="">All Types</option>
                       {getJobTypes().map(type => (
@@ -408,13 +406,13 @@ export default function CompanyCareerPage() {
 
                 {getLocationTypes().length > 0 && (
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Physical Location</label>
+                    <label className="text-xs font-medium text-zinc-400">Location</label>
                     <select
                       value={locationTypeFilter}
                       onChange={(e) => setLocationTypeFilter(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-gray-300 focus:bg-gray-50/80 transition"
+                      className="w-full px-3 py-2 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-emerald-500/50 transition"
                     >
-                      <option value="">All Vectors</option>
+                      <option value="">All Locations</option>
                       {getLocationTypes().map(loc => (
                         <option key={loc} value={loc}>{loc}</option>
                       ))}
@@ -422,110 +420,109 @@ export default function CompanyCareerPage() {
                   </div>
                 )}
 
-                <div className="text-[11px] text-gray-400 pt-1 font-medium tracking-wide">
-                  Matching Index: {filteredJobs.length} nodes
+                <div className="text-xs text-zinc-500 pt-2 border-t border-zinc-800/80 font-medium">
+                  Showing {filteredJobs.length} position{filteredJobs.length !== 1 ? 's' : ''}
                 </div>
               </div>
             )}
 
-            {/* FULL WIDTH SCROLLABLE JOB CONTAINER */}
+            {/* JOB CARDS LIST */}
             <div className="flex-1 w-full h-full overflow-y-auto pr-1 space-y-3.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {jobs.length === 0 ? (
-                <div className="text-center py-16 bg-white/80 backdrop-blur-md border border-dashed border-gray-200 rounded-2xl">
-                  <Briefcase className="w-10 h-10 text-gray-300 mx-auto mb-3.5" />
-                  <h3 className="text-sm font-semibold text-gray-700 mb-1">Quiet Pipeline</h3>
-                  <p className="text-xs text-gray-400 max-w-xs mx-auto leading-relaxed">This workspace isn't accepting direct applications right now.</p>
+                <div className="text-center py-16 bg-zinc-900/40 border border-dashed border-zinc-800 rounded-2xl">
+                  <Briefcase className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
+                  <h3 className="text-sm font-semibold text-zinc-300 mb-1">No Open Positions</h3>
+                  <p className="text-xs text-zinc-500 max-w-xs mx-auto">This company currently has no active hiring positions.</p>
                 </div>
               ) : filteredJobs.length === 0 ? (
-                <div className="text-center py-16 bg-white/80 backdrop-blur-md border border-gray-200 rounded-2xl">
-                  <HelpCircle className="w-10 h-10 text-gray-300 mx-auto mb-3.5" />
-                  <p className="text-xs text-gray-400 mb-4">No structural matches found inside the current parameters.</p>
+                <div className="text-center py-16 bg-zinc-900/40 border border-zinc-800 rounded-2xl">
+                  <HelpCircle className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
+                  <p className="text-xs text-zinc-400 mb-4">No jobs matching your selected search filters.</p>
                 </div>
               ) : (
                 filteredJobs.map(job => (
                   <div 
                     key={job.id}
                     onClick={() => handleJobClick(job.id)}
-                    className="w-full bg-white/80 backdrop-blur-md border border-gray-200 hover:border-gray-300 rounded-2xl p-6 hover:bg-gray-800/50 transition-all duration-300 cursor-pointer group relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-sm"
+                    className="w-full bg-zinc-900/50 border border-zinc-800/80 hover:border-emerald-500/40 hover:bg-zinc-900/90 rounded-2xl p-5 md:p-6 transition-all duration-200 cursor-pointer group relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-5 shadow-lg"
                   >
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-transparent group-hover:bg-zinc-400 transition-colors" />
-
-                    <div className="space-y-2.5 flex-1 min-w-0">
+                    <div className="space-y-3 flex-1 min-w-0">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                        <h3 className="text-lg font-bold text-gray-900 tracking-tight group-hover:text-gray-900 transition-colors">
+                        <h3 className="text-base md:text-lg font-bold text-white tracking-tight group-hover:text-emerald-400 transition-colors">
                           {job.title}
                         </h3>
                         
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="px-2.5 py-0.5 bg-gray-50/80 border border-gray-200 rounded-lg text-[10px] text-gray-500 font-semibold uppercase tracking-wider">
+                          <span className="px-2.5 py-0.5 bg-zinc-800/80 border border-zinc-700/80 rounded-lg text-[10px] text-zinc-300 font-semibold uppercase tracking-wider">
                             {job.jobType}
                           </span>
                           {job.locationType && (
-                            <span className="px-2.5 py-0.5 bg-gray-50/80 border border-gray-200 rounded-lg text-[10px] text-gray-500 font-semibold uppercase tracking-wider">
+                            <span className="px-2.5 py-0.5 bg-zinc-800/80 border border-zinc-700/80 rounded-lg text-[10px] text-zinc-300 font-semibold uppercase tracking-wider">
                               {job.locationType}
                             </span>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-gray-500 font-medium">
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-zinc-400 font-medium">
                         {job.department && (
-                          <span className="flex items-center gap-1.5 text-gray-700">
-                            <Building2 className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="flex items-center gap-1.5 text-zinc-300">
+                            <Building2 className="w-3.5 h-3.5 text-zinc-500" />
                             {job.department}
                           </span>
                         )}
                         {job.location && (
-                          <span className="flex items-center gap-1.5 text-gray-500">
-                            <MapPin className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="flex items-center gap-1.5 text-zinc-400">
+                            <MapPin className="w-3.5 h-3.5 text-zinc-500" />
                             {job.location}
                           </span>
                         )}
                         {job.experienceRequired && (
-                          <span className="flex items-center gap-1.5 text-gray-500">
-                            <Clock className="w-3.5 h-3.5 text-gray-400" />
+                          <span className="flex items-center gap-1.5 text-zinc-400">
+                            <Clock className="w-3.5 h-3.5 text-zinc-500" />
                             {job.experienceRequired}
                           </span>
                         )}
                         {job.salaryRange && (
-                          <span className="flex items-center gap-1.5 text-emerald-400 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 shadow-sm">
-                            <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+                          <span className="flex items-center gap-1.5 text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
                             {job.salaryRange}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-400 font-medium pt-1 border-t border-gray-100">
-                        <span>Allocated Positions: {job.openings}</span>
-                        <span className="text-gray-300">•</span>
-                        <span>{job.applicationsCount} Processing</span>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500 font-medium pt-2 border-t border-zinc-800/60">
+                        <span>{job.openings} Opening{job.openings !== 1 ? 's' : ''}</span>
+                        <span className="text-zinc-700">•</span>
+                        <span>{job.applicationsCount} Applicant{job.applicationsCount !== 1 ? 's' : ''}</span>
                         {job.deadline && (
                           <>
-                            <span className="text-gray-300">•</span>
+                            <span className="text-zinc-700">•</span>
                             <span className="flex items-center gap-1.5">
-                              <Calendar className="w-3 h-3 text-gray-400" />
-                              Closing {new Date(job.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              <Calendar className="w-3 h-3 text-zinc-500" />
+                              Closes {new Date(job.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                             </span>
                           </>
                         )}
                         {job.hasApplied && job.appliedAt && (
                           <>
-                            <span className="text-gray-300">•</span>
-                            <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                              <Check className="w-3 h-3 text-emerald-500" />
-                              Transmitted {new Date(job.appliedAt).toLocaleDateString()}
+                            <span className="text-zinc-700">•</span>
+                            <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+                              <Check className="w-3 h-3 text-emerald-400" />
+                              Applied on {new Date(job.appliedAt).toLocaleDateString()}
                             </span>
                           </>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-3 border-t border-gray-200 sm:border-t-0 pt-3 sm:pt-0 flex-shrink-0">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 border-t border-zinc-800 sm:border-t-0 pt-3 sm:pt-0 flex-shrink-0">
                       {job.hasApplied ? (
                         getStatusBadge(job.applicationStatus)
                       ) : (
-                        <div className="w-9 h-9 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-gray-400 group-hover:text-gray-900 group-hover:bg-gray-100/60 group-hover:border-gray-300 transition-all ml-auto sm:ml-0 shadow-inner">
-                          <ChevronRight className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" />
+                        <div className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-emerald-400 text-black hover:text-black font-semibold text-xs rounded-xl transition-all shadow-md group-hover:scale-105">
+                          <span>View Job</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </div>
                       )}
                     </div>
@@ -537,26 +534,26 @@ export default function CompanyCareerPage() {
           </div>
         )}
 
-        {/* STATIC TAB DESIGNS */}
+        {/* ABOUT COMPANY TAB */}
         {activeTab === 'about' && (
-          <div className="h-full overflow-y-auto pr-1 space-y-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="max-w-3xl space-y-8">
-              <div className="space-y-4">
-                <h2 className="text-lg font-bold text-gray-900 tracking-tight flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-gray-400" />
-                  Operational Mission
+          <div className="h-full overflow-y-auto pr-1 space-y-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="max-w-4xl space-y-8">
+              <div className="space-y-3">
+                <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  About Us & Mission
                 </h2>
                 {company.tagline && (
-                  <p className="text-gray-500 text-sm leading-relaxed font-normal bg-white/80 backdrop-blur-md border border-gray-200 p-5 rounded-2xl shadow-sm">{company.tagline}</p>
+                  <p className="text-zinc-300 text-sm leading-relaxed bg-zinc-900/60 border border-zinc-800/80 p-5 rounded-2xl shadow-lg">{company.tagline}</p>
                 )}
               </div>
               
               {company.services && company.services.length > 0 && (
-                <div className="space-y-4">
-                  <h3 className="text-xs uppercase font-bold tracking-widest text-gray-400">Core Services Stack</h3>
+                <div className="space-y-3">
+                  <h3 className="text-xs uppercase font-bold tracking-wider text-zinc-400">Services & Capabilities</h3>
                   <div className="flex flex-wrap gap-2">
                     {company.services.map((service, idx) => (
-                      <span key={idx} className="px-3 py-2 bg-white/80 backdrop-blur-md border border-gray-200 rounded-xl text-xs text-gray-700 font-semibold hover:border-gray-300 transition duration-150 shadow-md">
+                      <span key={idx} className="px-3.5 py-2 bg-zinc-900/60 border border-zinc-800 rounded-xl text-xs text-zinc-200 font-medium shadow-sm">
                         {service}
                       </span>
                     ))}
@@ -565,15 +562,15 @@ export default function CompanyCareerPage() {
               )}
 
               {company.coreValues && company.coreValues.length > 0 && (
-                <div className="space-y-4">
-                  <h3 className="text-xs uppercase font-bold tracking-widest text-gray-400">Corporate Anchors</h3>
+                <div className="space-y-3">
+                  <h3 className="text-xs uppercase font-bold tracking-wider text-zinc-400">Core Values</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {company.coreValues.map((value, idx) => (
-                      <div key={idx} className="flex items-start gap-3 p-4 bg-white/80 backdrop-blur-md border border-gray-200 rounded-xl shadow-md">
-                        <div className="p-1.5 bg-gray-50/80 border border-gray-200 text-gray-500 rounded-lg mt-0.5">
+                      <div key={idx} className="flex items-start gap-3 p-4 bg-zinc-900/60 border border-zinc-800 rounded-xl shadow-sm">
+                        <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg mt-0.5">
                           <Target className="w-3.5 h-3.5" />
                         </div>
-                        <span className="text-gray-700 text-xs font-medium leading-relaxed">{value}</span>
+                        <span className="text-zinc-300 text-xs font-medium leading-relaxed">{value}</span>
                       </div>
                     ))}
                   </div>
@@ -583,30 +580,31 @@ export default function CompanyCareerPage() {
           </div>
         )}
 
+        {/* OVERVIEW TAB */}
         {activeTab === 'overview' && (
           <div className="h-full overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
-                <div className="bg-white/80 backdrop-blur-md border border-gray-200 rounded-2xl p-6 shadow-sm">
-                  <h3 className="text-sm font-bold text-gray-900 mb-4 uppercase tracking-wider text-gray-400">Node Properties</h3>
+                <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 shadow-lg">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-4">Company Overview</h3>
                   <div className="space-y-1 text-xs">
-                    <div className="flex justify-between py-3.5 border-b border-gray-200 font-medium">
-                      <span className="text-gray-400">Industrial Core</span>
-                      <span className="text-gray-800">{company.industry}</span>
+                    <div className="flex justify-between py-3 border-b border-zinc-800/80 font-medium">
+                      <span className="text-zinc-400">Industry</span>
+                      <span className="text-zinc-200">{company.industry}</span>
                     </div>
-                    <div className="flex justify-between py-3.5 border-b border-gray-200 font-medium">
-                      <span className="text-gray-400">Scale Factor</span>
-                      <span className="text-gray-800">{company.size} personnel</span>
+                    <div className="flex justify-between py-3 border-b border-zinc-800/80 font-medium">
+                      <span className="text-zinc-400">Company Size</span>
+                      <span className="text-zinc-200">{company.size} employees</span>
                     </div>
-                    <div className="flex justify-between py-3.5 border-b border-gray-200 font-medium">
-                      <span className="text-gray-400">Active Pipelines</span>
-                      <span className="text-gray-800 font-bold">{company.activeJobsCount} tracks open</span>
+                    <div className="flex justify-between py-3 border-b border-zinc-800/80 font-medium">
+                      <span className="text-zinc-400">Active Hiring</span>
+                      <span className="text-emerald-400 font-bold">{company.activeJobsCount} positions open</span>
                     </div>
-                    <div className="flex justify-between py-3.5 font-medium">
-                      <span className="text-gray-400">Registry Clearance</span>
+                    <div className="flex justify-between py-3 font-medium">
+                      <span className="text-zinc-400">Verification Status</span>
                       <span className="text-emerald-400 flex items-center gap-1.5 font-semibold">
-                        <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                        {company.verificationBadge}
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        Verified
                       </span>
                     </div>
                   </div>
@@ -619,10 +617,10 @@ export default function CompanyCareerPage() {
                     href={company.corporateLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 bg-white hover:bg-gray-800 text-gray-800 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-xl transition-all font-semibold text-xs tracking-wide uppercase shadow-sm"
+                    className="w-full inline-flex items-center justify-center gap-2 px-5 py-4 bg-white hover:bg-zinc-200 text-black font-semibold rounded-xl transition-all text-xs tracking-wide shadow-lg"
                   >
-                    Request External Gateway
-                    <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
+                    Visit Corporate Website
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
               </div>
