@@ -37,6 +37,16 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Skip retry on public/session endpoints to avoid unnecessary refresh requests
+    if (
+      originalRequest?.url?.includes('/company/auth/session') || 
+      originalRequest?.url?.includes('/auth/refresh') ||
+      originalRequest?.url?.includes('/company/auth/forgot-password') ||
+      originalRequest?.url?.includes('/company/auth/reset-password')
+    ) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {

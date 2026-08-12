@@ -947,29 +947,40 @@ export const verifyEmailChangeOtp = async (req: Request, res: Response) => {
 export const forgotCompanyPassword = async (req: Request, res: Response) => {
   try {
     const { email, type } = req.body;
-    if (!email || !type) {
-      return res.status(400).json({ success: false, message: 'Email and portal type are required.' });
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email address is required.' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    let emailDispatched = false;
 
-    if (type === 'admin') {
-      const company = await prisma.company.findUnique({ where: { email: normalizedEmail } });
+    // 1. Search Company table (Admin account)
+    if (!type || type === 'admin') {
+      const company = await prisma.company.findFirst({
+        where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
+      });
       if (company) {
         const token = jwt.sign(
           { companyId: company.id, purpose: 'reset-password' },
           JWT_SECRET,
           { expiresIn: '1h' }
         );
-        await sendPasswordResetEmail(normalizedEmail, token);
+        await sendPasswordResetEmail(company.email, token);
+        emailDispatched = true;
       }
-    } else if (type === 'team') {
+    }
+
+    // 2. Search User & TeamMember tables
+    if (!emailDispatched && (!type || type === 'team' || type === 'admin')) {
       const user = await prisma.user.findFirst({
         where: {
           OR: [
-            { mobileNumber: normalizedEmail },
-            ...( 'email' in prisma.user.fields ? [{ email: normalizedEmail }] : [] )
+            { mobileNumber: { equals: normalizedEmail, mode: 'insensitive' } },
+            { jobSeekerProfile: { email: { equals: normalizedEmail, mode: 'insensitive' } } }
           ]
+        },
+        include: {
+          jobSeekerProfile: true
         }
       });
 
@@ -983,11 +994,27 @@ export const forgotCompanyPassword = async (req: Request, res: Response) => {
             JWT_SECRET,
             { expiresIn: '1h' }
           );
-          await sendPasswordResetEmail(normalizedEmail, token);
+          const targetEmail = user.jobSeekerProfile?.email || (user.mobileNumber.includes('@') ? user.mobileNumber : normalizedEmail);
+          await sendPasswordResetEmail(targetEmail, token);
+          emailDispatched = true;
         }
       }
-    } else {
-      return res.status(400).json({ success: false, message: 'Invalid portal type.' });
+    }
+
+    // 3. Fallback: If user selected 'team' but account is actually a company admin
+    if (!emailDispatched && type === 'team') {
+      const company = await prisma.company.findFirst({
+        where: { email: { equals: normalizedEmail, mode: 'insensitive' } }
+      });
+      if (company) {
+        const token = jwt.sign(
+          { companyId: company.id, purpose: 'reset-password' },
+          JWT_SECRET,
+          { expiresIn: '1h' }
+        );
+        await sendPasswordResetEmail(company.email, token);
+        emailDispatched = true;
+      }
     }
 
     // Always return success for security/privacy (prevent account enumeration)
@@ -1031,6 +1058,12 @@ export const resetCompanyPassword = async (req: Request, res: Response) => {
         where: { id: decoded.teamMemberId },
         data: { password: hashedPassword }
       });
+      if (decoded.userId) {
+        await prisma.user.update({
+          where: { id: decoded.userId },
+          data: { password: hashedPassword }
+        });
+      }
     } else {
       return res.status(400).json({ success: false, message: 'Invalid token content.' });
     }

@@ -91,8 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           setCompany(response.data.company);
         }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
+      } catch (error: any) {
+        // 401 is normal when visitor is not logged in yet
+        if (error?.response?.status !== 401) {
+          console.error('Auth initialization error:', error);
+        }
         setIsAuthenticated(false);
         setUser(null);
         setCompany(null);
@@ -108,11 +111,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isLoading) return;
 
-    const publicPaths = ['/', '/login', '/signup', '/accept-invite', '/set-password', '/verify-email'];
+    const publicPaths = ['/', '/login', '/signup', '/accept-invite', '/set-password', '/verify-email', '/forgot-password', '/reset-password'];
     const isPublicPath = publicPaths.includes(pathname);
     const isDashboardPath = pathname.startsWith('/dashboard');
 
-    if (isAuthenticated && (pathname === '/login' || pathname === '/signup')) {
+    if (isAuthenticated && (pathname === '/login' || pathname === '/signup' || pathname === '/forgot-password')) {
       router.replace('/dashboard');
     } else if (!isAuthenticated && isDashboardPath) {
       router.replace('/login');
