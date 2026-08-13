@@ -9624,10 +9624,9 @@ var getAllPublicCompanies = async (req, res) => {
     console.log("reached me");
     const { industry, size, search, verified } = req.query;
     const where = {
-      isVerified: true,
+      ...verified === "true" ? { OR: [{ isVerified: true }, { verificationBadge: { not: "none" } }] } : {},
       ...industry && { industry: { equals: industry, mode: "insensitive" } },
       ...size && { size: { equals: size, mode: "insensitive" } },
-      ...verified === "true" && { verificationBadge: { not: "none" } },
       ...search && { name: { contains: search, mode: "insensitive" } }
     };
     const companies = await prisma.company.findMany({
@@ -9639,6 +9638,7 @@ var getAllPublicCompanies = async (req, res) => {
         industry: true,
         size: true,
         tagline: true,
+        isVerified: true,
         verificationBadge: true,
         _count: {
           select: {

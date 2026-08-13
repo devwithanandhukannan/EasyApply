@@ -87,6 +87,17 @@ export const publicAPIService = {
       throw error;
     }
   },
+
+  // Get all public companies
+  getCompanies: async (params?: any) => {
+    try {
+      const response = await publicAPI.get('/public/companies', { params });
+      return response;
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      throw error;
+    }
+  },
 };
 
 // Export both the service and the axios instance

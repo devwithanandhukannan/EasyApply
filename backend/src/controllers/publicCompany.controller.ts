@@ -334,10 +334,9 @@ export const getAllPublicCompanies = async (req: Request, res: Response) => {
     const { industry, size, search, verified } = req.query;
 
     const where: any = {
-      isVerified: true,
+      ...(verified === 'true' ? { OR: [{ isVerified: true }, { verificationBadge: { not: 'none' } }] } : {}),
       ...(industry && { industry: { equals: industry as string, mode: 'insensitive' } }),
       ...(size && { size: { equals: size as string, mode: 'insensitive' } }),
-      ...(verified === 'true' && { verificationBadge: { not: 'none' } }),
       ...(search && { name: { contains: search as string, mode: 'insensitive' } })
     };
 
@@ -350,6 +349,7 @@ export const getAllPublicCompanies = async (req: Request, res: Response) => {
         industry: true,
         size: true,
         tagline: true,
+        isVerified: true,
         verificationBadge: true,
         _count: {
           select: { 

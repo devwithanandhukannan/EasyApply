@@ -1,7 +1,7 @@
 'use client';
 
 import { useAuth } from '@/app/contexts/AuthContext';
-import { redirect } from 'next/navigation';
+import { redirect, useRouter } from 'next/navigation';
 import {
   Sparkles,
   Zap,
@@ -20,6 +20,7 @@ import {
 
 export default function Home() {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
 
   if (isAuthenticated) {
     redirect('/dashboard');
@@ -111,14 +112,30 @@ export default function Home() {
 
           {/* Nav Links */}
           <nav className="hidden md:flex items-center gap-8">
-            {['Features', 'How It Works', 'Companies'].map((item) => (
-              <span key={item} className="text-xs font-medium cursor-pointer transition-colors duration-200"
-                style={{ color: 'rgba(255,255,255,0.5)' }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'white')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}>
-                {item}
-              </span>
-            ))}
+            <button
+              onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}
+              className="text-xs font-medium cursor-pointer transition-colors duration-200 bg-transparent border-0"
+              style={{ color: 'rgba(255,255,255,0.5)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}>
+              Features
+            </button>
+            <button
+              onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
+              className="text-xs font-medium cursor-pointer transition-colors duration-200 bg-transparent border-0"
+              style={{ color: 'rgba(255,255,255,0.5)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}>
+              How It Works
+            </button>
+            <button
+              onClick={() => router.push('/companies')}
+              className="text-xs font-medium cursor-pointer transition-colors duration-200 bg-transparent border-0"
+              style={{ color: 'rgba(255,255,255,0.5)' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'white')}
+              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.5)')}>
+              Companies
+            </button>
           </nav>
 
           {/* CTA */}
@@ -164,7 +181,9 @@ export default function Home() {
             Sign In via WhatsApp OTP
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
-          <button className="btn-secondary inline-flex items-center gap-2 px-6 py-4 rounded-2xl text-sm font-medium">
+          <button
+            onClick={() => router.push('/companies')}
+            className="btn-secondary inline-flex items-center gap-2 px-6 py-4 rounded-2xl text-sm font-medium cursor-pointer transition-all hover:bg-white/10">
             <Globe className="w-4 h-4 opacity-60" />
             Browse Companies
           </button>
@@ -195,7 +214,7 @@ export default function Home() {
       </div>
 
       {/* ── FEATURES ─────────────────────────────────────────────────── */}
-      <section className="relative z-10 max-w-7xl mx-auto px-6 py-24">
+      <section id="features" className="relative z-10 max-w-7xl mx-auto px-6 py-24">
         <div className="text-center mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-4 text-xs font-medium"
             style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: 'rgba(165,180,252,1)' }}>
@@ -244,7 +263,7 @@ export default function Home() {
       </section>
 
       {/* ── HOW IT WORKS ────────────────────────────────────────────── */}
-      <section className="relative z-10 max-w-7xl mx-auto px-6 py-20">
+      <section id="how-it-works" className="relative z-10 max-w-7xl mx-auto px-6 py-20">
         <div className="divider-gradient mb-16" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left: Copy */}
