@@ -6,7 +6,6 @@ import { useGlassToast } from '@/app/components/GlassToastContainer';
 import { 
   ArrowLeft, 
   FileText, 
-  Download, 
   Send, 
   Clock, 
   Eye, 
@@ -118,24 +117,6 @@ export default function OfferDetailsPage() {
     }
   };
 
-  const handleDownload = async () => {
-    try {
-      const response = await api.get(`/company/offers/${params.id}/download`, {
-        responseType: 'blob'
-      });
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `offer-letter-${params.id}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (error) {
-      console.error('Download failed:', error);
-      showToast('failed', 'Failed to download offer letter.', 'danger');
-    }
-  };
 
   if (isLoading) {
     return (
@@ -546,38 +527,17 @@ export default function OfferDetailsPage() {
           </div>
 
           {/* Action Toolbar */}
-          
-<div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
-  <button
-    onClick={handleDownload}
-    className="px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 font-mono uppercase tracking-tight"
-  >
-    <Download className="w-4 h-4" />
-    Download PDF
-  </button>
-
-  {/* SIGN OFFER ACTION: Shows up if the company signature block is completely missing or not yet executed */}
-  {(isAdmin || isHR) && offer.status === 'pending' && !offer.companySignature && (
-    <Link
-      href={`/dashboard/offers/${offer.id}/sign`}
-      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-sm transition-colors flex items-center gap-2 font-mono uppercase tracking-tight shadow-lg shadow-blue-950/20"
-    >
-      <Signature className="w-4 h-4" />
-      Sign Offer Letter
-    </Link>
-  )}
-
-  {/* EDIT ACTION: Available for Draft layouts */}
-  {(isAdmin || isHR) && offer.status === 'draft' && (
-    <Link
-      href={`/dashboard/offers/${offer.id}/edit`}
-      className="px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 font-mono uppercase tracking-tight"
-    >
-      <Edit className="w-4 h-4" />
-      Edit Offer
-    </Link>
-  )}
-</div>
+          {(isAdmin || isHR) && offer.status === 'draft' && (
+            <div className="flex flex-wrap items-center gap-3 border-t border-zinc-900 pt-4">
+              <Link
+                href={`/dashboard/offers/${offer.id}/edit`}
+                className="px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2 font-mono uppercase tracking-tight"
+              >
+                <Edit className="w-4 h-4" />
+                Edit Offer
+              </Link>
+            </div>
+          )}
 
         </div>
 
