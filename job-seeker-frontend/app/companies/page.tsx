@@ -7,23 +7,19 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import {
   Building2,
   Search,
-  CheckCircle,
   Briefcase,
   MapPin,
   Clock,
-  DollarSign,
   ChevronRight,
   Layers,
-  Tag,
-  Sparkles,
   ArrowRight,
   Globe,
   Users,
-  Filter,
   X,
-  ExternalLink,
   ShieldCheck,
-  Zap,
+  CheckCircle2,
+  Tag,
+  Sparkles,
 } from 'lucide-react';
 
 interface CompanyItem {
@@ -107,9 +103,9 @@ export default function CompaniesDirectory() {
   const loadJobs = async () => {
     setLoadingJobs(true);
     try {
-      const res = await axios.get('/public/public');
+      const res = await axios.get('/public/jobs');
       if (res.data?.success) {
-        setJobs(res.data.data || []);
+        setJobs(res.data.data?.jobs || res.data.jobs || []);
       }
     } catch (error) {
       console.error('Failed to load jobs:', error);
@@ -120,22 +116,22 @@ export default function CompaniesDirectory() {
 
   // Filtered Companies
   const filteredCompanies = useMemo(() => {
-    return companies.filter((c) => {
-      if (verifiedOnly && c.verificationBadge !== 'verified' && !c.isVerified) {
+    return companies.filter((comp) => {
+      if (verifiedOnly && !(comp.verificationBadge === 'verified' || comp.isVerified)) {
         return false;
       }
-      if (industryFilter && c.industry.toLowerCase() !== industryFilter.toLowerCase()) {
+      if (industryFilter && comp.industry?.toLowerCase() !== industryFilter.toLowerCase()) {
         return false;
       }
-      if (sizeFilter && c.size !== sizeFilter) {
+      if (sizeFilter && comp.size !== sizeFilter) {
         return false;
       }
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const matchName = c.name?.toLowerCase().includes(query);
-        const matchIndustry = c.industry?.toLowerCase().includes(query);
-        const matchTagline = c.tagline?.toLowerCase().includes(query);
-        return matchName || matchIndustry || matchTagline;
+        const nameMatch = comp.name.toLowerCase().includes(query);
+        const industryMatch = comp.industry?.toLowerCase().includes(query);
+        const taglineMatch = comp.tagline?.toLowerCase().includes(query);
+        return nameMatch || industryMatch || taglineMatch;
       }
       return true;
     });
@@ -143,30 +139,23 @@ export default function CompaniesDirectory() {
 
   // Filtered Jobs
   const filteredJobs = useMemo(() => {
-    const now = new Date();
     return jobs.filter((job) => {
-      // 1. Deadline check
-      if (job.deadline && new Date(job.deadline) < now) {
-        return false;
-      }
-      // 2. Verified check
       if (verifiedOnly && job.company?.verificationBadge !== 'verified') {
         return false;
       }
-      // 3. Department filter
-      if (departmentFilter && job.department !== departmentFilter) {
+      if (departmentFilter && job.department?.toLowerCase() !== departmentFilter.toLowerCase()) {
         return false;
       }
-      // 4. Job type filter
-      if (jobTypeFilter && job.jobType !== jobTypeFilter) {
+      if (jobTypeFilter && job.jobType?.toLowerCase() !== jobTypeFilter.toLowerCase()) {
         return false;
       }
-      // 5. Keyword search
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const titleMatch = job.title?.toLowerCase().includes(query);
+        const titleMatch = job.title.toLowerCase().includes(query);
         const companyMatch = job.company?.name?.toLowerCase().includes(query);
-        const locationMatch = job.location?.toLowerCase().includes(query);
+        const locationMatch =
+          job.location?.toLowerCase().includes(query) ||
+          job.locationType?.toLowerCase().includes(query);
         const deptMatch = job.department?.toLowerCase().includes(query);
         let skillsMatch = false;
         if (Array.isArray(job.requiredSkills)) {
@@ -221,53 +210,20 @@ export default function CompaniesDirectory() {
   );
 
   return (
-    <div className="min-h-screen bg-[#020409] text-white font-sans overflow-x-hidden relative flex flex-col">
-      {/* Ambient background glows */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div
-          className="absolute top-[-200px] left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full"
-          style={{ background: 'radial-gradient(ellipse at center, rgba(99,102,241,0.12) 0%, transparent 70%)' }}
-        />
-        <div
-          className="absolute top-[35%] left-[-150px] w-[500px] h-[500px] rounded-full"
-          style={{ background: 'radial-gradient(ellipse, rgba(59,130,246,0.06) 0%, transparent 70%)' }}
-        />
-        <div
-          className="absolute top-[60%] right-[-150px] w-[500px] h-[500px] rounded-full"
-          style={{ background: 'radial-gradient(ellipse, rgba(139,92,246,0.06) 0%, transparent 70%)' }}
-        />
-        {/* Subtle grid pattern */}
-        <div
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)`,
-            backgroundSize: '60px 60px',
-          }}
-        />
-      </div>
-
+    <div className="min-h-screen bg-[#fafafa] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] font-sans flex flex-col transition-colors">
       {/* ── NAVBAR ──────────────────────────────────────────────── */}
-      <header
-        className="sticky top-0 z-50 border-b border-white/[0.06]"
-        style={{ backdropFilter: 'blur(20px)', background: 'rgba(2,4,9,0.85)' }}
-      >
+      <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#1c1c1e]/80 backdrop-blur-md border-b border-black/[0.06] dark:border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
           <button
             onClick={() => router.push('/')}
-            className="flex items-center gap-3 bg-transparent border-0 cursor-pointer p-0 text-left"
+            className="flex items-center gap-2.5 bg-transparent border-0 cursor-pointer p-0 text-left"
           >
-            <div
-              className="relative w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
-                boxShadow: '0 0 20px rgba(99,102,241,0.4)',
-              }}
-            >
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-xl bg-[#0071e3] flex items-center justify-center text-white shadow-sm">
+              <Sparkles className="w-4 h-4" />
             </div>
-            <span className="text-sm font-semibold tracking-tight text-white">
-              EasyApply <span className="text-blue-400 font-normal">for Seekers</span>
+            <span className="text-base font-bold tracking-tight text-[#1d1d1f] dark:text-white">
+              EasyApply <span className="text-[#86868b] font-normal text-xs">for Seekers</span>
             </span>
           </button>
 
@@ -275,22 +231,26 @@ export default function CompaniesDirectory() {
           <nav className="hidden md:flex items-center gap-6">
             <button
               onClick={() => router.push('/')}
-              className="text-xs font-medium cursor-pointer transition-colors duration-200 bg-transparent border-0 text-white/50 hover:text-white"
+              className="text-xs font-semibold text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-colors bg-transparent border-0 cursor-pointer"
             >
               Home
             </button>
             <button
               onClick={() => setActiveTab('companies')}
-              className={`text-xs font-medium cursor-pointer transition-colors duration-200 bg-transparent border-0 ${
-                activeTab === 'companies' ? 'text-white font-semibold' : 'text-white/50 hover:text-white'
+              className={`text-xs font-semibold transition-colors bg-transparent border-0 cursor-pointer ${
+                activeTab === 'companies'
+                  ? 'text-[#0071e3]'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
               }`}
             >
               Companies
             </button>
             <button
               onClick={() => setActiveTab('jobs')}
-              className={`text-xs font-medium cursor-pointer transition-colors duration-200 bg-transparent border-0 ${
-                activeTab === 'jobs' ? 'text-white font-semibold' : 'text-white/50 hover:text-white'
+              className={`text-xs font-semibold transition-colors bg-transparent border-0 cursor-pointer ${
+                activeTab === 'jobs'
+                  ? 'text-[#0071e3]'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
               }`}
             >
               Open Jobs
@@ -302,25 +262,17 @@ export default function CompaniesDirectory() {
             {isAuthenticated ? (
               <button
                 onClick={() => router.push('/dashboard')}
-                className="btn-primary inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold"
-                style={{
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)',
-                  boxShadow: '0 4px 20px rgba(99,102,241,0.35)',
-                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold transition-all shadow-[0_2px_8px_rgba(0,113,227,0.25)] cursor-pointer"
               >
-                Dashboard
+                <span>Dashboard</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             ) : (
               <button
                 onClick={() => router.push('/login')}
-                className="btn-primary inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold"
-                style={{
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%)',
-                  boxShadow: '0 4px 20px rgba(99,102,241,0.35)',
-                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold transition-all shadow-[0_2px_8px_rgba(0,113,227,0.25)] cursor-pointer"
               >
-                Sign In
+                <span>Sign In</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -329,87 +281,82 @@ export default function CompaniesDirectory() {
       </header>
 
       {/* ── HERO HEADER ────────────────────────────────────────────── */}
-      <section className="relative z-10 pt-12 pb-8 border-b border-white/[0.06]">
+      <section className="pt-12 pb-8 border-b border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#111112]">
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8">
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3 text-xs font-medium badge">
-                <Globe className="w-3.5 h-3.5 text-blue-400" />
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] text-xs font-semibold">
+                <Globe className="w-3.5 h-3.5 text-[#0071e3]" />
                 <span>Ecosystem Directory</span>
               </div>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight mb-3">
-                <span className="gradient-text">Browse Companies</span>{' '}
-                <span className="gradient-text-blue">& Open Roles</span>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">
+                Browse Companies & Open Roles
               </h1>
-              <p className="text-sm text-white/50 max-w-xl leading-relaxed">
-                Connect with verified tech companies, explore company cultures, and apply directly to live technical positions.
+              <p className="text-sm text-[#86868b] max-w-xl leading-relaxed font-medium">
+                Connect with verified tech companies, explore organizational cultures, and apply directly to live technical positions.
               </p>
             </div>
 
-            {/* Metric Pills */}
+            {/* Metric Stats Pills */}
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="glass-card rounded-2xl px-4 py-2.5 flex items-center gap-3">
-                <Building2 className="w-4 h-4 text-blue-400" />
+              <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
+                <Building2 className="w-4 h-4 text-[#0071e3]" />
                 <div>
-                  <div className="text-sm font-bold text-white">{companies.length}</div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Companies</div>
+                  <div className="text-sm font-bold text-[#1d1d1f] dark:text-white">{companies.length}</div>
+                  <div className="text-[10px] text-[#86868b] uppercase tracking-wider font-semibold">Companies</div>
                 </div>
               </div>
-              <div className="glass-card rounded-2xl px-4 py-2.5 flex items-center gap-3">
-                <Briefcase className="w-4 h-4 text-violet-400" />
+              <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
+                <Briefcase className="w-4 h-4 text-[#af52de]" />
                 <div>
-                  <div className="text-sm font-bold text-white">{jobs.length}</div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Live Positions</div>
+                  <div className="text-sm font-bold text-[#1d1d1f] dark:text-white">{jobs.length}</div>
+                  <div className="text-[10px] text-[#86868b] uppercase tracking-wider font-semibold">Live Positions</div>
                 </div>
               </div>
-              <div className="glass-card rounded-2xl px-4 py-2.5 flex items-center gap-3">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-xs">
+                <ShieldCheck className="w-4 h-4 text-[#34c759]" />
                 <div>
-                  <div className="text-sm font-bold text-white">{totalVerifiedCount}</div>
-                  <div className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Verified</div>
+                  <div className="text-sm font-bold text-[#1d1d1f] dark:text-white">{totalVerifiedCount}</div>
+                  <div className="text-[10px] text-[#86868b] uppercase tracking-wider font-semibold">Verified</div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Dual Tabs & Search Container */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            {/* Tabs */}
-            <div className="inline-flex p-1 rounded-2xl bg-white/[0.03] border border-white/[0.08] backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+            {/* Segmented Control Tabs */}
+            <div className="inline-flex p-1 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06]">
               <button
                 onClick={() => setActiveTab('companies')}
-                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'companies'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/25'
-                    : 'text-white/60 hover:text-white'
+                    ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                    : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
                 }`}
               >
                 <Building2 className="w-3.5 h-3.5" />
                 <span>Companies</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-md ${
-                    activeTab === 'companies' ? 'bg-white/20 text-white' : 'bg-white/[0.06] text-white/40'
-                  }`}
-                >
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  activeTab === 'companies' ? 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white' : 'bg-black/[0.04] text-[#86868b]'
+                }`}>
                   {filteredCompanies.length}
                 </span>
               </button>
 
               <button
                 onClick={() => setActiveTab('jobs')}
-                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeTab === 'jobs'
-                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/25'
-                    : 'text-white/60 hover:text-white'
+                    ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                    : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
                 }`}
               >
                 <Briefcase className="w-3.5 h-3.5" />
                 <span>Job Openings</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded-md ${
-                    activeTab === 'jobs' ? 'bg-white/20 text-white' : 'bg-white/[0.06] text-white/40'
-                  }`}
-                >
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  activeTab === 'jobs' ? 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white' : 'bg-black/[0.04] text-[#86868b]'
+                }`}>
                   {filteredJobs.length}
                 </span>
               </button>
@@ -417,22 +364,22 @@ export default function CompaniesDirectory() {
 
             {/* Quick Search */}
             <div className="relative flex-1 sm:max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#86868b]" />
               <input
                 type="text"
                 placeholder={
                   activeTab === 'companies'
-                    ? 'Search companies by name, industry, or keywords...'
+                    ? 'Search companies by name, industry...'
                     : 'Search jobs by title, company, skills, or location...'
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-9 py-2.5 bg-white/[0.03] hover:bg-white/[0.05] focus:bg-white/[0.06] border border-white/[0.08] focus:border-indigo-500/50 rounded-2xl text-xs text-white placeholder-white/40 focus:outline-none transition-all"
+                className="w-full pl-10 pr-9 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl text-xs text-[#1d1d1f] dark:text-white placeholder-[#86868b] focus:outline-none transition-colors"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white bg-transparent border-0 cursor-pointer p-0"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-transparent border-0 cursor-pointer p-0"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -443,20 +390,20 @@ export default function CompaniesDirectory() {
       </section>
 
       {/* ── FILTER TOOLBAR ─────────────────────────────────────────── */}
-      <section className="relative z-10 border-b border-white/[0.04] bg-white/[0.01]">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+      <section className="border-b border-black/[0.06] dark:border-white/[0.08] bg-white/50 dark:bg-[#161617]/50">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             {activeTab === 'companies' ? (
               <>
                 {/* Industry Filter */}
                 <select
                   value={industryFilter}
                   onChange={(e) => setIndustryFilter(e.target.value)}
-                  className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.15] rounded-xl text-xs text-white/80 focus:outline-none transition"
+                  className="px-3 py-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3] transition cursor-pointer font-medium"
                 >
-                  <option value="" className="bg-[#090d16] text-white">All Industries</option>
+                  <option value="">All Industries</option>
                   {uniqueIndustries.map((ind) => (
-                    <option key={ind} value={ind} className="bg-[#090d16] text-white">
+                    <option key={ind} value={ind}>
                       {ind}
                     </option>
                   ))}
@@ -466,11 +413,11 @@ export default function CompaniesDirectory() {
                 <select
                   value={sizeFilter}
                   onChange={(e) => setSizeFilter(e.target.value)}
-                  className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.15] rounded-xl text-xs text-white/80 focus:outline-none transition"
+                  className="px-3 py-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3] transition cursor-pointer font-medium"
                 >
-                  <option value="" className="bg-[#090d16] text-white">All Sizes</option>
+                  <option value="">All Sizes</option>
                   {uniqueCompanySizes.map((size) => (
-                    <option key={size} value={size} className="bg-[#090d16] text-white">
+                    <option key={size} value={size}>
                       {size} employees
                     </option>
                   ))}
@@ -482,11 +429,11 @@ export default function CompaniesDirectory() {
                 <select
                   value={departmentFilter}
                   onChange={(e) => setDepartmentFilter(e.target.value)}
-                  className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.15] rounded-xl text-xs text-white/80 focus:outline-none transition"
+                  className="px-3 py-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3] transition cursor-pointer font-medium"
                 >
-                  <option value="" className="bg-[#090d16] text-white">All Departments</option>
+                  <option value="">All Departments</option>
                   {uniqueDepartments.map((dept) => (
-                    <option key={dept} value={dept} className="bg-[#090d16] text-white">
+                    <option key={dept} value={dept}>
                       {dept}
                     </option>
                   ))}
@@ -496,11 +443,11 @@ export default function CompaniesDirectory() {
                 <select
                   value={jobTypeFilter}
                   onChange={(e) => setJobTypeFilter(e.target.value)}
-                  className="px-3 py-2 bg-white/[0.04] border border-white/[0.08] hover:border-white/[0.15] rounded-xl text-xs text-white/80 focus:outline-none transition"
+                  className="px-3 py-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3] transition cursor-pointer font-medium"
                 >
-                  <option value="" className="bg-[#090d16] text-white">All Arrangements</option>
+                  <option value="">All Arrangements</option>
                   {uniqueJobTypes.map((type) => (
-                    <option key={type} value={type} className="bg-[#090d16] text-white">
+                    <option key={type} value={type}>
                       {type}
                     </option>
                   ))}
@@ -509,12 +456,12 @@ export default function CompaniesDirectory() {
             )}
 
             {/* Verified Only Checkbox */}
-            <label className="inline-flex items-center gap-2 px-3 py-2 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.08] rounded-xl text-xs text-white/70 hover:text-white cursor-pointer select-none transition">
+            <label className="inline-flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] cursor-pointer select-none transition font-medium">
               <input
                 type="checkbox"
                 checked={verifiedOnly}
                 onChange={(e) => setVerifiedOnly(e.target.checked)}
-                className="w-3.5 h-3.5 rounded bg-zinc-900 border-white/20 text-indigo-500 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                className="w-3.5 h-3.5 rounded text-[#0071e3] focus:ring-0 cursor-pointer"
               />
               <span>Verified only</span>
             </label>
@@ -523,51 +470,45 @@ export default function CompaniesDirectory() {
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/15 border border-rose-500/20 rounded-xl transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-[#ff3b30] bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-xl transition cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
-                <span>Reset Filters</span>
+                <span>Reset</span>
               </button>
             )}
           </div>
 
-          <div className="text-xs text-white/40 font-medium">
-            Showing{' '}
-            <span className="text-white font-semibold">
-              {activeTab === 'companies' ? filteredCompanies.length : filteredJobs.length}
-            </span>{' '}
-            {activeTab === 'companies' ? 'companies' : 'open positions'}
+          <div className="text-xs text-[#86868b] font-medium">
+            Showing <span className="text-[#1d1d1f] dark:text-white font-bold">{activeTab === 'companies' ? filteredCompanies.length : filteredJobs.length}</span> results
           </div>
         </div>
       </section>
 
       {/* ── MAIN CONTENT AREA ──────────────────────────────────────── */}
-      <main className="relative z-10 flex-1 max-w-7xl mx-auto px-6 py-10 w-full">
+      <main className="flex-1 max-w-7xl mx-auto px-6 py-8 w-full">
         {activeTab === 'companies' ? (
           /* ── COMPANIES TAB CONTENT ─────────────────────────────────── */
           <div>
             {loadingCompanies ? (
-              /* Loading Skeletons for Companies */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <div
                     key={n}
-                    className="glass-card rounded-3xl p-6 flex flex-col gap-4 animate-pulse border border-white/[0.06]"
+                    className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-6 flex flex-col gap-4 animate-pulse border border-black/[0.06] dark:border-white/[0.08] shadow-xs"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-white/[0.05]" />
+                      <div className="w-14 h-14 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e]" />
                       <div className="flex-1 space-y-2">
-                        <div className="h-4 bg-white/[0.08] rounded w-3/4" />
-                        <div className="h-3 bg-white/[0.04] rounded w-1/2" />
+                        <div className="h-4 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded w-3/4" />
+                        <div className="h-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded w-1/2" />
                       </div>
                     </div>
-                    <div className="h-10 bg-white/[0.03] rounded-xl" />
-                    <div className="h-4 bg-white/[0.05] rounded w-1/3 mt-auto" />
+                    <div className="h-10 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-xl" />
+                    <div className="h-4 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded w-1/3 mt-auto" />
                   </div>
                 ))}
               </div>
             ) : filteredCompanies.length > 0 ? (
-              /* Companies Grid */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {filteredCompanies.map((comp) => {
                   const isVerified = comp.verificationBadge === 'verified' || comp.isVerified;
@@ -577,15 +518,12 @@ export default function CompaniesDirectory() {
                     <div
                       key={comp.id}
                       onClick={() => router.push(`/careers/${comp.id}`)}
-                      className="glass-card rounded-3xl p-6 flex flex-col justify-between group cursor-pointer border border-white/[0.08] hover:border-indigo-500/40 hover:shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 relative overflow-hidden"
+                      className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-6 flex flex-col justify-between group cursor-pointer border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.15] dark:hover:border-white/[0.2] shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all duration-200"
                     >
-                      {/* Top Accent Line */}
-                      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500/0 to-transparent group-hover:via-indigo-500 transition-all duration-500" />
-
                       <div>
                         {/* Company Card Header */}
                         <div className="flex items-start gap-4 mb-4">
-                          <div className="w-14 h-14 rounded-2xl bg-white/[0.04] border border-white/[0.08] group-hover:border-white/20 p-2 flex items-center justify-center flex-shrink-0 overflow-hidden transition">
+                          <div className="w-14 h-14 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] p-2 flex items-center justify-center shrink-0 overflow-hidden">
                             {comp.logoUrl ? (
                               <img
                                 src={comp.logoUrl}
@@ -593,38 +531,30 @@ export default function CompaniesDirectory() {
                                 className="w-full h-full object-contain rounded-xl"
                               />
                             ) : (
-                              <Building2 className="w-7 h-7 text-white/40 group-hover:text-blue-400 transition" />
+                              <Building2 className="w-6 h-6 text-[#0071e3]" />
                             )}
                           </div>
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <h3 className="text-base font-bold text-white group-hover:text-blue-300 transition-colors truncate">
+                              <h3 className="text-base font-bold text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors truncate">
                                 {comp.name}
                               </h3>
                               {isVerified && (
-                                <div
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
-                                  style={{
-                                    background: 'rgba(16,185,129,0.12)',
-                                    border: '1px solid rgba(16,185,129,0.25)',
-                                    color: '#34d399',
-                                  }}
-                                  title="Verified Employer"
-                                >
-                                  <CheckCircle className="w-3 h-3" />
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158]">
+                                  <CheckCircle2 className="w-3 h-3" />
                                   <span>Verified</span>
-                                </div>
+                                </span>
                               )}
                             </div>
 
-                            <div className="flex items-center gap-2 mt-1 text-xs text-white/50">
+                            <div className="flex items-center gap-2 mt-1 text-xs text-[#86868b] font-medium">
                               <span>{comp.industry || 'Technology'}</span>
                               {comp.size && (
                                 <>
                                   <span>•</span>
                                   <span className="flex items-center gap-1">
-                                    <Users className="w-3 h-3 opacity-60" />
+                                    <Users className="w-3 h-3 text-[#86868b]" />
                                     {comp.size}
                                   </span>
                                 </>
@@ -634,25 +564,25 @@ export default function CompaniesDirectory() {
                         </div>
 
                         {/* Tagline */}
-                        <p className="text-xs text-white/50 line-clamp-2 leading-relaxed mb-6">
+                        <p className="text-xs text-[#86868b] font-medium line-clamp-2 leading-relaxed mb-6">
                           {comp.tagline || 'Leading engineering team hiring top talent on EasyApply.'}
                         </p>
                       </div>
 
                       {/* Card Footer */}
-                      <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between">
-                        <div className="inline-flex items-center gap-1.5 text-xs font-medium">
+                      <div className="pt-4 border-t border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between">
+                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold">
                           {activeJobs > 0 ? (
-                            <span className="inline-flex items-center gap-1.5 text-emerald-400">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="inline-flex items-center gap-1.5 text-[#248a3d] dark:text-[#30d158]">
+                              <span className="w-2 h-2 rounded-full bg-[#34c759]" />
                               {activeJobs} {activeJobs === 1 ? 'Job' : 'Jobs'} Available
                             </span>
                           ) : (
-                            <span className="text-white/40">Profile Open</span>
+                            <span className="text-[#86868b]">Profile Open</span>
                           )}
                         </div>
 
-                        <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 group-hover:text-blue-300 group-hover:translate-x-1 transition-all">
+                        <div className="inline-flex items-center gap-1 text-xs font-bold text-[#0071e3] group-hover:translate-x-0.5 transition-transform">
                           <span>View Hub</span>
                           <ChevronRight className="w-4 h-4" />
                         </div>
@@ -663,20 +593,20 @@ export default function CompaniesDirectory() {
               </div>
             ) : (
               /* Empty State for Companies */
-              <div className="glass-card rounded-3xl p-12 text-center max-w-lg mx-auto my-12 border border-dashed border-white/[0.1]">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center mx-auto mb-4 text-white/40">
-                  <Building2 className="w-7 h-7" />
+              <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-12 text-center max-w-md mx-auto my-12 border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+                <div className="w-12 h-12 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex items-center justify-center mx-auto mb-4 text-[#86868b]">
+                  <Building2 className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-semibold text-white mb-2">No Companies Match Filters</h3>
-                <p className="text-xs text-white/40 mb-6 leading-relaxed">
-                  We couldn't find any registered companies matching your current filter criteria. Try adjusting keywords or clearing filters.
+                <h3 className="text-base font-bold text-[#1d1d1f] dark:text-white mb-1">No Companies Match Filters</h3>
+                <p className="text-xs text-[#86868b] font-medium mb-6 leading-relaxed">
+                  No registered companies found with the specified criteria. Try clearing search keywords or filters.
                 </p>
                 <button
                   onClick={resetFilters}
-                  className="btn-secondary inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-medium cursor-pointer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#0071e3] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
-                  Clear All Filters
+                  <span>Reset All Filters</span>
                 </button>
               </div>
             )}
@@ -685,23 +615,21 @@ export default function CompaniesDirectory() {
           /* ── JOBS TAB CONTENT ─────────────────────────────────────── */
           <div>
             {loadingJobs ? (
-              /* Loading Skeletons for Jobs */
               <div className="space-y-4">
                 {[1, 2, 3, 4, 5].map((n) => (
                   <div
                     key={n}
-                    className="glass-card rounded-2xl p-5 flex flex-col md:flex-row gap-5 animate-pulse border border-white/[0.06]"
+                    className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-6 flex flex-col md:flex-row gap-5 animate-pulse border border-black/[0.06] dark:border-white/[0.08] shadow-xs"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-white/[0.05] flex-shrink-0" />
+                    <div className="w-12 h-12 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] shrink-0" />
                     <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-white/[0.08] rounded w-1/3" />
-                      <div className="h-3 bg-white/[0.04] rounded w-1/2" />
+                      <div className="h-4 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded w-1/3" />
+                      <div className="h-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded w-1/2" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : filteredJobs.length > 0 ? (
-              /* Stacked Job Cards */
               <div className="space-y-3.5">
                 {filteredJobs.map((job) => {
                   const companyId = job.company?.id || job.companyId;
@@ -710,37 +638,34 @@ export default function CompaniesDirectory() {
                     <div
                       key={job.id}
                       onClick={() => router.push(`/careers/${companyId}/jobs/${job.id}`)}
-                      className="glass-card rounded-2xl p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 group cursor-pointer border border-white/[0.08] hover:border-indigo-500/40 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 relative overflow-hidden"
+                      className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5 group cursor-pointer border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.15] dark:hover:border-white/[0.2] shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-all duration-200"
                     >
-                      {/* Left Subtle Highlight Accent */}
-                      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-transparent group-hover:bg-indigo-500 transition-colors" />
-
                       {/* Job Info Section */}
                       <div className="flex items-start gap-4 flex-1 min-w-0">
-                        {/* Company Logo (clickable directly to company career hub) */}
+                        {/* Company Logo */}
                         <div
                           onClick={(e) => {
                             e.stopPropagation();
                             router.push(`/careers/${companyId}`);
                           }}
-                          className="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-white/[0.04] border border-white/[0.08] group-hover:border-white/20 p-2 flex items-center justify-center flex-shrink-0 overflow-hidden transition"
+                          className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] p-2 flex items-center justify-center shrink-0 overflow-hidden"
                           title="View Company Hub"
                         >
                           {job.company?.logoUrl ? (
                             <img
                               src={job.company.logoUrl}
                               alt={job.company.name}
-                              className="w-full h-full object-contain rounded-lg"
+                              className="w-full h-full object-contain rounded-xl"
                             />
                           ) : (
-                            <Building2 className="w-6 h-6 text-white/40 group-hover:text-blue-400 transition" />
+                            <Building2 className="w-6 h-6 text-[#0071e3]" />
                           )}
                         </div>
 
                         {/* Title & Metadata */}
                         <div className="flex-1 min-w-0 space-y-1.5">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base font-bold text-white group-hover:text-blue-300 transition-colors truncate">
+                            <h3 className="text-base font-bold text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors truncate">
                               {job.title}
                             </h3>
 
@@ -749,51 +674,43 @@ export default function CompaniesDirectory() {
                                 e.stopPropagation();
                                 router.push(`/careers/${companyId}`);
                               }}
-                              className="text-[11px] text-white/60 font-semibold bg-white/[0.04] hover:bg-white/[0.08] hover:text-white px-2 py-0.5 rounded-md border border-white/[0.08] transition"
+                              className="text-[11px] text-[#0071e3] font-semibold bg-[#0071e3]/10 hover:bg-[#0071e3]/15 px-2.5 py-0.5 rounded-full border border-[#0071e3]/20 transition cursor-pointer"
                             >
                               {job.company?.name || 'Company'}
                             </button>
 
                             {job.company?.verificationBadge === 'verified' && (
-                              <div
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium"
-                                style={{
-                                  background: 'rgba(16,185,129,0.12)',
-                                  border: '1px solid rgba(16,185,129,0.25)',
-                                  color: '#34d399',
-                                }}
-                              >
-                                <CheckCircle className="w-2.5 h-2.5" />
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158]">
+                                <CheckCircle2 className="w-3 h-3" />
                                 <span>Verified</span>
-                              </div>
+                              </span>
                             )}
                           </div>
 
                           {/* Metadata row */}
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/50">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#86868b] font-medium">
                             {job.department && (
-                              <span className="text-white/70 font-medium">{job.department}</span>
+                              <span className="text-[#1d1d1f] dark:text-white font-semibold">{job.department}</span>
                             )}
-                            <span className="text-white/20">•</span>
+                            <span className="text-black/20 dark:text-white/20">•</span>
                             <span className="flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-white/40" />
+                              <MapPin className="w-3 h-3 text-[#86868b]" />
                               {job.location || job.locationType || 'Remote'}
                             </span>
                             {job.experienceRequired && (
                               <>
-                                <span className="text-white/20">•</span>
+                                <span className="text-black/20 dark:text-white/20">•</span>
                                 <span className="flex items-center gap-1">
-                                  <Clock className="w-3 h-3 text-white/40" />
+                                  <Clock className="w-3 h-3 text-[#86868b]" />
                                   {job.experienceRequired}
                                 </span>
                               </>
                             )}
                             {job.salaryRange && (
                               <>
-                                <span className="text-white/20">•</span>
-                                <span className="flex items-center gap-1 text-emerald-400 font-semibold">
-                                  <DollarSign className="w-3 h-3" />
-                                  {job.salaryRange}
+                                <span className="text-black/20 dark:text-white/20">•</span>
+                                <span className="flex items-center gap-1 text-[#248a3d] dark:text-[#30d158] font-bold">
+                                  <span>{job.salaryRange}</span>
                                 </span>
                               </>
                             )}
@@ -805,14 +722,14 @@ export default function CompaniesDirectory() {
                               {job.requiredSkills.slice(0, 6).map((skill: string, idx: number) => (
                                 <span
                                   key={idx}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/[0.03] border border-white/[0.06] rounded-md text-[10px] text-white/60 font-mono"
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-full text-[10px] text-[#1d1d1f] dark:text-[#f5f5f7] font-medium"
                                 >
-                                  <Tag className="w-2.5 h-2.5 text-white/30" />
+                                  <Tag className="w-2.5 h-2.5 text-[#86868b]" />
                                   {skill}
                                 </span>
                               ))}
                               {job.requiredSkills.length > 6 && (
-                                <span className="text-[10px] text-white/40 self-center">
+                                <span className="text-[10px] text-[#86868b] font-medium self-center">
                                   +{job.requiredSkills.length - 6} more
                                 </span>
                               )}
@@ -822,24 +739,20 @@ export default function CompaniesDirectory() {
                       </div>
 
                       {/* Right Action Section */}
-                      <div className="flex items-center justify-between md:justify-end gap-5 border-t border-white/[0.04] md:border-t-0 pt-3 md:pt-0 flex-shrink-0">
+                      <div className="flex items-center justify-between md:justify-end gap-4 border-t border-black/[0.06] dark:border-white/[0.08] md:border-t-0 pt-3 md:pt-0 shrink-0">
                         <div className="flex flex-col items-start md:items-end gap-1">
-                          <span className="px-2.5 py-1 bg-white/[0.04] border border-white/[0.08] rounded-lg text-white/80 text-[10px] font-bold tracking-wider uppercase">
+                          <span className="px-2.5 py-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-[#1d1d1f] dark:text-white text-[10px] font-bold uppercase tracking-wider">
                             {job.jobType}
                           </span>
                           {job.deadline && (
-                            <span className="text-[10px] text-white/40">
-                              Until:{' '}
-                              {new Date(job.deadline).toLocaleDateString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                              })}
+                            <span className="text-[10px] text-[#86868b] font-medium">
+                              Until: {new Date(job.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                             </span>
                           )}
                         </div>
 
-                        <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-white/40 group-hover:text-white group-hover:bg-indigo-600/30 group-hover:border-indigo-500/50 transition-all shadow-inner">
-                          <ChevronRight className="w-4 h-4 transform group-hover:translate-x-0.5 transition-transform" />
+                        <div className="w-9 h-9 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-center text-[#86868b] group-hover:text-[#0071e3] transition-colors">
+                          <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                         </div>
                       </div>
                     </div>
@@ -848,20 +761,20 @@ export default function CompaniesDirectory() {
               </div>
             ) : (
               /* Empty State for Jobs */
-              <div className="glass-card rounded-3xl p-12 text-center max-w-lg mx-auto my-12 border border-dashed border-white/[0.1]">
-                <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center mx-auto mb-4 text-white/40">
-                  <Layers className="w-7 h-7" />
+              <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-12 text-center max-w-md mx-auto my-12 border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+                <div className="w-12 h-12 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex items-center justify-center mx-auto mb-4 text-[#86868b]">
+                  <Layers className="w-6 h-6" />
                 </div>
-                <h3 className="text-base font-semibold text-white mb-2">No Active Positions Match</h3>
-                <p className="text-xs text-white/40 mb-6 leading-relaxed">
-                  There are currently no job openings matching your filter criteria. Try resetting keywords or broadening filters.
+                <h3 className="text-base font-bold text-[#1d1d1f] dark:text-white mb-1">No Active Positions Match</h3>
+                <p className="text-xs text-[#86868b] font-medium mb-6 leading-relaxed">
+                  No job openings match the selected filters. Try broadening your search or resetting filters.
                 </p>
                 <button
                   onClick={resetFilters}
-                  className="btn-secondary inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-medium cursor-pointer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#0071e3] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
-                  Clear All Filters
+                  <span>Reset All Filters</span>
                 </button>
               </div>
             )}
@@ -870,28 +783,25 @@ export default function CompaniesDirectory() {
       </main>
 
       {/* ── FOOTER ────────────────────────────────────────────────── */}
-      <footer className="relative z-10 py-8 border-t border-white/[0.06] mt-auto">
+      <footer className="py-8 border-t border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#111112] mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-6 h-6 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}
-            >
-              <Sparkles className="w-3 h-3 text-white" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-[#0071e3] flex items-center justify-center text-white">
+              <Sparkles className="w-3 h-3" />
             </div>
-            <span className="text-xs font-semibold text-white/50">EasyApply Ecosystem</span>
+            <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">EasyApply Ecosystem</span>
           </div>
-          <p className="text-xs text-white/30">© 2026 EasyApply. Connecting ambitious talent with world-class teams.</p>
+          <p className="text-xs text-[#86868b] font-medium">© 2026 EasyApply. Connecting ambitious talent with world-class teams.</p>
           <div className="flex items-center gap-6">
             <button
               onClick={() => router.push('/')}
-              className="text-xs text-white/40 hover:text-white bg-transparent border-0 cursor-pointer"
+              className="text-xs text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-transparent border-0 cursor-pointer font-medium"
             >
               Home
             </button>
             <button
               onClick={() => router.push('/login')}
-              className="text-xs text-white/40 hover:text-white bg-transparent border-0 cursor-pointer"
+              className="text-xs text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-transparent border-0 cursor-pointer font-medium"
             >
               Seeker Login
             </button>
