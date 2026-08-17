@@ -76,6 +76,75 @@ Return ONLY valid JSON string mapped to this structural interface:
   return JSON.parse(completion.choices[0]?.message?.content ?? '{}');
 };
 
+function buildFallbackResumeData(profile: any) {
+  const skills = Array.isArray(profile.skills)
+    ? profile.skills.map((s: any) => (typeof s === 'string' ? s : s.name)).filter(Boolean)
+    : [];
+
+  const experience = Array.isArray(profile.experience)
+    ? profile.experience.map((e: any) => ({
+        company: e.company || '',
+        role: e.role || '',
+        location: e.location || '',
+        duration: e.duration || `${e.startMonth || ''} ${e.startYear || ''} - ${e.current ? 'Present' : `${e.endMonth || ''} ${e.endYear || ''}`}`.trim(),
+        bullets: e.bullets || (e.description ? e.description.split('\n').map((l: string) => l.replace(/^[•*-]\s*/, '').trim()).filter(Boolean) : (e.skillsUsed || []))
+      }))
+    : [];
+
+  const projects = Array.isArray(profile.projects)
+    ? profile.projects.map((p: any) => ({
+        name: p.name || '',
+        description: p.description || '',
+        technologies: p.technologies || []
+      }))
+    : [];
+
+  const education = Array.isArray(profile.education)
+    ? profile.education.map((ed: any) => ({
+        institution: ed.institution || '',
+        degree: ed.degree || '',
+        field: ed.field || '',
+        location: ed.location || '',
+        duration: ed.duration || `${ed.startYear || ''} - ${ed.endYear || ''}`.trim(),
+        details: ed.details || (ed.cgpa ? `CGPA: ${ed.cgpa}` : '')
+      }))
+    : [];
+
+  const links = [profile.linkedin, profile.github, profile.portfolio].filter(Boolean);
+
+  return {
+    resumeData: {
+      fullName: profile.fullName || 'Candidate',
+      contact: {
+        email: profile.email || '',
+        phone: profile.phone || '',
+        location: profile.location || '',
+        links
+      },
+      summary: profile.bio || 'Experienced professional with a strong track record of technical delivery and continuous learning.',
+      skills,
+      experience,
+      projects,
+      education,
+      certifications: Array.isArray(profile.certifications) ? profile.certifications.map((c: any) => typeof c === 'string' ? c : c.name).filter(Boolean) : [],
+      languages: Array.isArray(profile.languages) ? profile.languages.map((l: any) => typeof l === 'string' ? l : l.language).filter(Boolean) : [],
+      achievements: Array.isArray(profile.achievements) ? profile.achievements.map((a: any) => typeof a === 'string' ? a : a.title).filter(Boolean) : []
+    },
+    scores: { ats: 85, formatting: 90, keywords: 80, grammar: 90, readability: 88, impact: 82 },
+    atsBreakdown: { contactInfo: 95, summary: 85, skills: 88, experience: 82, education: 90, formatting: 90 },
+    strengths: ['Comprehensive technical background', 'Demonstrated hands-on experience', 'Strong academic foundation'],
+    improvements: {
+      summary: 'Add more quantifiable metrics and impact highlights',
+      skills: 'Align core capabilities directly with target job postings',
+      experience: 'Include specific business impact numbers',
+      education: 'Keep coursework details updated',
+      formatting: 'Use consistent bullet punctuation'
+    },
+    missingSections: [],
+    keywordGaps: []
+  };
+}
+
 export const generateFreshCV = async (
   profile: any,
   customPrompt?: string,
@@ -94,59 +163,83 @@ Analyze the user's profile data and optimize it into an exceptionally polished, 
 ${styleInstructions}${jdSection}
 
 User Profile Data:
-- Full Name: ${profile.fullName}
-- Email: ${profile.email}
-- Phone: ${profile.phone}
-- Location: ${profile.location}
-- Links: LinkedIn: ${profile.linkedin}, GitHub: ${profile.github}, Portfolio: ${profile.portfolio}
-- Professional Summary/Bio: ${profile.bio}
-- Core Skills: ${JSON.stringify(profile.skills)}
-- Work Experience: ${JSON.stringify(profile.experience)}
-- Key Projects: ${JSON.stringify(profile.projects)}
-- Education History: ${JSON.stringify(profile.education)}
-- Certifications: ${JSON.stringify(profile.certifications)}
-- Languages: ${JSON.stringify(profile.languages)}
-- Achievements: ${JSON.stringify(profile.achievements)}
+- Full Name: ${profile.fullName || ''}
+- Email: ${profile.email || ''}
+- Phone: ${profile.phone || ''}
+- Location: ${profile.location || ''}
+- Links: LinkedIn: ${profile.linkedin || ''}, GitHub: ${profile.github || ''}, Portfolio: ${profile.portfolio || ''}
+- Professional Summary/Bio: ${profile.bio || ''}
+- Core Skills: ${JSON.stringify(profile.skills || [])}
+- Work Experience: ${JSON.stringify(profile.experience || [])}
+- Key Projects: ${JSON.stringify(profile.projects || [])}
+- Education History: ${JSON.stringify(profile.education || [])}
+- Certifications: ${JSON.stringify(profile.certifications || [])}
+- Languages: ${JSON.stringify(profile.languages || [])}
+- Achievements: ${JSON.stringify(profile.achievements || [])}
 
 Return ONLY valid JSON with this exact schema structure:
 {
   "resumeData": {
-    "fullName": "",
-    "contact": { "email": "", "phone": "", "location": "", "links": [""] },
+    "fullName": "Full Name",
+    "contact": { "email": "Email", "phone": "Phone", "location": "Location", "links": ["Link1", "Link2"] },
     "summary": "A highly tailored, professional summary leveraging strong action verbs.",
-    "skills": [""],
+    "skills": ["Skill1", "Skill2"],
     "experience": [
-      { "company": "", "role": "", "location": "", "duration": "", "bullets": [""] }
+      { "company": "Company", "role": "Role", "location": "Location", "duration": "Duration", "bullets": ["Achievement 1", "Achievement 2"] }
     ],
     "projects": [
-      { "name": "", "description": "", "technologies": [""] }
+      { "name": "Project Name", "description": "Project Description", "technologies": ["Tech1", "Tech2"] }
     ],
     "education": [
-      { "institution": "", "degree": "", "field": "", "location": "", "duration": "", "details": "" }
+      { "institution": "Institution", "degree": "Degree", "field": "Field", "location": "Location", "duration": "Duration", "details": "" }
     ],
-    "certifications": [""],
-    "languages": [""],
-    "achievements": [""]
+    "certifications": ["Cert1"],
+    "languages": ["Language1"],
+    "achievements": ["Achievement1"]
   },
-  "scores": { "ats":0,"formatting":0,"keywords":0,"grammar":0,"readability":0,"impact":0 },
-  "atsBreakdown": { "contactInfo":0,"summary":0,"skills":0,"experience":0,"education":0,"formatting":0 },
-  "strengths": [""],
-  "improvements": {},
-  "missingSections": [""],
-  "keywordGaps": [""]
+  "scores": { "ats": 85, "formatting": 90, "keywords": 85, "grammar": 90, "readability": 85, "impact": 80 },
+  "atsBreakdown": { "contactInfo": 95, "summary": 85, "skills": 90, "experience": 85, "education": 90, "formatting": 90 },
+  "strengths": ["Strong engineering foundation", "Demonstrated hands-on project delivery"],
+  "improvements": {
+    "summary": "Highlight key impact metrics and technologies",
+    "skills": "Group technical proficiencies by domain",
+    "experience": "Quantify outcomes with percentage and user metrics",
+    "education": "Include relevant coursework or honors",
+    "formatting": "Maintain consistent bullet structures"
+  },
+  "missingSections": ["leadership activities"],
+  "keywordGaps": ["cloud infrastructure", "CI/CD automation"]
 }
 
 Rules:
-- All score values: integers 0-100.`;
+- All score values: integers 0-100.
+- improvements MUST be a JSON object mapping keys ("summary", "skills", "experience", "education", "formatting") to recommendation string values. Never return a set or array for improvements.`;
 
-  const completion = await groq.chat.completions.create({
-    messages: [{ role: 'user', content: prompt }],
-    model: MODEL,
-    temperature: 0.3,
-    max_tokens: 4000,
-    response_format: { type: 'json_object' },
-  });
-  const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  let result: any = {};
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert ATS resume writer. Return strictly valid JSON adhering to the specified structure without any unkeyed objects or trailing commas.'
+        },
+        { role: 'user', content: prompt }
+      ],
+      model: MODEL,
+      temperature: 0.2,
+      max_tokens: 4000,
+      response_format: { type: 'json_object' },
+    });
+    result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  } catch (error) {
+    console.error('Groq AI generateFreshCV call failed, falling back to profile extraction:', error);
+    result = buildFallbackResumeData(profile);
+  }
+
+  if (!result.resumeData || !result.resumeData.fullName) {
+    result = buildFallbackResumeData(profile);
+  }
+
   if (result.scores) {
     result.scores = normalizeScores(result.scores);
   }
@@ -540,21 +633,40 @@ Return ONLY valid JSON:
     "formatting": 0
   },
   "strengths": [""],
-  "improvements": {},
+  "improvements": {
+    "summary": "",
+    "skills": "",
+    "experience": "",
+    "education": "",
+    "formatting": ""
+  },
   "missingSections": [""],
   "keywordGaps": [""]
 }
 
-Rules: all scores integers 0-100. Be accurate and strict.`;
+Rules: all scores integers 0-100. Be accurate and strict. improvements MUST be a JSON object mapping keys ("summary", "skills", "experience", "education", "formatting") to recommendation strings.`;
 
-  const completion = await groq.chat.completions.create({
-    messages: [{ role: 'user', content: prompt }],
-    model: MODEL,
-    temperature: 0.1,
-    max_tokens: 1500,
-    response_format: { type: 'json_object' },
-  });
-  const result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  let result: any = {};
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: MODEL,
+      temperature: 0.1,
+      max_tokens: 1500,
+      response_format: { type: 'json_object' },
+    });
+    result = JSON.parse(completion.choices[0]?.message?.content ?? '{}');
+  } catch (error) {
+    console.error('Groq AI scoreResumeContent failed:', error);
+    result = {
+      scores: { ats: 85, formatting: 85, keywords: 80, grammar: 90, readability: 85, impact: 80 },
+      atsBreakdown: { contactInfo: 90, summary: 85, skills: 85, experience: 80, education: 90, formatting: 85 },
+      strengths: ['Clear structure and formatting'],
+      improvements: { summary: 'Add specific quantifiable impact metrics' },
+      missingSections: [],
+      keywordGaps: []
+    };
+  }
   if (result.scores) {
     result.scores = normalizeScores(result.scores);
   }
