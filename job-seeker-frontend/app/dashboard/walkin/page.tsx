@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/app/lib/axios';
 import {
@@ -114,18 +114,40 @@ export default function WalkInRoomsPage() {
   const [joining, setJoining] = useState(false);
   const [leavingId, setLeavingId] = useState<string | null>(null);
 
+  const [activeTab, setActiveTab] = useState<'all' | 'new' | 'applied'>('all');
+
+  const appliedRoomsCount = useMemo(
+    () => rooms.filter((r) => r.hasApplied || r.myEntry).length,
+    [rooms]
+  );
+  const newRoomsCount = useMemo(
+    () => rooms.filter((r) => !r.hasApplied && !r.myEntry).length,
+    [rooms]
+  );
+
+  const displayedRooms = useMemo(() => {
+    if (activeTab === 'new') {
+      return rooms.filter((r) => !r.hasApplied && !r.myEntry);
+    }
+    if (activeTab === 'applied') {
+      return rooms.filter((r) => r.hasApplied || r.myEntry);
+    }
+    return rooms;
+  }, [rooms, activeTab]);
+
   useEffect(() => {
     fetchData();
     fetchResumes();
   }, []);
 
-  // Poll active queues every 5 seconds
+  // Poll active queues and rooms every 5 seconds for real-time status updates
   useEffect(() => {
     const interval = setInterval(() => {
       fetchMyQueuesSilent();
+      fetchRoomsSilent();
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [search]);
 
   const fetchData = async () => {
     try {
@@ -144,6 +166,17 @@ export default function WalkInRoomsPage() {
       }
     } catch (err) {
       console.error('Failed to fetch rooms', err);
+    }
+  };
+
+  const fetchRoomsSilent = async () => {
+    try {
+      const res = await api.get(`/walkin/active-rooms?search=${encodeURIComponent(search)}`);
+      if (res.data?.success) {
+        setRooms(res.data.rooms);
+      }
+    } catch {
+      // silent
     }
   };
 
@@ -260,161 +293,139 @@ export default function WalkInRoomsPage() {
   };
 
   return (
-    <div className="space-y-8 w-full max-w-full pb-16">
-      {/* ─── HERO BANNER ──────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-950/60 via-zinc-950 to-zinc-950 border border-indigo-500/20 p-6 sm:p-10 backdrop-blur-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none -mr-32 -mt-32"></div>
-        <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="min-h-screen bg-black text-white p-4 sm:p-6 lg:p-8 space-y-8 w-full max-w-full">
+      {/* ─── HEADER / HERO SECTION ───────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-950/60 via-zinc-950 to-zinc-950 border border-indigo-500/30 p-6 sm:p-8 lg:p-10 backdrop-blur-xl w-full">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
 
-        <div className="relative z-10 space-y-4 max-w-3xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold">
-            <Radio className="w-3.5 h-3.5 animate-pulse text-indigo-400" />
-            <span>Instant Walk-In Interviews</span>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10 w-full">
+          <div className="space-y-2 max-w-3xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 text-xs font-semibold">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Instant Walk-In Interview Hub</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">
+              Queue Live, Interview Fast
+            </h1>
+            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+              Skip traditional scheduling delays. Join live walk-in queues, get prioritized by your skills, and connect directly with hiring managers in 1-on-1 video rooms.
+            </p>
           </div>
 
-          <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight">
-            Live Walk-In Rooms & Priority Queue
-          </h1>
-
-          <p className="text-sm text-zinc-400 leading-relaxed">
-            Skip traditional scheduling. Join live walk-in rooms hosted by employers, get instant AI skill matching, queue up in real time, and receive an instant call into 1-on-1 video interviews when your turn arrives.
-          </p>
-
-          {/* Quick Direct Code Input */}
-          <form onSubmit={handleDirectCodeLookup} className="pt-2 flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[240px] max-w-md">
-              <KeyRound className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          {/* Quick Room Code Input */}
+          <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 sm:p-5 w-full lg:w-84 space-y-3 shrink-0 shadow-xl">
+            <div className="flex items-center gap-2 text-xs font-bold text-zinc-200">
+              <KeyRound className="w-4 h-4 text-indigo-400" />
+              <span>Have a Private Room Code?</span>
+            </div>
+            <form onSubmit={handleDirectCodeLookup} className="flex gap-2">
               <input
                 type="text"
-                placeholder="Have a room code? e.g. F4WAKG"
+                placeholder="e.g. F4WAKG"
+                maxLength={6}
                 value={directCode}
                 onChange={(e) => setDirectCode(e.target.value.toUpperCase())}
-                maxLength={10}
-                className="w-full bg-zinc-900/80 border border-zinc-800 focus:border-indigo-500 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white uppercase tracking-wider font-semibold placeholder:normal-case placeholder:text-zinc-500 placeholder:font-normal outline-none transition-all"
+                className="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-white placeholder:text-zinc-600 font-mono font-bold tracking-wider uppercase outline-none transition-all"
               />
-            </div>
-            <button
-              type="submit"
-              disabled={lookingUpCode || !directCode.trim()}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/20"
-            >
-              {lookingUpCode ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Looking up...</span>
-                </>
-              ) : (
-                <>
-                  <span>Lookup & Join</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </>
-              )}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={lookingUpCode || !directCode.trim()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all shadow-md shadow-indigo-600/20"
+              >
+                {lookingUpCode ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Join</span>}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
 
-      {/* ─── MY ACTIVE QUEUES TRACKER BANNER ──────────────────────────── */}
+      {/* ─── ACTIVE QUEUE STATUS TRACKER (IF IN ANY QUEUE) ───────────── */}
       {myQueues.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-3 w-full">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
-              <h2 className="text-base font-bold text-white">Your Active Queues ({myQueues.length})</h2>
+              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+              <h2 className="text-sm font-bold text-zinc-200 uppercase tracking-wider">
+                Your Active Queue Tracker ({myQueues.length})
+              </h2>
             </div>
-            <button
-              onClick={fetchMyQueues}
-              className="text-xs text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5 transition-colors"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>Refresh Status</span>
-            </button>
+            <span className="text-[11px] text-zinc-500">Live 5s Polling Active</span>
           </div>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-3 w-full">
             {myQueues.map((q) => {
               const isInterviewing = q.status === 'interviewing';
+
               return (
                 <div
                   key={q.id}
-                  className={`rounded-2xl border p-5 sm:p-6 transition-all relative overflow-hidden backdrop-blur-xl ${
+                  className={`p-4 sm:p-5 rounded-2xl border transition-all w-full ${
                     isInterviewing
-                      ? 'bg-gradient-to-r from-emerald-950/60 via-zinc-950 to-zinc-950 border-emerald-500/50 shadow-xl shadow-emerald-500/10 ring-1 ring-emerald-500/30'
-                      : 'bg-zinc-950/90 border-indigo-500/30'
+                      ? 'bg-emerald-950/40 border-emerald-500/60 shadow-lg shadow-emerald-500/10'
+                      : 'bg-zinc-950 border-indigo-500/30'
                   }`}
                 >
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden text-lg font-bold text-zinc-400">
-                        {q.room.company.logoUrl ? (
-                          <img src={q.room.company.logoUrl} alt={q.room.company.name} className="w-full h-full object-contain" />
-                        ) : (
-                          <Building2 className="w-6 h-6 text-indigo-400" />
-                        )}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                          isInterviewing
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        }`}
+                      >
+                        {isInterviewing ? <Video className="w-5 h-5" /> : `#${q.queuePosition}`}
                       </div>
 
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-zinc-400">{q.room.company.name}</span>
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-zinc-900 border border-zinc-800 text-zinc-400 rounded-md">
-                            Code: {q.room.roomCode}
-                          </span>
+                          <span className="font-bold text-white text-sm">{q.room.title}</span>
+                          <span className="text-xs text-zinc-400 font-medium">({q.room.company.name})</span>
                           <span
-                            className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
+                            className={`px-2 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
                               isInterviewing
-                                ? 'bg-emerald-500 text-black animate-bounce font-extrabold'
-                                : 'bg-indigo-500/10 border border-indigo-500/30 text-indigo-400'
+                                ? 'bg-emerald-500 text-black font-extrabold animate-bounce'
+                                : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
                             }`}
                           >
-                            {isInterviewing ? '🎉 Recruiter Is Calling You!' : `Waiting in Queue (#${q.queuePosition})`}
+                            {q.status}
                           </span>
                         </div>
 
-                        <h3 className="text-lg font-bold text-white">{q.room.title}</h3>
-
-                        <div className="flex items-center gap-4 text-xs text-zinc-400 pt-1 flex-wrap">
+                        <div className="flex items-center gap-3 text-xs text-zinc-400 flex-wrap">
                           <span>
                             Skill Match: <strong className="text-indigo-400 font-semibold">{Math.round(q.skillScore)}%</strong>
                           </span>
                           <span>•</span>
                           <span>
-                            Priority Score: <strong className="text-emerald-400 font-semibold">{Math.round(q.priorityScore)}</strong>
+                            Priority: <strong className="text-emerald-400 font-semibold">{Math.round(q.priorityScore)}</strong>
                           </span>
                           <span>•</span>
                           <span>
-                            Queue Size: <strong className="text-zinc-200">{q.room._count.queue} waiting</strong>
+                            Waiting: <strong className="text-zinc-200">{q.room._count.queue}</strong>
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Actions */}
-                    <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                    <div className="flex items-center gap-3 shrink-0">
                       {isInterviewing ? (
                         <button
                           onClick={() => router.push(`/meet/${q.room.livekitRoom}?token=${encodeURIComponent(q.livekitToken || '')}`)}
-                          className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all scale-105 animate-pulse"
+                          className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all animate-pulse"
                         >
                           <Video className="w-4 h-4" />
                           <span>Join Video Interview Now</span>
                           <ArrowRight className="w-4 h-4" />
                         </button>
                       ) : (
-                        <>
-                          <Link
-                            href={`/walkin/${q.room.roomCode}`}
-                            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold transition-all"
-                          >
-                            View Live Position
-                          </Link>
-                          <button
-                            onClick={() => handleLeaveQueue(q.room.roomCode)}
-                            disabled={leavingId === q.room.roomCode}
-                            className="px-3.5 py-2 bg-zinc-900/60 hover:bg-rose-950/40 border border-zinc-800 hover:border-rose-900/60 text-zinc-400 hover:text-rose-400 rounded-xl text-xs font-medium transition-all"
-                          >
-                            {leavingId === q.room.roomCode ? 'Leaving...' : 'Leave Queue'}
-                          </button>
-                        </>
+                        <button
+                          onClick={() => handleLeaveQueue(q.room.roomCode)}
+                          disabled={leavingId === q.room.roomCode}
+                          className="px-3.5 py-2 bg-zinc-900/60 hover:bg-rose-950/40 border border-zinc-800 hover:border-rose-900/60 text-zinc-400 hover:text-rose-400 rounded-xl text-xs font-medium transition-all"
+                        >
+                          {leavingId === q.room.roomCode ? 'Leaving...' : 'Leave Queue'}
+                        </button>
                       )}
                     </div>
                   </div>
@@ -425,66 +436,133 @@ export default function WalkInRoomsPage() {
         </div>
       )}
 
-      {/* ─── ACTIVE WALK-IN ROOMS DIRECTORY ───────────────────────────── */}
-      <div className="space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* ─── ACTIVE WALK-IN ROOMS DIRECTORY (FULL WIDTH) ──────────────── */}
+      <div className="space-y-6 w-full">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
           <div>
-            <h2 className="text-xl font-extrabold text-white">Active Walk-In Rooms</h2>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-white">Walk-In Rooms Directory</h2>
             <p className="text-xs text-zinc-400">
-              Browse public rooms open for immediate queuing across verified companies
+              Browse rooms for immediate evaluation or monitor your live queue progress
             </p>
           </div>
 
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by title, company or skill..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder:text-zinc-500 outline-none transition-all"
-            />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            {/* Filter Tabs Toggle Buttons */}
+            <div className="flex items-center p-1 bg-zinc-900/90 border border-zinc-800 rounded-xl shrink-0">
+              <button
+                onClick={() => setActiveTab('all')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === 'all'
+                    ? 'bg-zinc-800 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                All Rooms ({rooms.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('new')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'new'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Available ({newRoomsCount})</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('applied')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  activeTab === 'applied'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                <CheckCircle2 className="w-3 h-3" />
+                <span>Applied ({appliedRoomsCount})</span>
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search rooms or skills..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder:text-zinc-500 outline-none transition-all"
+              />
+            </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="py-20 text-center space-y-3">
+          <div className="py-24 text-center space-y-3 w-full">
             <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto" />
-            <p className="text-sm text-zinc-500">Loading open walk-in rooms...</p>
+            <p className="text-sm text-zinc-500">Loading walk-in rooms...</p>
           </div>
-        ) : rooms.length === 0 ? (
-          <div className="bg-zinc-950 border border-zinc-800/80 rounded-2xl p-12 text-center space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-zinc-500">
-              <Video className="w-6 h-6" />
+        ) : displayedRooms.length === 0 ? (
+          <div className="bg-zinc-950 border border-zinc-800/80 rounded-2xl p-16 text-center space-y-4 w-full">
+            <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-zinc-500">
+              <Video className="w-7 h-7" />
             </div>
-            <div className="space-y-1 max-w-sm mx-auto">
-              <h3 className="text-base font-bold text-zinc-200">No Open Walk-In Rooms Right Now</h3>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-lg font-bold text-zinc-200">
+                {activeTab === 'applied'
+                  ? 'No Applied Walk-In Rooms'
+                  : activeTab === 'new'
+                  ? 'No New Rooms Available'
+                  : 'No Walk-In Rooms Found'}
+              </h3>
               <p className="text-xs text-zinc-500">
                 {search
                   ? `No walk-in rooms matched "${search}". Try clearing your search.`
-                  : 'Companies host walk-in rooms when actively evaluating candidates. Check back soon or enter a private room code above.'}
+                  : activeTab === 'applied'
+                  ? 'You have not queued into any walk-in rooms yet. Switch to "Available" to join an open room.'
+                  : 'Companies host walk-in rooms when actively evaluating candidates. Check back soon!'}
               </p>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {rooms.map((room) => {
-              const inQueue = !!room.myEntry;
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 w-full">
+            {displayedRooms.map((room) => {
+              const appliedEntry = room.myEntry;
+              const isApplied = Boolean(room.hasApplied || appliedEntry);
               const isFull = room._count.queue >= room.maxQueue;
               const isPaused = room.status === 'PAUSED';
+
+              const entryStatus = appliedEntry?.status;
+              const isInterviewing = entryStatus === 'interviewing';
+              const isPriority = entryStatus === 'priority';
+              const isWaiting = entryStatus === 'waiting';
+              const isAccepted = entryStatus === 'accepted' || entryStatus === 'done';
+              const isSkipped = entryStatus === 'skipped' || entryStatus === 'rejected';
+
+              // FULL CARD STATUS BACKGROUND THEMES
+              let cardThemeClass = 'bg-zinc-950 border-zinc-800/80 hover:border-zinc-700';
+              if (isInterviewing) {
+                cardThemeClass = 'bg-emerald-950/35 border-emerald-500/80 shadow-xl shadow-emerald-500/15';
+              } else if (isAccepted) {
+                cardThemeClass = 'bg-emerald-950/25 border-emerald-500/50 shadow-lg shadow-emerald-950/40';
+              } else if (isSkipped) {
+                cardThemeClass = 'bg-rose-950/20 border-rose-600/40 shadow-sm';
+              } else if (isPriority) {
+                cardThemeClass = 'bg-violet-950/25 border-violet-500/50 shadow-md shadow-violet-500/10';
+              } else if (isWaiting) {
+                cardThemeClass = 'bg-sky-950/20 border-sky-500/40 shadow-sm';
+              }
 
               return (
                 <div
                   key={room.id}
-                  className={`bg-zinc-950 border rounded-2xl p-6 space-y-5 transition-all relative flex flex-col justify-between hover:border-zinc-700/80 ${
-                    inQueue ? 'border-indigo-500/40 bg-indigo-950/10' : 'border-zinc-800/80'
-                  }`}
+                  className={`border rounded-2xl p-6 space-y-5 transition-all relative flex flex-col justify-between ${cardThemeClass}`}
                 >
                   <div className="space-y-4">
                     {/* Header */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden font-bold text-zinc-400">
+                        <div className="w-11 h-11 rounded-xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-center shrink-0 overflow-hidden font-bold text-zinc-400">
                           {room.company.logoUrl ? (
                             <img src={room.company.logoUrl} alt={room.company.name} className="w-full h-full object-contain" />
                           ) : (
@@ -493,24 +571,46 @@ export default function WalkInRoomsPage() {
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-zinc-300">{room.company.name}</span>
+                            <span className="text-xs font-bold text-zinc-200">{room.company.name}</span>
                             {room.company.isVerified && (
                               <span title="Verified Company">
                                 <BadgeCheck className="w-3.5 h-3.5 text-emerald-400" />
                               </span>
                             )}
                           </div>
-                          <span className="text-[11px] text-zinc-500">{room.company.industry || 'General'}</span>
+                          <span className="text-[11px] text-zinc-400">{room.company.industry || 'General'}</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        {room.hasApplied && (
-                          <span className="px-2.5 py-0.5 text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" />
-                            <span>Applied</span>
+                      {/* Prominent Status Badges */}
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {isInterviewing ? (
+                          <span className="px-3 py-1 text-[11px] font-extrabold bg-emerald-500 text-black rounded-full uppercase tracking-wider animate-bounce flex items-center gap-1.5 shadow-md shadow-emerald-500/30">
+                            <Video className="w-3.5 h-3.5" />
+                            <span>Live Interview</span>
                           </span>
-                        )}
+                        ) : isAccepted ? (
+                          <span className="px-3 py-1 text-[11px] font-extrabold bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Accepted</span>
+                          </span>
+                        ) : isSkipped ? (
+                          <span className="px-3 py-1 text-[11px] font-extrabold bg-rose-500/20 border border-rose-500/50 text-rose-300 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                            <span>Rejected</span>
+                          </span>
+                        ) : isPriority ? (
+                          <span className="px-2.5 py-0.5 text-[10px] font-bold bg-violet-500/20 border border-violet-500/40 text-violet-300 rounded-full uppercase tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-violet-400" />
+                            <span>Priority Queue</span>
+                          </span>
+                        ) : isWaiting ? (
+                          <span className="px-2.5 py-0.5 text-[10px] font-bold bg-sky-500/20 border border-sky-500/40 text-sky-300 rounded-full uppercase tracking-wider flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-sky-400" />
+                            <span>In Queue</span>
+                          </span>
+                        ) : null}
+
                         <span
                           className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
                             room.status === 'OPEN'
@@ -523,9 +623,9 @@ export default function WalkInRoomsPage() {
                       </div>
                     </div>
 
-                    {/* Room Info */}
+                    {/* Room Title & Description */}
                     <div className="space-y-1.5">
-                      <h3 className="text-base font-bold text-white group-hover:text-indigo-400 transition-colors">
+                      <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-indigo-400 transition-colors">
                         {room.title}
                       </h3>
                       {room.description && (
@@ -535,20 +635,20 @@ export default function WalkInRoomsPage() {
                       )}
                     </div>
 
-                    {/* Required Skills & Candidate Match */}
+                    {/* Required Skills & Match */}
                     {room.requiredSkills.length > 0 && (
                       <div className="space-y-1.5 pt-1">
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-zinc-500 font-semibold uppercase tracking-wider">Required Skills</span>
+                          <span className="text-zinc-400 font-semibold uppercase tracking-wider">Required Skills</span>
                           {room.mySkillMatch !== null && room.mySkillMatch !== undefined && (
-                            <span className="text-indigo-400 font-bold">
+                            <span className="text-indigo-300 font-bold">
                               {Math.round(room.mySkillMatch)}% Profile Match
                             </span>
                           )}
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {room.requiredSkills.map((s, idx) => (
-                            <span key={idx} className="px-2 py-0.5 text-[11px] bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-md font-medium">
+                            <span key={idx} className="px-2.5 py-0.5 text-[11px] bg-black/40 border border-white/10 text-zinc-300 rounded-md font-medium">
                               {s}
                             </span>
                           ))}
@@ -557,30 +657,84 @@ export default function WalkInRoomsPage() {
                     )}
                   </div>
 
-                  {/* Footer & Queue Metrics */}
-                  <div className="pt-4 border-t border-zinc-900 space-y-4">
+                  {/* ─── IN-CARD STATUS OR ACTION FOOTER ─────────────────── */}
+                  <div className="pt-4 border-t border-white/10 space-y-3.5">
                     <div className="flex items-center justify-between text-xs text-zinc-400">
                       <div className="flex items-center gap-2">
-                        <Users className="w-3.5 h-3.5 text-zinc-500" />
+                        <Users className="w-3.5 h-3.5 text-zinc-400" />
                         <span>
                           Queue: <strong className="text-zinc-200">{room._count.queue}</strong> / {room.maxQueue}
                         </span>
                       </div>
-                      <span className="text-[11px] text-zinc-500">
+                      <span className="text-[11px] text-zinc-400">
                         Code: <code className="text-indigo-400 font-semibold">{room.roomCode}</code>
                       </span>
                     </div>
 
-                    {/* Action button */}
-                    {room.hasApplied || inQueue ? (
-                      <Link
-                        href={`/walkin/${room.roomCode}`}
-                        className="w-full py-2.5 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Applied • View Queue Status</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
+                    {/* DIRECT IN-CARD EXPERIENCE (CLEAN, NO NESTED BOXES) */}
+                    {isApplied ? (
+                      <div>
+                        {isInterviewing ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                              <span>Recruiter is waiting in the video room!</span>
+                            </div>
+                            <button
+                              onClick={() => router.push(`/meet/${room.livekitRoom}?token=${encodeURIComponent(appliedEntry?.livekitToken || '')}`)}
+                              className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all animate-pulse"
+                            >
+                              <Video className="w-4 h-4" />
+                              <span>Join Video Call Now</span>
+                              <ArrowRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : isAccepted ? (
+                          <div className="flex items-center justify-between text-xs text-emerald-300 font-bold pt-1">
+                            <span className="flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span>Application Accepted & Qualified</span>
+                            </span>
+                          </div>
+                        ) : isSkipped ? (
+                          <div className="flex items-center justify-between text-xs text-rose-300 font-semibold pt-1">
+                            <span className="flex items-center gap-1.5">
+                              <AlertCircle className="w-4 h-4 text-rose-400" />
+                              <span>Application Status: Rejected / Skipped</span>
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5">
+                            <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                              <div className="p-2 bg-black/40 rounded-xl border border-white/10">
+                                <div className="text-[10px] text-zinc-400 font-bold uppercase">Skill Score</div>
+                                <div className="font-extrabold text-indigo-400 text-sm">
+                                  {Math.round(appliedEntry?.skillScore ?? room.mySkillMatch ?? 0)}%
+                                </div>
+                              </div>
+                              <div className="p-2 bg-black/40 rounded-xl border border-white/10">
+                                <div className="text-[10px] text-zinc-400 font-bold uppercase">Priority Score</div>
+                                <div className="font-extrabold text-emerald-400 text-sm">
+                                  {Math.round(appliedEntry?.priorityScore ?? 0)}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              <span className="text-[11px] font-medium text-zinc-300 flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+                                <span>{isPriority ? 'Priority • Waiting to be called' : 'Live in Queue • Waiting for call'}</span>
+                              </span>
+                              <button
+                                onClick={() => handleLeaveQueue(room.roomCode)}
+                                disabled={leavingId === room.roomCode}
+                                className="px-3 py-1.5 text-[11px] font-semibold bg-rose-950/30 hover:bg-rose-950/60 border border-rose-800/40 text-rose-300 rounded-lg transition-all shrink-0"
+                              >
+                                {leavingId === room.roomCode ? 'Leaving...' : 'Leave Queue'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <button
                         onClick={() => openJoinModal(room)}
