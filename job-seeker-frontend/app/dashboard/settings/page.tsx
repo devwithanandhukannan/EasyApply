@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Lock, Eye, EyeOff, ShieldCheck, Loader2, Search, Sparkles } from 'lucide-react';
+import { Lock, Eye, EyeOff, ShieldCheck, Loader2, Search, Sparkles, Sun, Moon } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
+import { useTheme } from '@/app/lib/theme';
 
 export default function SettingsPage() {
   const { showToast } = useGlassToast();
+  const { mode, setMode } = useTheme();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -116,8 +118,66 @@ export default function SettingsPage() {
       <div className="border-b border-zinc-900 pb-5">
         <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Account & Visibility Settings</h1>
         <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
-          Manage your account credentials, security configuration, and recruiter discovery preferences.
+          Manage your account credentials, interface theme (Dark / Light mode), and recruiter discovery preferences.
         </p>
+      </div>
+
+      {/* ─── APPEARANCE & THEME TOGGLE CARD ──────────────────────────── */}
+      <div className="bg-zinc-950/40 border border-zinc-800 rounded-xl p-6 space-y-4 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-indigo-400">
+              {mounted && mode === 'light' ? (
+                <Sun className="w-5 h-5 text-amber-400" />
+              ) : (
+                <Moon className="w-5 h-5 text-indigo-400" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
+                Interface Appearance
+              </h3>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Toggle between dark mode and clean light mode.
+              </p>
+            </div>
+          </div>
+
+          {/* Dark / Light Mode Toggle Pill */}
+          <div className="inline-flex p-1 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('dark');
+                showToast('Theme Updated', 'Dark mode activated', 'info');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                mounted && mode === 'dark'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Moon className="w-3.5 h-3.5" />
+              <span>Dark</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('light');
+                showToast('Theme Updated', 'Light mode activated', 'info');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                mounted && mode === 'light'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/30'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Sun className="w-3.5 h-3.5" />
+              <span>Light</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Recruiter Discovery Opt-In Card */}

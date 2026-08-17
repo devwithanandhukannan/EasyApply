@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation';
 import axios from '@/app/lib/axios';
 import { 
   Building2, Save, Plus, Trash2, X, Users, Shield, 
-  Mail, Phone, Lock, Upload, Check, AlertCircle
+  Mail, Phone, Lock, Upload, Check, AlertCircle, Sun, Moon
 } from 'lucide-react';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
+import { useTheme } from '@/app/lib/theme';
 
 type TabState = 'identity' | 'security' | 'team';
 
@@ -23,6 +24,7 @@ interface Employee {
 
 export default function CompleteCompanyProfile() {
   const { showToast } = useGlassToast();
+  const { mode, setMode } = useTheme();
   const router = useRouter();
   
   const [activeTab, setActiveTab] = useState<TabState>('identity');
@@ -343,11 +345,50 @@ const loadProfile = async (silent = false) => {
       
       {/* HEADER */}
       <header className="mb-8 border-b border-zinc-900 pb-6">
-        <div className="flex items-center gap-2 text-zinc-400 text-[10px] uppercase tracking-widest mb-1">
-          <Building2 className="w-3 h-3" /> Company Configuration
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-zinc-400 text-[10px] uppercase tracking-widest mb-1">
+              <Building2 className="w-3 h-3" /> Company Configuration
+            </div>
+            <h1 className="text-xl font-semibold tracking-tight text-white uppercase">Profile Management</h1>
+            <p className="text-xs text-zinc-500 mt-1">Update company details, security credentials, and appearance</p>
+          </div>
+
+          {/* Theme Mode Toggle Pill */}
+          <div className="inline-flex p-1 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setMode('dark');
+                showToast('Theme Updated', 'Dark mode activated', 'info');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                mode === 'dark'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Moon className="w-3.5 h-3.5" />
+              <span>Dark</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMode('light');
+                showToast('Theme Updated', 'Light mode activated', 'info');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                mode === 'light'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/30'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Sun className="w-3.5 h-3.5" />
+              <span>Light</span>
+            </button>
+          </div>
         </div>
-        <h1 className="text-xl font-semibold tracking-tight text-white uppercase">Profile Management</h1>
-        <p className="text-xs text-zinc-500 mt-1">Update company details, security credentials, and team settings</p>
 
         {/* TAB NAVIGATION */}
         <div className="flex gap-2 mt-6 p-1 bg-zinc-900/50 border border-zinc-900 rounded-xl max-w-lg">

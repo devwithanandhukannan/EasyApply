@@ -5,6 +5,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import CompanySidebar from '@/app/components/CompanySidebar';
 import { Menu, Building2 } from 'lucide-react';
 import { ToastProvider } from '../components/GlassToastContainer';
+import { ThemeProvider } from '@/app/lib/theme';
 
 export default function CompanyDashboardLayout({ children }: { children: React.ReactNode }) {
   const { isLoading, company } = useAuth();
@@ -29,8 +30,9 @@ export default function CompanyDashboardLayout({ children }: { children: React.R
   };
 
   return (
-     <ToastProvider>
-    <div className="flex h-screen bg-black overflow-hidden font-sans text-zinc-200 antialiased">
+    <ThemeProvider>
+      <ToastProvider>
+        <div className="flex h-screen bg-black overflow-hidden font-sans text-zinc-200 antialiased">
       {/* Structural Sidebar Drawer */}
       <CompanySidebar 
         company={companyData}
@@ -68,5 +70,6 @@ export default function CompanyDashboardLayout({ children }: { children: React.R
       </div>
     </div>
     </ToastProvider>
+    </ThemeProvider>
   );
 }

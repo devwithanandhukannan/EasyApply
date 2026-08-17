@@ -5,17 +5,31 @@
 }
 
 :root {
-  --background: #020409;
+  --bg-base: #05070e;
+  --bg-surface: rgba(15, 18, 33, 0.75);
+  --bg-surface-hover: rgba(25, 30, 55, 0.85);
+  --bg-glass: rgba(10, 14, 28, 0.65);
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-primary-glow: rgba(99, 102, 241, 0.28);
+  --color-secondary: #8b5cf6;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-default: rgba(99, 102, 241, 0.25);
+  --border-focus: #6366f1;
+  --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --gradient-card: linear-gradient(180deg, rgba(99, 102, 241, 0.06) 0%, rgba(10, 14, 28, 0.8) 100%);
+
+  --background: var(--bg-base);
   --foreground: #f0f4ff;
   --accent-blue: #3b82f6;
-  --accent-violet: #8b5cf6;
+  --accent-violet: var(--color-primary);
   --accent-emerald: #10b981;
-  --glow-blue: rgba(59, 130, 246, 0.15);
-  --glow-violet: rgba(139, 92, 246, 0.12);
-  --surface: rgba(255, 255, 255, 0.03);
-  --surface-hover: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(255, 255, 255, 0.15);
+  --glow-blue: var(--color-primary-glow);
+  --glow-violet: var(--color-primary-glow);
+  --surface: var(--bg-surface);
+  --surface-hover: var(--bg-surface-hover);
+  --border: var(--border-subtle);
+  --border-hover: var(--border-default);
 }
 
 * {
@@ -27,12 +41,61 @@ html {
 }
 
 body {
-  background: var(--background);
+  background: var(--bg-base);
   color: var(--foreground);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  transition: background-color 0.3s ease;
+}
+
+/* ── DYNAMIC THEME UTILITY CLASSES ──────────────── */
+.theme-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-card:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-default);
+  box-shadow: 0 12px 36px var(--color-primary-glow);
+}
+
+.theme-card-glow {
+  background: var(--gradient-card);
+  border: 1px solid var(--border-default);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.theme-btn-primary {
+  background: var(--gradient-primary);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 6px 24px var(--color-primary-glow);
+  transition: all 0.25s ease;
+}
+
+.theme-btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 30px var(--color-primary-glow);
+}
+
+.theme-border-accent {
+  border-color: var(--border-default);
+}
+
+.theme-text-primary {
+  color: var(--color-primary);
+}
+
+.theme-bg-primary-subtle {
+  background: var(--color-primary-glow);
 }
 
 /* ── CUSTOM SCROLLBAR ───────────────────────────── */

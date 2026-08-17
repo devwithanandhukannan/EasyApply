@@ -16,11 +16,15 @@ import {
   Save,
   Loader2,
   CheckCircle2,
+  Sun,
+  Moon,
 } from 'lucide-react';
+import { useTheme } from '@/lib/theme';
 
 type Tab = 'payment' | 'email' | 'ai' | 'video' | 'general' | 'queue';
 
 export default function SettingsPage() {
+  const { mode, setMode } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('payment');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -224,9 +228,33 @@ export default function SettingsPage() {
 
   return (
     <div style={{ width: '100%' }}>
-      <div className="page-header">
-        <h1 className="page-title">Platform Configuration Hub</h1>
-        <p className="page-subtitle">Manage platform-wide API secrets, SMTP, AI models and system parameters</p>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+        <div>
+          <h1 className="page-title">Platform Configuration Hub</h1>
+          <p className="page-subtitle">Manage platform-wide API secrets, SMTP, AI models and system parameters</p>
+        </div>
+
+        {/* Theme Mode Toggle */}
+        <div style={{ display: 'inline-flex', padding: '4px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '12px', gap: '4px' }}>
+          <button
+            type="button"
+            onClick={() => setMode('dark')}
+            className={`btn btn-sm ${mode === 'dark' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ padding: '6px 12px', fontSize: '12px' }}
+          >
+            <Moon size={14} />
+            <span>Dark</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('light')}
+            className={`btn btn-sm ${mode === 'light' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ padding: '6px 12px', fontSize: '12px' }}
+          >
+            <Sun size={14} />
+            <span>Light</span>
+          </button>
+        </div>
       </div>
 
       {msg && (

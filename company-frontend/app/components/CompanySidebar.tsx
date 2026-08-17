@@ -19,7 +19,8 @@ import {
   LogOut,
   User,
   DoorOpen,
-  Search
+  Search,
+  Palette
 } from 'lucide-react';
 
 interface SidebarProps {

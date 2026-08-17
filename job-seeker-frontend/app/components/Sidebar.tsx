@@ -17,6 +17,7 @@ import {
   Compass,
   Video,
   Zap,
+  Palette,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
