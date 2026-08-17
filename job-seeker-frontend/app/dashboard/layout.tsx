@@ -18,8 +18,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Sidebar user={user} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
           
           {/* Content Stream Pipeline */}
-          <main className="flex-1 min-w-0 overflow-y-auto pt-14 md:pt-0">
-            <div className="p-5 sm:p-8 max-w-5xl mx-auto w-full">
+          <main className="flex-1 min-w-0 overflow-y-auto pt-14 md:pt-0 custom-scrollbar">
+            <div className="p-4 sm:p-6 lg:p-8 w-full max-w-full">
               {children}
             </div>
           </main>

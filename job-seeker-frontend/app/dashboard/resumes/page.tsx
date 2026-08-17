@@ -599,7 +599,7 @@ export default function ResumesPage() {
   ];
 
   return (
-    <div className="flex h-[calc(100vh-80px)] -m-4 md:-m-8 overflow-hidden">
+    <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-2rem)] -m-4 sm:-m-6 lg:-m-8 overflow-hidden">
       {/* Sidebar */}
       <aside className="w-72 xl:w-80 flex-shrink-0 border-r border-[#1e1e1e] flex flex-col bg-[#080808]">
         <div className="p-4 border-b border-[#1e1e1e]">

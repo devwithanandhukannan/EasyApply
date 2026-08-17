@@ -327,7 +327,7 @@ export default function ApplicationsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto px-4 sm:px-6 py-6 bg-black min-h-screen text-zinc-300">
+    <div className="space-y-6 w-full max-w-full text-zinc-300">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

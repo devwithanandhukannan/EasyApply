@@ -117,7 +117,7 @@ export default function JobSeekerInterviewsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto w-full text-white font-mono p-4">
+    <div className="space-y-6 w-full max-w-full text-white">
       <div>
         <h1 className="text-lg font-semibold uppercase tracking-tight">Interview Hub</h1>
         <p className="text-xs text-zinc-500 mt-1">Review validation parameters and access scheduled audio/video channels.</p>
