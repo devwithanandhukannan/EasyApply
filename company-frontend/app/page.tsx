@@ -20,6 +20,7 @@ import {
   Clock,
   TrendingUp,
 } from 'lucide-react';
+import EasyApplyLogo from '@/app/components/EasyApplyLogo';
 
 export default function CompanyFrontPage() {
   const { isAuthenticated } = useAuth();
@@ -131,16 +132,7 @@ export default function CompanyFrontPage() {
         style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(24px)', background: 'rgba(3,5,8,0.85)' }}>
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 0 24px rgba(99,102,241,0.45)' }}>
-              <Building2 className="w-4 h-4 text-white" />
-            </div>
-            <div className="flex flex-col leading-none">
-              <span className="text-xs font-bold tracking-tight text-white">EasyApply</span>
-              <span className="text-[10px] font-medium" style={{ color: 'rgba(165,180,252,0.7)' }}>for Business</span>
-            </div>
-          </div>
+          <EasyApplyLogo size="md" badge="Business" />
 
           {/* Nav */}
           <nav className="hidden md:flex items-center gap-8">
@@ -470,13 +462,7 @@ export default function CompanyFrontPage() {
       {/* ── FOOTER ────────────────────────────────────────────────────── */}
       <footer className="relative z-10 py-8" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
-              <Building2 className="w-3 h-3 text-white" />
-            </div>
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>EasyApply for Business</span>
-          </div>
+          <EasyApplyLogo size="sm" badge="Business" />
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.18)' }}>© 2026 EasyApply Ecosystem. Configured for enterprise use.</p>
           <div className="flex items-center gap-6">
             {['Privacy', 'Terms', 'Security', 'Support'].map((item) => (

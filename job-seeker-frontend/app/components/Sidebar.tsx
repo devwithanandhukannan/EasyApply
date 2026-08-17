@@ -17,11 +17,12 @@ import {
   Compass,
   Video,
   Zap,
-  Palette,
+  Rocket,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
+import EasyApplyLogo from './EasyApplyLogo';
 
 interface SidebarProps {
   user?: any;
@@ -87,12 +88,7 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
     <>
       {/* ─── MOBILE CONTAINER HEADER ───────────────────────── */}
       <div className="md:hidden fixed top-0 left-0 right-0 bg-zinc-950 border-b border-zinc-900/80 px-5 flex items-center justify-between z-40 h-14">
-        <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 bg-white rounded-lg flex items-center justify-center shadow-md">
-            <Compass className="w-3.5 h-3.5 text-black" />
-          </div>
-          <span className="text-zinc-100 font-bold text-xs tracking-wider uppercase">Portal</span>
-        </div>
+        <EasyApplyLogo size="sm" />
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
           className="p-2 rounded-xl border border-zinc-800 bg-zinc-900/30 text-zinc-400"
@@ -110,13 +106,12 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
         {/* Core Brand Header */}
         <div className="p-4 border-b border-zinc-900/80 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
           <div className="flex items-center gap-2.5 overflow-hidden">
-            <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0 shadow-inner">
-              <Compass className="w-4 h-4 text-zinc-300" />
-            </div>
-            {!isCollapsed && (
-              <span className="font-bold text-xs tracking-wider text-zinc-100 uppercase transition-opacity duration-200">
-                JobPortal
-              </span>
+            {isCollapsed ? (
+              <div className="p-2 text-[#0071e3] flex items-center justify-center">
+                <Rocket size={20} className="text-[#0071e3] fill-[#0071e3] transform -rotate-12" />
+              </div>
+            ) : (
+              <EasyApplyLogo size="md" />
             )}
           </div>
         </div>

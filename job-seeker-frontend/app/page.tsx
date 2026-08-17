@@ -17,6 +17,7 @@ import {
   Globe,
   ChevronRight,
 } from 'lucide-react';
+import EasyApplyLogo from '@/app/components/EasyApplyLogo';
 
 export default function Home() {
   const { isAuthenticated } = useAuth();
@@ -100,15 +101,7 @@ export default function Home() {
       <header className="sticky top-0 z-50" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(20px)', background: 'rgba(2,4,9,0.8)' }}>
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="relative w-8 h-8 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', boxShadow: '0 0 20px rgba(99,102,241,0.4)' }}>
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-sm font-semibold tracking-tight text-white">
-              EasyApply <span className="text-blue-400 font-normal">for Seekers</span>
-            </span>
-          </div>
+          <EasyApplyLogo size="md" badge="Seekers" />
 
           {/* Nav Links */}
           <nav className="hidden md:flex items-center gap-8">
@@ -408,13 +401,7 @@ export default function Home() {
       {/* ── FOOTER ────────────────────────────────────────────────────── */}
       <footer className="relative z-10 py-8" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)' }}>
-              <Sparkles className="w-3 h-3 text-white" />
-            </div>
-            <span className="text-xs font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>EasyApply for Seekers</span>
-          </div>
+          <EasyApplyLogo size="sm" badge="Seekers" />
           <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>© 2026 EasyApply Ecosystem. All rights reserved.</p>
           <div className="flex items-center gap-6">
             {['Privacy', 'Terms', 'Support'].map((item) => (

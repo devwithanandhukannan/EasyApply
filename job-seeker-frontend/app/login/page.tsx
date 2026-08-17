@@ -5,6 +5,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import api from '@/app/lib/axios';
 import dynamic from 'next/dynamic';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
+import EasyApplyLogo from '@/app/components/EasyApplyLogo';
 
 function LoginPageComponent() {
   const { showToast } = useGlassToast();
@@ -199,14 +200,14 @@ function LoginPageComponent() {
       <div className="w-full max-w-md">
         {/* Logo Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-[#0071e3] text-white rounded-2xl mb-4 shadow-[0_4px_16px_rgba(0,113,227,0.3)]">
-            <span className="font-bold text-xl tracking-tight">J</span>
+          <div className="flex justify-center mb-4">
+            <EasyApplyLogo size="xl" badge="Seekers" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] mb-1.5">
             {step === 'profile_setup' ? 'Complete Profile' : 'Welcome Back'}
           </h1>
           <p className="text-[#86868b] text-sm">
-            {step === 'profile_setup' ? 'Enter credentials to finalize database indexing' : 'Sign in to access your job portal'}
+            {step === 'profile_setup' ? 'Enter credentials to finalize database indexing' : 'Sign in to access your candidate workspace'}
           </p>
         </div>
 

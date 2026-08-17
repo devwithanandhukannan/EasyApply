@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Zap, Lock, Loader2 } from 'lucide-react';
+import EasyApplyLogo from '@/app/components/EasyApplyLogo';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,10 +35,9 @@ export default function LoginPage() {
       <div className="glass" style={{ width: '100%', maxWidth: 420, padding: 40 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ width: 56, height: 56, borderRadius: 16, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#fff' }}>
-            <Zap size={28} />
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <EasyApplyLogo size="lg" badge="Admin" />
           </div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>EasyApply Admin</h1>
           <p style={{ color: 'var(--muted)', fontSize: 14, marginTop: 6 }}>Platform Administration Panel</p>
         </div>
 

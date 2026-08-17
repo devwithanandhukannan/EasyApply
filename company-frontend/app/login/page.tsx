@@ -6,6 +6,7 @@ import { Mail, Lock, ArrowRight, ShieldAlert, CheckCircle2, Building2, Users } f
 import { AxiosError } from 'axios';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
+import EasyApplyLogo from '@/app/components/EasyApplyLogo';
 
 // Define explicit operational login configurations 
 type LoginType = 'admin' | 'team';
@@ -104,8 +105,8 @@ export default function LoginPage() {
         
         {/* Header Icon & Branding */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-[#0071e3] text-white rounded-2xl mb-4 shadow-[0_4px_16px_rgba(0,113,227,0.3)]">
-            <span className="font-bold text-xl tracking-tight">J</span>
+          <div className="flex justify-center mb-4">
+            <EasyApplyLogo size="xl" badge="Business" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] mb-1.5">Welcome Back</h1>
           <p className="text-[#86868b] text-sm">Sign in to manage your company dashboard</p>

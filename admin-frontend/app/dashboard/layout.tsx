@@ -13,6 +13,7 @@ import {
   Palette,
 } from 'lucide-react';
 import { ThemeProvider } from '@/lib/theme';
+import EasyApplyLogo from '@/app/components/EasyApplyLogo';
 
 interface NavLinkItem {
   label: string;
@@ -38,7 +39,7 @@ const NAV: NavItem[] = [
   { label: 'ATS Re-calc', href: '/dashboard/ats', icon: Cpu },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<{ name?: string; email?: string }>({});
@@ -47,15 +48,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     setMounted(true);
     const token = localStorage.getItem('admin_token');
+    const u = localStorage.getItem('admin_user');
     if (!token) {
       router.push('/login');
       return;
     }
-    try {
-      const storedUser = localStorage.getItem('admin_user');
-      if (storedUser) setUser(JSON.parse(storedUser));
-    } catch {
-      setUser({});
+    if (u) {
+      try {
+        setUser(JSON.parse(u));
+      } catch {}
     }
   }, [router]);
 
@@ -71,15 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Sidebar */}
         <nav className="sidebar">
           <div style={{ padding: '24px 20px 16px', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                <Zap size={20} />
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>EasyApply</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Admin Panel</div>
-              </div>
-            </div>
+            <EasyApplyLogo size="md" badge="Admin" />
           </div>
 
           <div style={{ flex: 1, padding: '12px 0', overflowY: 'auto' }}>

@@ -20,6 +20,7 @@ import { AxiosError } from 'axios';
 import { useRouter } from 'next/navigation'; // Added for clean postwar routing
 import api from '../lib/axios';
 import { useGlassToast } from '../components/GlassToastContainer';
+import EasyApplyLogo from '../components/EasyApplyLogo';
 
 type Step = 'company' | 'contact' | 'verify' | 'additional' | 'success';
 
@@ -286,8 +287,8 @@ function RegisterPageComponent() {
       <div className="w-full max-w-2xl">
         {/* Logo Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl mb-4">
-            <span className="text-black font-semibold text-xl">J</span>
+          <div className="flex justify-center mb-4">
+            <EasyApplyLogo size="xl" badge="Business" />
           </div>
           <h1 className="text-2xl font-semibold text-white mb-2">Company Registration</h1>
           <p className="text-gray-500 text-sm">Join our hiring platform in minutes</p>
