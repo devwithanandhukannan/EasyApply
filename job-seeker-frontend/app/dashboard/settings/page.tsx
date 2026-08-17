@@ -13,9 +13,10 @@ export default function SettingsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Discovery toggle state
+  const [mounted, setMounted] = useState(false);
   const [discoverable, setDiscoverable] = useState(false);
   const [loadingDiscovery, setLoadingDiscovery] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(false);
 
   // Password visibility states
   const [showCurrent, setShowCurrent] = useState(false);
@@ -23,6 +24,7 @@ export default function SettingsPage() {
   const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     fetchProfile();
   }, []);
 
@@ -143,9 +145,9 @@ export default function SettingsPage() {
           <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
             <input
               type="checkbox"
-              checked={discoverable}
+              checked={mounted ? discoverable : false}
               onChange={handleToggleDiscovery}
-              disabled={initialLoading || loadingDiscovery}
+              disabled={!mounted || loadingDiscovery}
               className="sr-only peer"
             />
             <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
@@ -155,7 +157,7 @@ export default function SettingsPage() {
         <div className="pt-2 border-t border-indigo-500/10 flex items-center justify-between text-[11px] text-zinc-500">
           <div className="flex items-center gap-1.5 text-zinc-400">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Status: <strong className={discoverable ? 'text-emerald-400' : 'text-zinc-500'}>{discoverable ? 'Visible to all employers' : 'Hidden from searches'}</strong></span>
+            <span>Status: <strong className={mounted && discoverable ? 'text-emerald-400' : 'text-zinc-500'}>{mounted && discoverable ? 'Visible to all employers' : 'Hidden from searches'}</strong></span>
           </div>
           {loadingDiscovery && <span className="text-indigo-400 animate-pulse">Updating...</span>}
         </div>

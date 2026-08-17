@@ -1,7 +1,15 @@
 import type { Request, Response } from 'express';
 import { AccessToken } from 'livekit-server-sdk';
 import { prisma } from '../utils/prisma.ts';
-import { computeSkillScore, computePriorityScore, ensureAgingRunning, stopAging } from '../services/walkInQueue.service.ts';
+import {
+  computeSkillScore,
+  computePriorityScore,
+  ensureAgingRunning,
+  stopAging,
+  extractTextFromCvBuffer,
+  evaluateCandidateCvAgainstRoom,
+  calculateRealTimeAging
+} from '../services/walkInQueue.service.ts';
 import { getWalkInQueueMax } from '../services/platformSettings.service.ts';
 
 function generateRoomCode(): string {
@@ -23,7 +31,16 @@ export const createWalkInRoom = async (req: Request, res: Response) => {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: 'Company context required' });
 
-    const { title, description, requiredSkills, maxQueue } = req.body;
+    const {
+      title,
+      description,
+      requiredSkills,
+      minExperience,
+      priorityThreshold,
+      evaluationCriteria,
+      maxQueue
+    } = req.body;
+
     if (!title) return res.status(400).json({ success: false, message: 'title is required' });
 
     const globalMax = await getWalkInQueueMax();
@@ -45,6 +62,9 @@ export const createWalkInRoom = async (req: Request, res: Response) => {
         title,
         description: description ?? null,
         requiredSkills: requiredSkills ?? [],
+        minExperience: minExperience ? String(minExperience).trim() : null,
+        priorityThreshold: priorityThreshold ? parseInt(String(priorityThreshold), 10) : 70,
+        evaluationCriteria: evaluationCriteria ? String(evaluationCriteria).trim() : null,
         roomCode,
         livekitRoom,
         maxQueue: roomMaxQueue,
@@ -92,7 +112,7 @@ export const getWalkInRoomByCode = async (req: Request, res: Response) => {
     });
     if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
 
-    let myEntry = null;
+    let myEntry: any = null;
     let hasApplied = false;
     let queuePosition = null;
 
@@ -100,10 +120,21 @@ export const getWalkInRoomByCode = async (req: Request, res: Response) => {
       const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
       if (profile) {
         myEntry = await prisma.walkInQueueEntry.findUnique({
-          where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
+          where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } },
+          include: {
+            resume: { select: { id: true, name: true, filePath: true, atsScore: true } }
+          }
         });
         if (myEntry) {
           hasApplied = true;
+          const { minutesWaiting, agingBonus, priorityScore } = calculateRealTimeAging(myEntry.waitingSince, myEntry.skillScore);
+          myEntry = {
+            ...myEntry,
+            minutesWaiting,
+            agingBonus: myEntry.status === 'priority' ? myEntry.agingBonus : agingBonus,
+            effectivePriority: myEntry.status === 'priority' ? myEntry.priorityScore : priorityScore,
+          };
+
           const ahead = await prisma.walkInQueueEntry.count({
             where: { roomId: room.id, status: 'waiting', priorityScore: { gt: myEntry.priorityScore } }
           });
@@ -135,7 +166,11 @@ export const joinWalkInQueue = async (req: Request, res: Response) => {
 
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
-      include: { skills: { select: { name: true } } }
+      include: {
+        skills: { select: { name: true } },
+        experience: { select: { role: true, company: true, description: true } },
+        education: { select: { degree: true, institution: true } }
+      }
     });
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
 
@@ -156,32 +191,92 @@ export const joinWalkInQueue = async (req: Request, res: Response) => {
       });
     }
 
+    let cvText = '';
+    let linkedResumeId: string | null = resumeId ?? null;
+    let cvFileUrl: string | null = null;
+
+    // 1. If file uploaded directly with request
+    if (req.file) {
+      cvText = await extractTextFromCvBuffer(req.file.buffer, req.file.mimetype);
+      // Create a Resume record for permanence
+      try {
+        const createdResume = await prisma.resume.create({
+          data: {
+            jobSeekerProfileId: profile.id,
+            name: req.file.originalname || 'Walk-In CV',
+            filePath: '',
+            source: 'uploaded',
+            atsScore: null,
+            content: { rawText: cvText.slice(0, 5000), originalName: req.file.originalname }
+          }
+        });
+        linkedResumeId = createdResume.id;
+      } catch (resumeErr) {
+        console.warn('[WalkIn Resume Save Warning]', resumeErr);
+      }
+    } else if (linkedResumeId) {
+      // 2. If existing resume selected
+      const existingResume = await prisma.resume.findUnique({ where: { id: linkedResumeId } });
+      if (existingResume) {
+        cvFileUrl = existingResume.filePath || null;
+        if (typeof existingResume.content === 'object' && existingResume.content) {
+          cvText = (existingResume.content as any).rawText || JSON.stringify(existingResume.content);
+        }
+      }
+    }
+
+    // Candidate experience text from profile
     const candidateSkills = profile.skills.map(s => s.name);
-    const skillScore = computeSkillScore(candidateSkills, room.requiredSkills);
-    const priorityScore = computePriorityScore(skillScore, 0);
+    const candidateExpText = profile.experience
+      .map(e => `${e.role} at ${e.company}${e.description ? ` (${e.description})` : ''}`)
+      .join('; ');
+
+    // 3. AI Validation & Score Matrix Generation
+    const cvAnalysis = await evaluateCandidateCvAgainstRoom(
+      cvText,
+      candidateSkills,
+      candidateExpText,
+      {
+        title: room.title,
+        description: room.description,
+        requiredSkills: room.requiredSkills,
+        minExperience: room.minExperience,
+        evaluationCriteria: room.evaluationCriteria
+      }
+    );
+
+    const overallScore = cvAnalysis.overallScore;
+    const isPriority = overallScore >= (room.priorityThreshold ?? 70);
+    const initialStatus = isPriority ? 'priority' : 'waiting';
 
     const entry = await prisma.walkInQueueEntry.create({
       data: {
         roomId: room.id,
         jobSeekerProfileId: profile.id,
-        resumeId: resumeId ?? null,
-        skillScore,
-        priorityScore,
-        status: 'waiting',
+        resumeId: linkedResumeId,
+        cvFileUrl,
+        cvAnalysis: cvAnalysis as any,
+        skillScore: overallScore,
+        priorityScore: overallScore,
+        status: initialStatus,
         waitingSince: new Date(),
       }
     });
 
     // Queue position
     const ahead = await prisma.walkInQueueEntry.count({
-      where: { roomId: room.id, status: 'waiting', priorityScore: { gt: priorityScore } }
+      where: { roomId: room.id, status: 'waiting', priorityScore: { gt: overallScore } }
     });
 
     return res.status(201).json({
       success: true,
       entry,
+      cvAnalysis,
+      isPriority,
       queuePosition: ahead + 1,
-      message: `You are #${ahead + 1} in the queue`
+      message: isPriority
+        ? `⭐ Priority Shortlist! You match ${overallScore}% of room criteria.`
+        : `You are #${ahead + 1} in the queue with ${overallScore}% score.`
     });
   } catch (err) {
     console.error('[WalkIn] joinQueue', err);
@@ -248,7 +343,22 @@ export const getQueueByRoom = async (req: Request, res: Response) => {
       }
     });
 
-    return res.json({ success: true, room, queue });
+    // Calculate real-time dynamic aging for all queue entries
+    const enrichedQueue = queue.map((entry) => {
+      const { minutesWaiting, agingBonus, priorityScore } = calculateRealTimeAging(entry.waitingSince, entry.skillScore);
+      const effectivePriority = entry.status === 'priority'
+        ? entry.priorityScore
+        : priorityScore;
+
+      return {
+        ...entry,
+        minutesWaiting,
+        agingBonus: entry.status === 'priority' ? entry.agingBonus : agingBonus,
+        effectivePriority,
+      };
+    });
+
+    return res.json({ success: true, room, queue: enrichedQueue });
   } catch (err) {
     console.error('[WalkIn] getQueueByRoom error:', err);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -465,8 +575,16 @@ export const updateRoomSettings = async (req: Request, res: Response) => {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: 'Company context required' });
 
-    const { code } = req.params;
-    const { title, description, requiredSkills, maxQueue, status } = req.body;
+    const {
+      title,
+      description,
+      requiredSkills,
+      minExperience,
+      priorityThreshold,
+      evaluationCriteria,
+      maxQueue,
+      status
+    } = req.body;
 
     const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
     if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
@@ -477,6 +595,9 @@ export const updateRoomSettings = async (req: Request, res: Response) => {
     if (title) updateData.title = title.trim();
     if (description !== undefined) updateData.description = description ? description.trim() : null;
     if (requiredSkills && Array.isArray(requiredSkills)) updateData.requiredSkills = requiredSkills;
+    if (minExperience !== undefined) updateData.minExperience = minExperience ? String(minExperience).trim() : null;
+    if (priorityThreshold !== undefined) updateData.priorityThreshold = parseInt(String(priorityThreshold), 10) || 70;
+    if (evaluationCriteria !== undefined) updateData.evaluationCriteria = evaluationCriteria ? String(evaluationCriteria).trim() : null;
     if (maxQueue !== undefined) updateData.maxQueue = Math.min(Number(maxQueue), globalMax);
     if (status && ['OPEN', 'PAUSED', 'CLOSED'].includes(status)) updateData.status = status;
 

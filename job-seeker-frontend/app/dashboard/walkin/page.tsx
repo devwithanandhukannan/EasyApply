@@ -27,11 +27,25 @@ import { useGlassToast } from '@/app/components/GlassToastContainer';
 import Link from 'next/link';
 import { uploadResume } from '@/app/lib/resumeApi';
 
+export interface CvScoreMatrix {
+  overallScore: number;
+  skillScore: number;
+  experienceScore: number;
+  strengths: string[];
+  missingSkills: string[];
+  matchedSkills: string[];
+  summary: string;
+  recommendation: 'STRONG_MATCH' | 'GOOD_MATCH' | 'MODERATE_MATCH' | 'POOR_MATCH';
+}
+
 interface WalkInRoom {
   id: string;
   title: string;
   description: string | null;
   requiredSkills: string[];
+  minExperience?: string | null;
+  priorityThreshold?: number;
+  evaluationCriteria?: string | null;
   roomCode: string;
   livekitRoom: string;
   status: 'OPEN' | 'PAUSED' | 'CLOSED';
@@ -54,6 +68,10 @@ interface WalkInRoom {
     status: string;
     skillScore: number;
     priorityScore: number;
+    agingBonus?: number;
+    minutesWaiting?: number;
+    effectivePriority?: number;
+    cvAnalysis?: CvScoreMatrix | null;
     livekitToken?: string | null;
     waitingSince: string;
   } | null;
@@ -62,10 +80,13 @@ interface WalkInRoom {
 interface MyQueueEntry {
   id: string;
   roomId: string;
-  status: 'waiting' | 'interviewing' | 'done' | 'skipped';
+  status: 'waiting' | 'priority' | 'interviewing' | 'accepted' | 'done' | 'skipped' | 'rejected';
   skillScore: number;
   priorityScore: number;
   agingBonus: number;
+  minutesWaiting?: number;
+  effectivePriority?: number;
+  cvAnalysis?: CvScoreMatrix | null;
   livekitToken?: string | null;
   waitingSince: string;
   queuePosition: number;
@@ -75,6 +96,8 @@ interface MyQueueEntry {
     livekitRoom: string;
     status: 'OPEN' | 'PAUSED' | 'CLOSED';
     requiredSkills: string[];
+    minExperience?: string | null;
+    evaluationCriteria?: string | null;
     company: {
       name: string;
       logoUrl: string | null;
@@ -704,25 +727,44 @@ export default function WalkInRoomsPage() {
                             </span>
                           </div>
                         ) : (
-                          <div className="space-y-2.5">
+                          <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                              <div className="p-2 bg-black/40 rounded-xl border border-white/10">
-                                <div className="text-[10px] text-zinc-400 font-bold uppercase">Skill Score</div>
-                                <div className="font-extrabold text-indigo-400 text-sm">
-                                  {Math.round(appliedEntry?.skillScore ?? room.mySkillMatch ?? 0)}%
+                              <div className="p-2.5 bg-black/40 rounded-xl border border-white/10">
+                                <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">AI Match Score</div>
+                                <div className="font-black text-indigo-400 text-base">
+                                  {Math.round(appliedEntry?.cvAnalysis?.overallScore ?? appliedEntry?.skillScore ?? room.mySkillMatch ?? 0)}%
                                 </div>
                               </div>
-                              <div className="p-2 bg-black/40 rounded-xl border border-white/10">
-                                <div className="text-[10px] text-zinc-400 font-bold uppercase">Priority Score</div>
-                                <div className="font-extrabold text-emerald-400 text-sm">
-                                  {Math.round(appliedEntry?.priorityScore ?? 0)}
+                              <div className="p-2.5 bg-black/40 rounded-xl border border-white/10">
+                                <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Queue Priority</div>
+                                <div className="font-black text-emerald-400 text-base">
+                                  {Math.round(appliedEntry?.effectivePriority ?? appliedEntry?.priorityScore ?? 0)}
                                 </div>
                               </div>
                             </div>
+
+                            {/* Dynamic Aging Boost Pill */}
+                            <div className="px-3 py-2 rounded-xl bg-zinc-900/60 border border-zinc-800 flex items-center justify-between text-xs text-zinc-300">
+                              <span className="flex items-center gap-1.5 text-[11px]">
+                                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Waited {appliedEntry?.minutesWaiting ?? 0}m</span>
+                              </span>
+                              <span className="text-[11px] font-semibold text-amber-400">
+                                +{Math.round(appliedEntry?.agingBonus ?? 0)} aging pts boost
+                              </span>
+                            </div>
+
+                            {/* AI Summary Quote if present */}
+                            {appliedEntry?.cvAnalysis?.summary && (
+                              <p className="text-[11px] text-zinc-300 italic bg-indigo-950/20 p-2.5 rounded-lg border border-indigo-500/20 line-clamp-2">
+                                "{appliedEntry.cvAnalysis.summary}"
+                              </p>
+                            )}
+
                             <div className="flex items-center justify-between gap-2 pt-0.5">
                               <span className="text-[11px] font-medium text-zinc-300 flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-                                <span>{isPriority ? 'Priority • Waiting to be called' : 'Live in Queue • Waiting for call'}</span>
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>{isPriority ? '⭐ Priority Shortlisted' : 'Live in Queue • Waiting for recruiter'}</span>
                               </span>
                               <button
                                 onClick={() => handleLeaveQueue(room.roomCode)}
@@ -765,7 +807,7 @@ export default function WalkInRoomsPage() {
       {/* ─── JOIN QUEUE CONFIRMATION MODAL ────────────────────────────── */}
       {joinModalOpen && selectedRoom && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 sm:p-8 space-y-6 relative overflow-hidden shadow-2xl">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 sm:p-8 space-y-5 relative overflow-hidden shadow-2xl">
             <button
               onClick={() => setJoinModalOpen(false)}
               className="absolute top-5 right-5 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-900 transition-colors"
@@ -779,23 +821,39 @@ export default function WalkInRoomsPage() {
               </div>
               <h2 className="text-xl font-bold text-white">{selectedRoom.title}</h2>
               <p className="text-xs text-zinc-400">
-                You are about to enter the live priority queue for immediate evaluation.
+                Submit your CV to get scored with AI and placed into the priority walk-in queue.
               </p>
             </div>
 
-            {/* Required Skills match preview */}
-            {selectedRoom.requiredSkills.length > 0 && (
-              <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4 space-y-2">
-                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Required Skills for Scoring</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedRoom.requiredSkills.map((s, idx) => (
-                    <span key={idx} className="px-2.5 py-1 text-xs bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-lg font-medium">
-                      {s}
-                    </span>
-                  ))}
+            {/* Room Criteria & Requirements Box */}
+            <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-4 space-y-2.5 text-xs">
+              {selectedRoom.minExperience && (
+                <div>
+                  <span className="text-zinc-400 font-semibold">Min Experience: </span>
+                  <span className="text-white font-medium">{selectedRoom.minExperience}</span>
                 </div>
-              </div>
-            )}
+              )}
+
+              {selectedRoom.evaluationCriteria && (
+                <div>
+                  <span className="text-zinc-400 font-semibold">Evaluation Focus: </span>
+                  <span className="text-zinc-300">{selectedRoom.evaluationCriteria}</span>
+                </div>
+              )}
+
+              {selectedRoom.requiredSkills.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Required Skills</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedRoom.requiredSkills.map((s, idx) => (
+                      <span key={idx} className="px-2.5 py-0.5 text-xs bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-lg font-medium">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Resume / CV Selection & Upload */}
             <div className="space-y-2">

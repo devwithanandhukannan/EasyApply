@@ -81,16 +81,31 @@ interface SeekerProfile {
   }[];
 }
 
+export interface CvScoreMatrix {
+  overallScore: number;
+  skillScore: number;
+  experienceScore: number;
+  strengths: string[];
+  missingSkills: string[];
+  matchedSkills: string[];
+  summary: string;
+  recommendation: 'STRONG_MATCH' | 'GOOD_MATCH' | 'MODERATE_MATCH' | 'POOR_MATCH';
+}
+
 interface QueueEntry {
   id: string;
   status: 'waiting' | 'priority' | 'interviewing' | 'accepted' | 'done' | 'skipped' | 'rejected';
   skillScore: number;
   priorityScore: number;
   agingBonus: number;
+  minutesWaiting?: number;
+  effectivePriority?: number;
   waitingSince: string;
   livekitToken?: string | null;
   notes?: string | null;
   resumeId?: string | null;
+  cvFileUrl?: string | null;
+  cvAnalysis?: CvScoreMatrix | null;
   resume?: ResumeData | null;
   jobSeekerProfile: SeekerProfile;
 }
@@ -100,6 +115,9 @@ interface WalkInRoom {
   title: string;
   description: string | null;
   requiredSkills: string[];
+  minExperience?: string | null;
+  priorityThreshold?: number;
+  evaluationCriteria?: string | null;
   roomCode: string;
   livekitRoom: string;
   status: 'OPEN' | 'PAUSED' | 'CLOSED';
@@ -202,6 +220,9 @@ export default function CompanyWalkInKanbanPage() {
   // Create Room Form
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [minExperience, setMinExperience] = useState('');
+  const [priorityThreshold, setPriorityThreshold] = useState(70);
+  const [evaluationCriteria, setEvaluationCriteria] = useState('');
   const [skillInput, setSkillInput] = useState('');
   const [skills, setSkills] = useState<string[]>([]);
   const [maxQueue, setMaxQueue] = useState(25);
@@ -210,6 +231,9 @@ export default function CompanyWalkInKanbanPage() {
   // Settings Form
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editMinExperience, setEditMinExperience] = useState('');
+  const [editPriorityThreshold, setEditPriorityThreshold] = useState(70);
+  const [editEvaluationCriteria, setEditEvaluationCriteria] = useState('');
   const [editSkills, setEditSkills] = useState<string[]>([]);
   const [editSkillInput, setEditSkillInput] = useState('');
   const [editMaxQueue, setEditMaxQueue] = useState(25);
@@ -241,24 +265,21 @@ export default function CompanyWalkInKanbanPage() {
           setSelectedRoom(res.data.rooms[0]);
         }
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      showToast('Error', 'Failed to load walk-in rooms', 'danger');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchQueue = async (code: string) => {
+  const fetchQueue = async (roomCode: string) => {
     try {
-      const res = await api.get(`/walkin/rooms/${code}/queue`);
+      const res = await api.get(`/walkin/rooms/${roomCode}/queue`);
       if (res.data?.success) {
         setQueue(res.data.queue);
-        if (res.data.room) {
-          setSelectedRoom((prev) => (prev ? { ...prev, ...res.data.room } : res.data.room));
-        }
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      // silent
     }
   };
 
@@ -266,24 +287,18 @@ export default function CompanyWalkInKanbanPage() {
   const filteredQueue = useMemo(() => {
     return queue.filter((entry) => {
       // Search
-      if (search.trim()) {
-        const query = search.toLowerCase();
-        const name = entry.jobSeekerProfile.fullName.toLowerCase();
-        const email = entry.jobSeekerProfile.email.toLowerCase();
-        const skillMatch = entry.jobSeekerProfile.skills?.some((s) => s.name.toLowerCase().includes(query));
-        if (!name.includes(query) && !email.includes(query) && !skillMatch) {
-          return false;
-        }
-      }
+      const name = entry.jobSeekerProfile?.fullName?.toLowerCase() || '';
+      const email = entry.jobSeekerProfile?.email?.toLowerCase() || '';
+      const s = search.toLowerCase();
+      const matchSearch = !s || name.includes(s) || email.includes(s);
+
       // Min Skill Match
-      if (minSkillMatch > 0 && entry.skillScore < minSkillMatch) {
-        return false;
-      }
+      const matchScore = (entry.cvAnalysis?.overallScore ?? entry.skillScore) >= minSkillMatch;
+
       // Has CV Only
-      if (hasCvOnly && !entry.resume) {
-        return false;
-      }
-      return true;
+      const matchCv = !hasCvOnly || Boolean(entry.resume || entry.cvFileUrl || entry.cvAnalysis);
+
+      return matchSearch && matchScore && matchCv;
     });
   }, [queue, search, minSkillMatch, hasCvOnly]);
 
@@ -331,6 +346,9 @@ export default function CompanyWalkInKanbanPage() {
         title: title.trim(),
         description: description.trim() || null,
         requiredSkills: skills,
+        minExperience: minExperience.trim() || null,
+        priorityThreshold: Number(priorityThreshold) || 70,
+        evaluationCriteria: evaluationCriteria.trim() || null,
         maxQueue: Number(maxQueue),
       });
       if (res.data?.success) {
@@ -338,6 +356,9 @@ export default function CompanyWalkInKanbanPage() {
         setCreateModalOpen(false);
         setTitle('');
         setDescription('');
+        setMinExperience('');
+        setPriorityThreshold(70);
+        setEvaluationCriteria('');
         setSkills([]);
         await fetchRooms();
         setSelectedRoom(res.data.room);
@@ -353,6 +374,9 @@ export default function CompanyWalkInKanbanPage() {
     if (!selectedRoom) return;
     setEditTitle(selectedRoom.title);
     setEditDescription(selectedRoom.description || '');
+    setEditMinExperience(selectedRoom.minExperience || '');
+    setEditPriorityThreshold(selectedRoom.priorityThreshold || 70);
+    setEditEvaluationCriteria(selectedRoom.evaluationCriteria || '');
     setEditSkills(selectedRoom.requiredSkills || []);
     setEditMaxQueue(selectedRoom.maxQueue || 25);
     setSettingsModalOpen(true);
@@ -367,6 +391,9 @@ export default function CompanyWalkInKanbanPage() {
         title: editTitle.trim(),
         description: editDescription.trim() || null,
         requiredSkills: editSkills,
+        minExperience: editMinExperience.trim() || null,
+        priorityThreshold: Number(editPriorityThreshold) || 70,
+        evaluationCriteria: editEvaluationCriteria.trim() || null,
         maxQueue: Number(editMaxQueue),
       });
       if (res.data?.success) {
@@ -942,31 +969,76 @@ export default function CompanyWalkInKanbanPage() {
                                   </div>
                                 </div>
 
-                                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/10 text-indigo-400 rounded shrink-0">
-                                  {Math.round(entry.skillScore)}%
-                                </span>
+                                {(() => {
+                                  const displayScore = Math.round(entry.cvAnalysis?.overallScore ?? entry.skillScore);
+                                  const scoreColor =
+                                    displayScore >= 75
+                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                      : displayScore >= 55
+                                      ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
+                                      : displayScore >= 40
+                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+
+                                  return (
+                                    <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md border shrink-0 ${scoreColor}`}>
+                                      {displayScore}%
+                                    </span>
+                                  );
+                                })()}
                               </div>
 
-                              {/* Scores & Resume Pill */}
-                              <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-900">
-                                <span>
-                                  Priority: <strong className="text-emerald-400 font-semibold">{Math.round(entry.priorityScore)}</strong>
-                                </span>
+                              {/* AI Recommendation Pill if present */}
+                              {entry.cvAnalysis?.recommendation && (
+                                <div className="flex items-center gap-1.5">
+                                  {entry.cvAnalysis.recommendation === 'STRONG_MATCH' && (
+                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full flex items-center gap-1">
+                                      <span>⭐</span> Strong Match
+                                    </span>
+                                  )}
+                                  {entry.cvAnalysis.recommendation === 'GOOD_MATCH' && (
+                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-full flex items-center gap-1">
+                                      <span>✓</span> Good Fit
+                                    </span>
+                                  )}
+                                  {entry.cvAnalysis.recommendation === 'MODERATE_MATCH' && (
+                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full flex items-center gap-1">
+                                      <span>⚠</span> Moderate
+                                    </span>
+                                  )}
+                                </div>
+                              )}
 
-                                {entry.resume ? (
+                              {/* Scores & Resume Pill & Dynamic Aging */}
+                              <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-900 flex-wrap gap-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span>
+                                    Priority: <strong className="text-emerald-400 font-semibold">{Math.round(entry.effectivePriority ?? entry.priorityScore)}</strong>
+                                  </span>
+                                  {(entry.agingBonus > 0 || (entry.minutesWaiting ?? 0) > 0) && (
+                                    <span
+                                      className="px-1.5 py-0.2 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded text-[9px]"
+                                      title="Dynamic anti-starvation boost"
+                                    >
+                                      ⏱ {entry.minutesWaiting ?? 0}m (+{Math.round(entry.agingBonus ?? 0)} pts)
+                                    </span>
+                                  )}
+                                </div>
+
+                                {entry.resume || entry.cvFileUrl || entry.cvAnalysis ? (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       openCandidateDrawer(entry);
                                     }}
                                     className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 rounded border border-zinc-800 transition-colors"
-                                    title="View CV"
+                                    title="View CV & AI Score Matrix"
                                   >
                                     <FileText className="w-3 h-3" />
-                                    <span>CV Attached</span>
+                                    <span>AI Matrix</span>
                                   </button>
                                 ) : (
-                                  <span className="text-zinc-600">No CV</span>
+                                  <span className="text-zinc-600">Profile Only</span>
                                 )}
                               </div>
 
@@ -1263,23 +1335,124 @@ export default function CompanyWalkInKanbanPage() {
               </div>
             </div>
 
-            {/* Score Cards */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
-                <div className="text-[10px] text-zinc-500 font-bold uppercase">AI Skill Match</div>
-                <div className="text-xl font-black text-indigo-400">{Math.round(selectedCandidate.skillScore)}%</div>
-              </div>
-              <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
-                <div className="text-[10px] text-zinc-500 font-bold uppercase">Priority Score</div>
-                <div className="text-xl font-black text-emerald-400">{Math.round(selectedCandidate.priorityScore)}</div>
-              </div>
-              <div className="bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
-                <div className="text-[10px] text-zinc-500 font-bold uppercase">ATS Resume Score</div>
-                <div className="text-xl font-black text-amber-400">
-                  {selectedCandidate.resume?.atsScore ? `${selectedCandidate.resume.atsScore}/100` : 'N/A'}
+            {/* ─── AI SCORE MATRIX & GAUGES ───────────────────────────── */}
+            {(() => {
+              const matrix = selectedCandidate.cvAnalysis;
+              const overall = Math.round(matrix?.overallScore ?? selectedCandidate.skillScore);
+              const skillScore = Math.round(matrix?.skillScore ?? selectedCandidate.skillScore);
+              const expScore = Math.round(matrix?.experienceScore ?? 65);
+              const effectivePrio = Math.round(selectedCandidate.effectivePriority ?? selectedCandidate.priorityScore);
+              const minutes = selectedCandidate.minutesWaiting ?? Math.round((Date.now() - new Date(selectedCandidate.waitingSince).getTime()) / 60000);
+              const agingBonus = selectedCandidate.agingBonus ?? 0;
+
+              return (
+                <div className="space-y-4">
+                  {/* Gauge Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
+                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Overall Fit</div>
+                      <div className="text-2xl font-black text-emerald-400">{overall}%</div>
+                    </div>
+                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
+                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Skill Match</div>
+                      <div className="text-2xl font-black text-indigo-400">{skillScore}%</div>
+                    </div>
+                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
+                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Exp Match</div>
+                      <div className="text-2xl font-black text-purple-400">{expScore}%</div>
+                    </div>
+                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
+                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Effective Priority</div>
+                      <div className="text-2xl font-black text-amber-400">{effectivePrio}</div>
+                    </div>
+                  </div>
+
+                  {/* Anti-Starvation Dynamic Aging Box */}
+                  <div className="p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-800/80 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-zinc-300 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Dynamic Anti-Starvation Aging</span>
+                      </span>
+                      <span className="text-[11px] text-amber-400 font-semibold">
+                        +0.75 pts / min waiting
+                      </span>
+                    </div>
+                    <div className="text-xs text-zinc-400 grid grid-cols-3 gap-2 text-center bg-black/40 p-2.5 rounded-lg border border-zinc-800/50">
+                      <div>
+                        <div className="text-[10px] text-zinc-500">Base Match</div>
+                        <div className="font-bold text-white">{overall} pts</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-zinc-500">Waited ({minutes}m)</div>
+                        <div className="font-bold text-amber-400">+{Math.round(agingBonus)} pts boost</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-zinc-500">Queue Priority</div>
+                        <div className="font-bold text-emerald-400">{effectivePrio} pts</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI Executive Summary & Strengths/Gaps */}
+                  {matrix && (
+                    <div className="space-y-3 bg-indigo-950/20 p-4 rounded-xl border border-indigo-500/20">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>AI Screening Matrix</span>
+                        </span>
+                        {matrix.recommendation && (
+                          <span className="px-2 py-0.5 text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-md uppercase">
+                            {matrix.recommendation.replace('_', ' ')}
+                          </span>
+                        )}
+                      </div>
+
+                      {matrix.summary && (
+                        <p className="text-xs text-zinc-300 leading-relaxed italic bg-black/30 p-2.5 rounded-lg">
+                          "{matrix.summary}"
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {matrix.strengths?.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Key Strengths
+                            </span>
+                            <ul className="space-y-1 text-xs text-zinc-300">
+                              {matrix.strengths.map((st, i) => (
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <span className="text-emerald-400 shrink-0">•</span>
+                                  <span>{st}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {matrix.missingSkills?.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> Skills Gaps / Missing
+                            </span>
+                            <ul className="space-y-1 text-xs text-zinc-300">
+                              {matrix.missingSkills.map((ms, i) => (
+                                <li key={i} className="flex items-start gap-1.5">
+                                  <span className="text-amber-400 shrink-0">•</span>
+                                  <span>{ms}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Resume / CV Attachment Section */}
             <div className="bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/80 space-y-3">
@@ -1288,9 +1461,9 @@ export default function CompanyWalkInKanbanPage() {
                   <FileText className="w-4 h-4 text-indigo-400" />
                   <span className="text-xs font-bold text-white">Candidate Resume / CV</span>
                 </div>
-                {selectedCandidate.resume?.filePath && (
+                {(selectedCandidate.resume?.filePath || selectedCandidate.cvFileUrl) && (
                   <a
-                    href={selectedCandidate.resume.filePath}
+                    href={selectedCandidate.resume?.filePath || selectedCandidate.cvFileUrl || '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-indigo-600/20"
@@ -1306,7 +1479,7 @@ export default function CompanyWalkInKanbanPage() {
                   <div>Submitted for Walk-In Evaluation</div>
                 </div>
               ) : (
-                <p className="text-xs text-zinc-500 italic">No direct resume PDF uploaded with this queue entry.</p>
+                <p className="text-xs text-zinc-500 italic">Profile skills & experience used for evaluation.</p>
               )}
             </div>
 
@@ -1397,20 +1570,52 @@ export default function CompanyWalkInKanbanPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Participant Limit (Max Queue)</label>
+                  <input
+                    type="number"
+                    value={editMaxQueue}
+                    onChange={(e) => setEditMaxQueue(Number(e.target.value))}
+                    min={1}
+                    max={200}
+                    required
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Priority Threshold (%)</label>
+                  <input
+                    type="number"
+                    value={editPriorityThreshold}
+                    onChange={(e) => setEditPriorityThreshold(Number(e.target.value))}
+                    min={30}
+                    max={100}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Participant / Queue Limit (Max Capacity)</label>
+                <label className="text-xs font-semibold text-zinc-300">Minimum Experience Requirement</label>
                 <input
-                  type="number"
-                  value={editMaxQueue}
-                  onChange={(e) => setEditMaxQueue(Number(e.target.value))}
-                  min={1}
-                  max={200}
-                  required
+                  type="text"
+                  placeholder="e.g. 2+ years in frontend or fullstack"
+                  value={editMinExperience}
+                  onChange={(e) => setEditMinExperience(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
                 />
-                <p className="text-[11px] text-zinc-500">
-                  Controls how many candidates can simultaneously wait in queue.
-                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-300">Custom Evaluation Criteria (for AI)</label>
+                <textarea
+                  placeholder="e.g. Strong React/Next.js skills, practical experience building APIs and PostgreSQL databases..."
+                  value={editEvaluationCriteria}
+                  onChange={(e) => setEditEvaluationCriteria(e.target.value)}
+                  rows={2}
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none resize-none"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -1418,7 +1623,7 @@ export default function CompanyWalkInKanbanPage() {
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
-                  rows={3}
+                  rows={2}
                   className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none resize-none"
                 />
               </div>
@@ -1473,15 +1678,50 @@ export default function CompanyWalkInKanbanPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Participant Limit</label>
+                  <input
+                    type="number"
+                    value={maxQueue}
+                    onChange={(e) => setMaxQueue(Number(e.target.value))}
+                    min={1}
+                    max={200}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300">Priority Threshold (%)</label>
+                  <input
+                    type="number"
+                    value={priorityThreshold}
+                    onChange={(e) => setPriorityThreshold(Number(e.target.value))}
+                    min={30}
+                    max={100}
+                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Participant Limit (Max Queue)</label>
+                <label className="text-xs font-semibold text-zinc-300">Minimum Experience Level</label>
                 <input
-                  type="number"
-                  value={maxQueue}
-                  onChange={(e) => setMaxQueue(Number(e.target.value))}
-                  min={1}
-                  max={200}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  type="text"
+                  placeholder="e.g. 2+ years / Mid-level"
+                  value={minExperience}
+                  onChange={(e) => setMinExperience(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-300">Custom Evaluation Criteria (for AI)</label>
+                <textarea
+                  placeholder="e.g. Strong problem solving, production Next.js experience, Docker or cloud basics..."
+                  value={evaluationCriteria}
+                  onChange={(e) => setEvaluationCriteria(e.target.value)}
+                  rows={2}
+                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none resize-none"
                 />
               </div>
 

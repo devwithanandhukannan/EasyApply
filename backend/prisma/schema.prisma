@@ -862,18 +862,21 @@ enum WalkInRoomStatus {
 }
 
 model WalkInRoom {
-  id             String           @id @default(uuid())
-  companyId      String
-  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  title          String
-  description    String?          @db.Text
-  requiredSkills String[]         @default([])
-  roomCode       String           @unique
-  livekitRoom    String           @unique
-  status         WalkInRoomStatus @default(OPEN)
-  maxQueue       Int              @default(50)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                 String           @id @default(uuid())
+  companyId          String
+  company            Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?          @db.Text
+  requiredSkills     String[]         @default([])
+  minExperience      String?
+  priorityThreshold  Int              @default(70)
+  evaluationCriteria String?          @db.Text
+  roomCode           String           @unique
+  livekitRoom        String           @unique
+  status             WalkInRoomStatus @default(OPEN)
+  maxQueue           Int              @default(50)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   queue WalkInQueueEntry[]
 
@@ -890,6 +893,8 @@ model WalkInQueueEntry {
   jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
   resumeId           String?
   resume             Resume?          @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  cvFileUrl          String?
+  cvAnalysis         Json?
   skillScore         Float            @default(0)
   priorityScore      Float            @default(0)
   waitingSince       DateTime         @default(now())

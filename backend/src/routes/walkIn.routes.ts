@@ -11,6 +11,8 @@ import {
   listDiscoverableSeekers, getDiscoverableSeekerProfile
 } from '../controllers/seekerDiscovery.controller.ts';
 
+import { upload } from '../utils/multer.ts';
+
 const router = Router();
 
 // ─── WALK-IN ROOMS ────────────────────────────────────────────────────────────
@@ -34,7 +36,7 @@ router.put('/queue/:entryId/priority', authenticateCompany, updateQueueEntryPrio
 
 // Seeker — join, check position, list my queues, leave queue
 router.get('/my-queues', authenticateToken, getMyWalkInQueues);
-router.post('/rooms/:code/join', authenticateToken, joinWalkInQueue);
+router.post('/rooms/:code/join', authenticateToken, upload.single('cv'), joinWalkInQueue);
 router.get('/rooms/:code/position', authenticateToken, getSeekerQueuePosition);
 router.post('/rooms/:code/leave', authenticateToken, leaveWalkInQueue);
 

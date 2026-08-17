@@ -10467,6 +10467,163 @@ import { Router as Router6 } from "express";
 import { AccessToken as AccessToken2 } from "livekit-server-sdk";
 
 // src/services/walkInQueue.service.ts
+import mammoth3 from "mammoth";
+import PDFParser2 from "pdf2json";
+import Groq3 from "groq-sdk";
+var groq2 = process.env.GROQ_API_KEY ? new Groq3({ apiKey: process.env.GROQ_API_KEY }) : null;
+var MODEL2 = "llama-3.3-70b-versatile";
+var extractTextFromCvBuffer = (buffer, mimetype) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (mimetype === "application/pdf") {
+        const pdfParser = new PDFParser2(null, 1);
+        pdfParser.on("pdfParser_dataError", (err) => {
+          console.warn("[PDF Parse Error]", err?.parserError);
+          resolve("");
+        });
+        pdfParser.on("pdfParser_dataReady", () => {
+          try {
+            const raw = pdfParser.getRawTextContent();
+            const cleaned = decodeURIComponent(raw || "").replace(/\r\n/g, "\n");
+            resolve(cleaned);
+          } catch {
+            const fallback = pdfParser.getRawTextContent() || "";
+            resolve(fallback);
+          }
+        });
+        pdfParser.parseBuffer(buffer);
+      } else if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || mimetype === "application/msword") {
+        const result = await mammoth3.extractRawText({ buffer });
+        resolve(result.value || "");
+      } else {
+        resolve(buffer.toString("utf-8"));
+      }
+    } catch (err) {
+      console.warn("[CV Text Extract Error]", err);
+      resolve("");
+    }
+  });
+};
+async function evaluateCandidateCvAgainstRoom(cvText, candidateSkills, candidateExperienceText, room) {
+  const reqSkills = room.requiredSkills || [];
+  const reqExp = room.minExperience || "Not explicitly specified";
+  const evalCriteria = room.evaluationCriteria || room.description || "Evaluate overall role alignment";
+  const normalizedReq = reqSkills.map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const normalizedCand = [
+    ...candidateSkills.map((s) => s.toLowerCase()),
+    ...cvText.toLowerCase().match(/\b[a-z0-9+#.]{2,20}\b/g) || []
+  ];
+  const matchedSkills = [];
+  const missingSkills = [];
+  for (const r of reqSkills) {
+    const rLow = r.trim().toLowerCase();
+    if (normalizedCand.some((c) => c.includes(rLow) || rLow.includes(c))) {
+      matchedSkills.push(r.trim());
+    } else {
+      missingSkills.push(r.trim());
+    }
+  }
+  let heuristicSkillScore = reqSkills.length > 0 ? Math.round(matchedSkills.length / reqSkills.length * 100) : 60;
+  let heuristicExpScore = 60;
+  let heuristicOverall = Math.round(heuristicSkillScore * 0.7 + heuristicExpScore * 0.3);
+  if (!groq2 || !cvText.trim() && candidateSkills.length === 0) {
+    return {
+      overallScore: Math.max(10, Math.min(100, heuristicOverall)),
+      skillScore: heuristicSkillScore,
+      experienceScore: heuristicExpScore,
+      strengths: matchedSkills.length > 0 ? [`Matches required skills: ${matchedSkills.join(", ")}`] : ["General profile submitted"],
+      missingSkills,
+      matchedSkills,
+      summary: `Candidate matches ${matchedSkills.length} of ${reqSkills.length} required skills.`,
+      recommendation: heuristicOverall >= 75 ? "STRONG_MATCH" : heuristicOverall >= 55 ? "GOOD_MATCH" : heuristicOverall >= 40 ? "MODERATE_MATCH" : "POOR_MATCH"
+    };
+  }
+  try {
+    const trimmedCv = (cvText || "").slice(0, 4500);
+    const prompt = `You are a precision technical recruiter and candidate screening engine.
+Evaluate this candidate's CV against the Walk-In Room requirements and produce a structured Score Matrix (0 to 100 scale).
+
+WALK-IN ROOM REQUIREMENTS:
+- Role Title: ${room.title}
+- Required Skills: ${reqSkills.join(", ") || "General Engineering"}
+- Experience Level Required: ${reqExp}
+- Special Criteria / Context: ${evalCriteria}
+
+CANDIDATE PROFILE & CV CONTENT:
+- Explicit Profile Skills: ${candidateSkills.join(", ")}
+- Work History Summary: ${candidateExperienceText || "From CV"}
+- CV Text Content:
+${trimmedCv || "No raw CV text provided; evaluate based on Profile skills and history."}
+
+CRITERIA FOR SCORING (0-100):
+1. skillScore: How accurately candidate skills cover required room skills (0-100).
+2. experienceScore: Seniority and project relevance against role requirement (0-100).
+3. overallScore: Weighted overall fit (0-100).
+4. strengths: 2-3 key bullet points on what makes them a good fit.
+5. missingSkills: List of any missing mandatory skills or experience gaps.
+6. matchedSkills: List of required skills successfully found in their profile/CV.
+7. recommendation: One of ["STRONG_MATCH", "GOOD_MATCH", "MODERATE_MATCH", "POOR_MATCH"].
+8. summary: 2-sentence concise executive summary.
+
+Return ONLY a valid JSON object matching this structure:
+{
+  "overallScore": 85,
+  "skillScore": 90,
+  "experienceScore": 80,
+  "strengths": ["Strong React and TypeScript project background", "3+ years building REST APIs"],
+  "missingSkills": ["Docker containerization"],
+  "matchedSkills": ["React", "TypeScript", "Node.js"],
+  "recommendation": "STRONG_MATCH",
+  "summary": "Candidate shows strong expertise in required web technologies with relevant production experience."
+}`;
+    const completion = await groq2.chat.completions.create({
+      model: MODEL2,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      response_format: { type: "json_object" }
+    });
+    const content = completion.choices[0]?.message?.content;
+    if (content) {
+      const parsed = JSON.parse(content);
+      return {
+        overallScore: Math.min(100, Math.max(0, Math.round(parsed.overallScore ?? heuristicOverall))),
+        skillScore: Math.min(100, Math.max(0, Math.round(parsed.skillScore ?? heuristicSkillScore))),
+        experienceScore: Math.min(100, Math.max(0, Math.round(parsed.experienceScore ?? heuristicExpScore))),
+        strengths: Array.isArray(parsed.strengths) ? parsed.strengths : [`Strong background in ${matchedSkills.join(", ")}`],
+        missingSkills: Array.isArray(parsed.missingSkills) ? parsed.missingSkills : missingSkills,
+        matchedSkills: Array.isArray(parsed.matchedSkills) ? parsed.matchedSkills : matchedSkills,
+        summary: parsed.summary || `Evaluated against ${room.title} criteria.`,
+        recommendation: parsed.recommendation || (parsed.overallScore >= 75 ? "STRONG_MATCH" : "GOOD_MATCH")
+      };
+    }
+  } catch (aiErr) {
+    console.error("[AI Walk-In Evaluation Error]", aiErr);
+  }
+  return {
+    overallScore: heuristicOverall,
+    skillScore: heuristicSkillScore,
+    experienceScore: heuristicExpScore,
+    strengths: matchedSkills.length > 0 ? [`Demonstrates knowledge of ${matchedSkills.join(", ")}`] : ["Submitted profile"],
+    missingSkills,
+    matchedSkills,
+    summary: `Candidate matches ${matchedSkills.length} of ${reqSkills.length} required skills.`,
+    recommendation: heuristicOverall >= 75 ? "STRONG_MATCH" : heuristicOverall >= 55 ? "GOOD_MATCH" : heuristicOverall >= 40 ? "MODERATE_MATCH" : "POOR_MATCH"
+  };
+}
+var AGING_RATE_PER_MINUTE = 0.75;
+var MAX_AGING_BONUS = 50;
+function calculateRealTimeAging(waitingSince, baseScore) {
+  const waitingDate = new Date(waitingSince);
+  const now = /* @__PURE__ */ new Date();
+  const minutesWaiting = Math.max(0, (now.getTime() - waitingDate.getTime()) / 6e4);
+  const agingBonus = Math.min(minutesWaiting * AGING_RATE_PER_MINUTE, MAX_AGING_BONUS);
+  const priorityScore = Math.round((baseScore + agingBonus) * 10) / 10;
+  return {
+    minutesWaiting: Math.round(minutesWaiting),
+    agingBonus: Math.round(agingBonus * 10) / 10,
+    priorityScore
+  };
+}
 function computeSkillScore(candidateSkills, requiredSkills) {
   if (!requiredSkills.length) return 50;
   const normalizedReq = requiredSkills.map((s) => s.trim().toLowerCase());
@@ -10477,28 +10634,22 @@ function computeSkillScore(candidateSkills, requiredSkills) {
   }
   return Math.round(matches / normalizedReq.length * 100);
 }
-function computePriorityScore(skillScore, agingBonus) {
-  return skillScore + Math.min(agingBonus, 30);
-}
 async function applyAgingToQueue(roomId) {
   const waitingEntries = await prisma.walkInQueueEntry.findMany({
     where: { roomId, status: "waiting" },
-    select: { id: true, waitingSince: true, skillScore: true, agingBonus: true }
+    select: { id: true, waitingSince: true, skillScore: true }
   });
-  const now = /* @__PURE__ */ new Date();
   const updates = waitingEntries.map((entry) => {
-    const minutesWaiting = (now.getTime() - new Date(entry.waitingSince).getTime()) / 6e4;
-    const newAgingBonus = minutesWaiting * 0.5;
-    const newPriorityScore = computePriorityScore(entry.skillScore, newAgingBonus);
+    const { agingBonus, priorityScore } = calculateRealTimeAging(entry.waitingSince, entry.skillScore);
     return prisma.walkInQueueEntry.update({
       where: { id: entry.id },
-      data: { agingBonus: newAgingBonus, priorityScore: newPriorityScore }
+      data: { agingBonus, priorityScore }
     });
   });
   await Promise.allSettled(updates);
 }
 function startAgingInterval(roomId) {
-  return setInterval(() => applyAgingToQueue(roomId), 6e4);
+  return setInterval(() => applyAgingToQueue(roomId), 45e3);
 }
 var agingIntervals = /* @__PURE__ */ new Map();
 function ensureAgingRunning(roomId) {
@@ -10530,7 +10681,15 @@ var createWalkInRoom = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { title, description, requiredSkills, maxQueue } = req.body;
+    const {
+      title,
+      description,
+      requiredSkills,
+      minExperience,
+      priorityThreshold,
+      evaluationCriteria,
+      maxQueue
+    } = req.body;
     if (!title) return res.status(400).json({ success: false, message: "title is required" });
     const globalMax = await getWalkInQueueMax();
     const roomMaxQueue = Math.min(maxQueue ?? 50, globalMax);
@@ -10548,6 +10707,9 @@ var createWalkInRoom = async (req, res) => {
         title,
         description: description ?? null,
         requiredSkills: requiredSkills ?? [],
+        minExperience: minExperience ? String(minExperience).trim() : null,
+        priorityThreshold: priorityThreshold ? parseInt(String(priorityThreshold), 10) : 70,
+        evaluationCriteria: evaluationCriteria ? String(evaluationCriteria).trim() : null,
         roomCode,
         livekitRoom,
         maxQueue: roomMaxQueue,
@@ -10577,10 +10739,10 @@ var listWalkInRooms = async (req, res) => {
 };
 var getWalkInRoomByCode = async (req, res) => {
   try {
-    const { code } = req.params;
+    const { code: code2 } = req.params;
     const userId = req.user?.userId;
     const room = await prisma.walkInRoom.findUnique({
-      where: { roomCode: code.toUpperCase() },
+      where: { roomCode: code2.toUpperCase() },
       include: {
         company: { select: { name: true, logoUrl: true, industry: true } },
         _count: { select: { queue: true } }
@@ -10594,10 +10756,20 @@ var getWalkInRoomByCode = async (req, res) => {
       const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
       if (profile) {
         myEntry = await prisma.walkInQueueEntry.findUnique({
-          where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
+          where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } },
+          include: {
+            resume: { select: { id: true, name: true, filePath: true, atsScore: true } }
+          }
         });
         if (myEntry) {
           hasApplied = true;
+          const { minutesWaiting, agingBonus, priorityScore } = calculateRealTimeAging(myEntry.waitingSince, myEntry.skillScore);
+          myEntry = {
+            ...myEntry,
+            minutesWaiting,
+            agingBonus: myEntry.status === "priority" ? myEntry.agingBonus : agingBonus,
+            effectivePriority: myEntry.status === "priority" ? myEntry.priorityScore : priorityScore
+          };
           const ahead = await prisma.walkInQueueEntry.count({
             where: { roomId: room.id, status: "waiting", priorityScore: { gt: myEntry.priorityScore } }
           });
@@ -10613,10 +10785,10 @@ var getWalkInRoomByCode = async (req, res) => {
 var joinWalkInQueue = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { code } = req.params;
+    const { code: code2 } = req.params;
     const { resumeId } = req.body;
     const room = await prisma.walkInRoom.findUnique({
-      where: { roomCode: code.toUpperCase() },
+      where: { roomCode: code2.toUpperCase() },
       include: { _count: { select: { queue: { where: { status: "waiting" } } } } }
     });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
@@ -10624,7 +10796,11 @@ var joinWalkInQueue = async (req, res) => {
     if (room._count.queue >= room.maxQueue) return res.status(400).json({ success: false, message: "Queue is full. Please try again later." });
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
-      include: { skills: { select: { name: true } } }
+      include: {
+        skills: { select: { name: true } },
+        experience: { select: { role: true, company: true, description: true } },
+        education: { select: { degree: true, institution: true } }
+      }
     });
     if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
     const existing = await prisma.walkInQueueEntry.findUnique({
@@ -10642,28 +10818,75 @@ var joinWalkInQueue = async (req, res) => {
         queuePosition: ahead2 + 1
       });
     }
+    let cvText = "";
+    let linkedResumeId = resumeId ?? null;
+    let cvFileUrl = null;
+    if (req.file) {
+      cvText = await extractTextFromCvBuffer(req.file.buffer, req.file.mimetype);
+      try {
+        const createdResume = await prisma.resume.create({
+          data: {
+            jobSeekerProfileId: profile.id,
+            name: req.file.originalname || "Walk-In CV",
+            filePath: "",
+            source: "uploaded",
+            atsScore: null,
+            content: { rawText: cvText.slice(0, 5e3), originalName: req.file.originalname }
+          }
+        });
+        linkedResumeId = createdResume.id;
+      } catch (resumeErr) {
+        console.warn("[WalkIn Resume Save Warning]", resumeErr);
+      }
+    } else if (linkedResumeId) {
+      const existingResume = await prisma.resume.findUnique({ where: { id: linkedResumeId } });
+      if (existingResume) {
+        cvFileUrl = existingResume.filePath || null;
+        if (typeof existingResume.content === "object" && existingResume.content) {
+          cvText = existingResume.content.rawText || JSON.stringify(existingResume.content);
+        }
+      }
+    }
     const candidateSkills = profile.skills.map((s) => s.name);
-    const skillScore = computeSkillScore(candidateSkills, room.requiredSkills);
-    const priorityScore = computePriorityScore(skillScore, 0);
+    const candidateExpText = profile.experience.map((e) => `${e.role} at ${e.company}${e.description ? ` (${e.description})` : ""}`).join("; ");
+    const cvAnalysis = await evaluateCandidateCvAgainstRoom(
+      cvText,
+      candidateSkills,
+      candidateExpText,
+      {
+        title: room.title,
+        description: room.description,
+        requiredSkills: room.requiredSkills,
+        minExperience: room.minExperience,
+        evaluationCriteria: room.evaluationCriteria
+      }
+    );
+    const overallScore = cvAnalysis.overallScore;
+    const isPriority = overallScore >= (room.priorityThreshold ?? 70);
+    const initialStatus = isPriority ? "priority" : "waiting";
     const entry = await prisma.walkInQueueEntry.create({
       data: {
         roomId: room.id,
         jobSeekerProfileId: profile.id,
-        resumeId: resumeId ?? null,
-        skillScore,
-        priorityScore,
-        status: "waiting",
+        resumeId: linkedResumeId,
+        cvFileUrl,
+        cvAnalysis,
+        skillScore: overallScore,
+        priorityScore: overallScore,
+        status: initialStatus,
         waitingSince: /* @__PURE__ */ new Date()
       }
     });
     const ahead = await prisma.walkInQueueEntry.count({
-      where: { roomId: room.id, status: "waiting", priorityScore: { gt: priorityScore } }
+      where: { roomId: room.id, status: "waiting", priorityScore: { gt: overallScore } }
     });
     return res.status(201).json({
       success: true,
       entry,
+      cvAnalysis,
+      isPriority,
       queuePosition: ahead + 1,
-      message: `You are #${ahead + 1} in the queue`
+      message: isPriority ? `\u2B50 Priority Shortlist! You match ${overallScore}% of room criteria.` : `You are #${ahead + 1} in the queue with ${overallScore}% score.`
     });
   } catch (err) {
     console.error("[WalkIn] joinQueue", err);
@@ -10674,9 +10897,9 @@ var getQueueByRoom = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { code } = req.params;
+    const { code: code2 } = req.params;
     const room = await prisma.walkInRoom.findFirst({
-      where: { roomCode: code.toUpperCase(), companyId },
+      where: { roomCode: code2.toUpperCase(), companyId },
       include: {
         _count: {
           select: { queue: true }
@@ -10724,7 +10947,17 @@ var getQueueByRoom = async (req, res) => {
         }
       }
     });
-    return res.json({ success: true, room, queue });
+    const enrichedQueue = queue.map((entry) => {
+      const { minutesWaiting, agingBonus, priorityScore } = calculateRealTimeAging(entry.waitingSince, entry.skillScore);
+      const effectivePriority = entry.status === "priority" ? entry.priorityScore : priorityScore;
+      return {
+        ...entry,
+        minutesWaiting,
+        agingBonus: entry.status === "priority" ? entry.agingBonus : agingBonus,
+        effectivePriority
+      };
+    });
+    return res.json({ success: true, room, queue: enrichedQueue });
   } catch (err) {
     console.error("[WalkIn] getQueueByRoom error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
@@ -10734,9 +10967,9 @@ var callNextCandidate = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { code } = req.params;
+    const { code: code2 } = req.params;
     const { entryId } = req.body || {};
-    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
+    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code2.toUpperCase(), companyId } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     let targetEntry;
     if (entryId) {
@@ -10897,8 +11130,16 @@ var updateRoomSettings = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { code } = req.params;
-    const { title, description, requiredSkills, maxQueue, status } = req.body;
+    const {
+      title,
+      description,
+      requiredSkills,
+      minExperience,
+      priorityThreshold,
+      evaluationCriteria,
+      maxQueue,
+      status
+    } = req.body;
     const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const globalMax = await getWalkInQueueMax();
@@ -10906,6 +11147,9 @@ var updateRoomSettings = async (req, res) => {
     if (title) updateData.title = title.trim();
     if (description !== void 0) updateData.description = description ? description.trim() : null;
     if (requiredSkills && Array.isArray(requiredSkills)) updateData.requiredSkills = requiredSkills;
+    if (minExperience !== void 0) updateData.minExperience = minExperience ? String(minExperience).trim() : null;
+    if (priorityThreshold !== void 0) updateData.priorityThreshold = parseInt(String(priorityThreshold), 10) || 70;
+    if (evaluationCriteria !== void 0) updateData.evaluationCriteria = evaluationCriteria ? String(evaluationCriteria).trim() : null;
     if (maxQueue !== void 0) updateData.maxQueue = Math.min(Number(maxQueue), globalMax);
     if (status && ["OPEN", "PAUSED", "CLOSED"].includes(status)) updateData.status = status;
     const updated = await prisma.walkInRoom.update({
@@ -10924,11 +11168,11 @@ var updateRoomStatus = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { code } = req.params;
+    const { code: code2 } = req.params;
     const { status } = req.body;
     if (!["OPEN", "PAUSED", "CLOSED"].includes(status))
       return res.status(400).json({ success: false, message: "status must be OPEN, PAUSED, or CLOSED" });
-    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
+    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code2.toUpperCase(), companyId } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const updated = await prisma.walkInRoom.update({ where: { id: room.id }, data: { status } });
     if (status === "OPEN") ensureAgingRunning(room.id);
@@ -10941,8 +11185,8 @@ var updateRoomStatus = async (req, res) => {
 var getSeekerQueuePosition = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { code } = req.params;
-    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code.toUpperCase() } });
+    const { code: code2 } = req.params;
+    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code2.toUpperCase() } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
     if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
@@ -11100,8 +11344,8 @@ var getMyWalkInQueues = async (req, res) => {
 var leaveWalkInQueue = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { code } = req.params;
-    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code.toUpperCase() } });
+    const { code: code2 } = req.params;
+    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code2.toUpperCase() } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
     if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
@@ -11278,7 +11522,7 @@ router12.put("/queue/batch-status", authenticateCompany, batchUpdateQueueEntrySt
 router12.put("/queue/:entryId/status", authenticateCompany, updateQueueEntryStatus);
 router12.put("/queue/:entryId/priority", authenticateCompany, updateQueueEntryPriority);
 router12.get("/my-queues", authenticateToken, getMyWalkInQueues);
-router12.post("/rooms/:code/join", authenticateToken, joinWalkInQueue);
+router12.post("/rooms/:code/join", authenticateToken, upload.single("cv"), joinWalkInQueue);
 router12.get("/rooms/:code/position", authenticateToken, getSeekerQueuePosition);
 router12.post("/rooms/:code/leave", authenticateToken, leaveWalkInQueue);
 router12.get("/discovery/seekers", authenticateCompany, listDiscoverableSeekers);
