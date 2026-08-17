@@ -10824,6 +10824,49 @@ var updateQueueEntryStatus = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+var batchUpdateQueueEntryStatus = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { entryIds, status, notes } = req.body;
+    if (!Array.isArray(entryIds) || entryIds.length === 0) {
+      return res.status(400).json({ success: false, message: "entryIds must be a non-empty array of IDs" });
+    }
+    const validStatuses = ["waiting", "priority", "accepted", "done", "skipped", "rejected"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: `status must be one of: ${validStatuses.join(", ")}` });
+    }
+    const entries = await prisma.walkInQueueEntry.findMany({
+      where: {
+        id: { in: entryIds },
+        room: { companyId }
+      },
+      select: { id: true }
+    });
+    const validEntryIds = entries.map((e) => e.id);
+    if (validEntryIds.length === 0) {
+      return res.status(404).json({ success: false, message: "No matching queue entries found for this company" });
+    }
+    const result = await prisma.walkInQueueEntry.updateMany({
+      where: {
+        id: { in: validEntryIds }
+      },
+      data: {
+        status,
+        ...notes !== void 0 ? { notes } : {}
+      }
+    });
+    return res.json({
+      success: true,
+      count: result.count,
+      status,
+      message: `Successfully updated ${result.count} candidates to "${status}"`
+    });
+  } catch (err) {
+    console.error("[WalkIn] batchUpdateQueueEntryStatus error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 var updateQueueEntryPriority = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
@@ -11086,23 +11129,78 @@ var listDiscoverableSeekers = async (req, res) => {
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
     const page = parseInt(req.query.page ?? "1");
     const limit = parseInt(req.query.limit ?? "20");
+    const search = req.query.search?.trim();
     const skills = req.query.skills;
-    const location = req.query.location;
+    const location = req.query.location?.trim();
     const availability = req.query.availability;
+    const experienceLevel = req.query.experience;
     const skip = (page - 1) * limit;
-    const where = { discoverable: true };
-    if (location) where.location = { contains: location, mode: "insensitive" };
-    if (availability) where.availabilityStatus = availability;
+    const andConditions = [
+      { discoverable: true }
+    ];
+    if (search) {
+      andConditions.push({
+        OR: [
+          { fullName: { contains: search, mode: "insensitive" } },
+          { bio: { contains: search, mode: "insensitive" } },
+          { location: { contains: search, mode: "insensitive" } },
+          {
+            skills: {
+              some: {
+                name: { contains: search, mode: "insensitive" }
+              }
+            }
+          },
+          {
+            experience: {
+              some: {
+                OR: [
+                  { role: { contains: search, mode: "insensitive" } },
+                  { company: { contains: search, mode: "insensitive" } }
+                ]
+              }
+            }
+          }
+        ]
+      });
+    }
+    if (location) {
+      andConditions.push({
+        location: { contains: location, mode: "insensitive" }
+      });
+    }
+    if (availability) {
+      andConditions.push({
+        availabilityStatus: availability
+      });
+    }
     if (skills) {
       const skillList = skills.split(",").map((s) => s.trim()).filter(Boolean);
-      if (skillList.length) {
-        where.skills = {
-          some: {
-            name: { in: skillList, mode: "insensitive" }
-          }
-        };
+      if (skillList.length > 0) {
+        andConditions.push({
+          OR: skillList.map((skill) => ({
+            skills: {
+              some: {
+                name: { contains: skill, mode: "insensitive" }
+              }
+            }
+          }))
+        });
       }
     }
+    if (experienceLevel) {
+      if (experienceLevel === "experienced") {
+        andConditions.push({
+          experience: { some: {} }
+        });
+      } else if (experienceLevel === "fresher" || experienceLevel === "entry") {
+      } else if (experienceLevel === "mid" || experienceLevel === "senior") {
+        andConditions.push({
+          experience: { some: {} }
+        });
+      }
+    }
+    const where = andConditions.length > 0 ? { AND: andConditions } : {};
     const [seekers, total] = await Promise.all([
       prisma.jobSeekerProfile.findMany({
         where,
@@ -11120,9 +11218,17 @@ var listDiscoverableSeekers = async (req, res) => {
           github: true,
           portfolio: true,
           skills: { select: { name: true } },
-          experience: { select: { role: true, company: true, current: true }, orderBy: { createdAt: "desc" }, take: 2 },
-          education: { select: { degree: true, institution: true }, orderBy: { createdAt: "desc" }, take: 1 },
-          _count: { select: { applications: true, skills: true } }
+          experience: {
+            select: { role: true, company: true, current: true, startYear: true, endYear: true },
+            orderBy: { createdAt: "desc" },
+            take: 3
+          },
+          education: {
+            select: { degree: true, institution: true, startYear: true, endYear: true },
+            orderBy: { createdAt: "desc" },
+            take: 2
+          },
+          _count: { select: { applications: true, skills: true, experience: true } }
         }
       }),
       prisma.jobSeekerProfile.count({ where })
@@ -11150,7 +11256,7 @@ var getDiscoverableSeekerProfile = async (req, res) => {
         achievements: true
       }
     });
-    if (!seeker) return res.status(404).json({ success: false, message: "Seeker not found or not discoverable" });
+    if (!seeker) return res.status(404).json({ success: false, message: "Seeker profile not found" });
     const { user, ...safeProfile } = seeker;
     return res.json({ success: true, seeker: safeProfile });
   } catch {
@@ -11168,6 +11274,7 @@ router12.get("/rooms/:code/queue", authenticateCompany, getQueueByRoom);
 router12.post("/rooms/:code/call-next", authenticateCompany, callNextCandidate);
 router12.put("/rooms/:code/status", authenticateCompany, updateRoomStatus);
 router12.put("/rooms/:code/settings", authenticateCompany, updateRoomSettings);
+router12.put("/queue/batch-status", authenticateCompany, batchUpdateQueueEntryStatus);
 router12.put("/queue/:entryId/status", authenticateCompany, updateQueueEntryStatus);
 router12.put("/queue/:entryId/priority", authenticateCompany, updateQueueEntryPriority);
 router12.get("/my-queues", authenticateToken, getMyWalkInQueues);

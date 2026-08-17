@@ -3,7 +3,7 @@ import { authenticateCompany, authenticateToken, optionalAuth } from '../middlew
 import {
   createWalkInRoom, listWalkInRooms, getWalkInRoomByCode,
   joinWalkInQueue, getQueueByRoom, callNextCandidate,
-  updateQueueEntryStatus, updateRoomStatus, getSeekerQueuePosition,
+  updateQueueEntryStatus, batchUpdateQueueEntryStatus, updateRoomStatus, getSeekerQueuePosition,
   listActiveWalkInRooms, getMyWalkInQueues, leaveWalkInQueue,
   updateRoomSettings, updateQueueEntryPriority
 } from '../controllers/walkIn.controller.ts';
@@ -28,6 +28,7 @@ router.get('/rooms/:code/queue', authenticateCompany, getQueueByRoom);
 router.post('/rooms/:code/call-next', authenticateCompany, callNextCandidate);
 router.put('/rooms/:code/status', authenticateCompany, updateRoomStatus);
 router.put('/rooms/:code/settings', authenticateCompany, updateRoomSettings);
+router.put('/queue/batch-status', authenticateCompany, batchUpdateQueueEntryStatus);
 router.put('/queue/:entryId/status', authenticateCompany, updateQueueEntryStatus);
 router.put('/queue/:entryId/priority', authenticateCompany, updateQueueEntryPriority);
 

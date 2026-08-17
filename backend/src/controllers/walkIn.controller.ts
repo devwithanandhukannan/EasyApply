@@ -370,6 +370,60 @@ export const updateQueueEntryStatus = async (req: Request, res: Response) => {
   }
 };
 
+// ─── COMPANY: BATCH UPDATE ENTRY STATUS ───────────────────────────────────────
+
+export const batchUpdateQueueEntryStatus = async (req: Request, res: Response) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: 'Company context required' });
+
+    const { entryIds, status, notes } = req.body;
+
+    if (!Array.isArray(entryIds) || entryIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'entryIds must be a non-empty array of IDs' });
+    }
+
+    const validStatuses = ['waiting', 'priority', 'accepted', 'done', 'skipped', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: `status must be one of: ${validStatuses.join(', ')}` });
+    }
+
+    // Verify all entries belong to rooms owned by this company
+    const entries = await prisma.walkInQueueEntry.findMany({
+      where: {
+        id: { in: entryIds },
+        room: { companyId }
+      },
+      select: { id: true }
+    });
+
+    const validEntryIds = entries.map(e => e.id);
+    if (validEntryIds.length === 0) {
+      return res.status(404).json({ success: false, message: 'No matching queue entries found for this company' });
+    }
+
+    const result = await prisma.walkInQueueEntry.updateMany({
+      where: {
+        id: { in: validEntryIds }
+      },
+      data: {
+        status,
+        ...(notes !== undefined ? { notes } : {})
+      }
+    });
+
+    return res.json({
+      success: true,
+      count: result.count,
+      status,
+      message: `Successfully updated ${result.count} candidates to "${status}"`
+    });
+  } catch (err) {
+    console.error('[WalkIn] batchUpdateQueueEntryStatus error:', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
 // ─── COMPANY: UPDATE ENTRY PRIORITY SCORE ─────────────────────────────────────
 
 export const updateQueueEntryPriority = async (req: Request, res: Response) => {

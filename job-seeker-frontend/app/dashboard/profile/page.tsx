@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   User, MapPin, Briefcase, Code, Award, Plus, Save, Upload, X, Trash2,
-  Link as LinkIcon, GraduationCap, CheckCircle2, Loader2, FileText,
+  Link as LinkIcon, GraduationCap, CheckCircle2, Loader2, FileText, Sparkles,
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
@@ -16,6 +16,8 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [discoverable, setDiscoverable] = useState(false);
+  const [togglingDiscoverable, setTogglingDiscoverable] = useState(false);
 
   const [basicInfo, setBasicInfo] = useState({
     fullName: '', email: '', phone: '', location: '',
@@ -109,6 +111,7 @@ export default function ProfilePage() {
         if (profileData.certifications?.length > 0) setCertifications(profileData.certifications);
         if (profileData.languages?.length > 0)      setLanguages(profileData.languages);
         if (profileData.achievements?.length > 0)   setAchievements(profileData.achievements);
+        setDiscoverable(!!profileData.discoverable);
       } catch (error: any) {
         showToast('Error', error.response?.data?.error || 'Failed to load profile', 'danger');
       } finally {
@@ -117,6 +120,22 @@ export default function ProfilePage() {
     };
     fetchProfile();
   }, []);
+
+  const handleToggleDiscoverable = async () => {
+    const nextVal = !discoverable;
+    setTogglingDiscoverable(true);
+    try {
+      const res = await api.put('/jobseeker/profile/discoverable', { discoverable: nextVal });
+      if (res.data?.success) {
+        setDiscoverable(nextVal);
+        showToast('Discovery Updated', res.data.message || (nextVal ? 'Your profile is now discoverable by companies' : 'Profile hidden from discovery'), 'success');
+      }
+    } catch (err: any) {
+      showToast('Error', err.response?.data?.message || 'Failed to update discovery', 'danger');
+    } finally {
+      setTogglingDiscoverable(false);
+    }
+  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -261,6 +280,51 @@ export default function ProfilePage() {
             <span>{saving ? 'Syncing...' : 'Save Workspace'}</span>
           </button>
         </div>
+      </div>
+
+      {/* Recruiter Discovery Status Banner */}
+      <div className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+        discoverable
+          ? 'bg-emerald-950/20 border-emerald-500/30'
+          : 'bg-zinc-950 border-zinc-800'
+      }`}>
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+            discoverable ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-900 text-zinc-500'
+          }`}>
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-white">Direct Recruiter Discovery</span>
+              <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full uppercase tracking-wider ${
+                discoverable
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
+              }`}>
+                {discoverable ? 'Visible in Seeker Discovery' : 'Hidden / Private'}
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-0.5">
+              {discoverable
+                ? 'Your profile is visible in Seruiter Discovery. Companies can find your skills and invite you directly.'
+                : 'Turn this on so companies using Seeker Direct Discovery can discover your skills and invite you.'}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleToggleDiscoverable}
+          disabled={togglingDiscoverable}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+            discoverable
+              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20'
+              : 'bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300'
+          }`}
+        >
+          {togglingDiscoverable ? 'Updating...' : discoverable ? 'Active (Turn Off)' : 'Turn On Discovery'}
+        </button>
       </div>
 
       {/* Parsing overlay banner */}

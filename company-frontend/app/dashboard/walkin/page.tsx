@@ -38,6 +38,9 @@ import {
   Settings,
   Flame,
   ArrowRight,
+  CheckSquare,
+  Square,
+  Layers,
 } from 'lucide-react';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
 
@@ -181,6 +184,11 @@ export default function CompanyWalkInKanbanPage() {
   const [search, setSearch] = useState('');
   const [minSkillMatch, setMinSkillMatch] = useState<number>(0);
   const [hasCvOnly, setHasCvOnly] = useState(false);
+  const [selectedStageFilter, setSelectedStageFilter] = useState<'all' | 'waiting' | 'priority' | 'interviewing' | 'accepted' | 'skipped'>('all');
+
+  // Batch Multi-Select
+  const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
+  const [batchUpdating, setBatchUpdating] = useState(false);
 
   // Modals & Drawers
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -436,6 +444,63 @@ export default function CompanyWalkInKanbanPage() {
     setRejectionNote('');
   };
 
+  // Batch Multi-Select Handlers
+  const toggleSelectCandidate = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedEntryIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllVisible = () => {
+    let visibleIds: string[] = [];
+    if (selectedStageFilter === 'all') {
+      visibleIds = filteredQueue.map((q) => q.id);
+    } else {
+      visibleIds = (columnsData[selectedStageFilter] || []).map((q) => q.id);
+    }
+
+    if (visibleIds.length === 0) return;
+
+    const allSelected = visibleIds.every((id) => selectedEntryIds.includes(id));
+    if (allSelected) {
+      // Deselect visible
+      setSelectedEntryIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      // Select all visible
+      const set = new Set([...selectedEntryIds, ...visibleIds]);
+      setSelectedEntryIds(Array.from(set));
+    }
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedEntryIds([]);
+  };
+
+  const handleBatchMove = async (targetStatus: string) => {
+    if (selectedEntryIds.length === 0 || !selectedRoom) return;
+    setBatchUpdating(true);
+    try {
+      const res = await api.put('/walkin/queue/batch-status', {
+        entryIds: selectedEntryIds,
+        status: targetStatus,
+      });
+      if (res.data?.success) {
+        showToast(
+          'Batch Updated',
+          `Successfully moved ${res.data.count} candidates to ${targetStatus}`,
+          'success'
+        );
+        setSelectedEntryIds([]);
+        fetchQueue(selectedRoom.roomCode);
+      }
+    } catch (err: any) {
+      showToast('Error', err.response?.data?.message || 'Failed to update candidates', 'danger');
+    } finally {
+      setBatchUpdating(false);
+    }
+  };
+
   // Drag and Drop Handlers
   const handleDragStart = (entryId: string) => {
     setDraggingEntryId(entryId);
@@ -590,7 +655,7 @@ export default function CompanyWalkInKanbanPage() {
                 <button
                   onClick={() => handleCallCandidate()}
                   disabled={callingNext || selectedRoom.status === 'CLOSED'}
-                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-50"
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <PhoneCall className="w-3.5 h-3.5" />
                   <span>{callingNext ? 'Calling...' : 'Call Top Candidate'}</span>
@@ -692,154 +757,278 @@ export default function CompanyWalkInKanbanPage() {
             </div>
           </div>
 
+          {/* ─── ADVANCED STAGE FILTER TABS ───────────────────────────────── */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              onClick={() => setSelectedStageFilter('all')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                selectedStageFilter === 'all'
+                  ? 'bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700'
+                  : 'bg-zinc-950 border border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>All Stages ({filteredQueue.length})</span>
+            </button>
+
+            {KANBAN_COLUMNS.map((col) => {
+              const count = (columnsData[col.id] || []).length;
+              const isActive = selectedStageFilter === col.id;
+              const ColIcon = col.icon;
+              return (
+                <button
+                  key={col.id}
+                  onClick={() => setSelectedStageFilter(isActive ? 'all' : col.id)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                    isActive
+                      ? `${col.bgColor} ${col.color} ring-1 ${col.borderColor} shadow-md`
+                      : 'bg-zinc-950 border border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  }`}
+                >
+                  <ColIcon className={`w-3.5 h-3.5 ${col.color}`} />
+                  <span>
+                    {col.title} ({count})
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* Quick Select All Toggle in Current Stage Filter */}
+            {filteredQueue.length > 0 && (
+              <button
+                onClick={handleSelectAllVisible}
+                className={`ml-auto px-3.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all ${
+                  selectedEntryIds.length > 0
+                    ? 'bg-indigo-600/20 border border-indigo-500/50 text-indigo-300'
+                    : 'bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 text-zinc-400'
+                }`}
+              >
+                <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+                <span>
+                  {selectedEntryIds.length > 0
+                    ? `Deselect (${selectedEntryIds.length})`
+                    : 'Select All in Filter'}
+                </span>
+              </button>
+            )}
+          </div>
+
           {/* ─── KANBAN BOARD VIEW ──────────────────────────────────────── */}
           {viewMode === 'kanban' ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 items-start overflow-x-auto pb-4">
-              {KANBAN_COLUMNS.map((col) => {
+            <div
+              className={`grid gap-4 items-start pb-4 ${
+                selectedStageFilter === 'all'
+                  ? 'grid-cols-1 md:grid-cols-3 lg:grid-cols-5'
+                  : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
+              }`}
+            >
+              {(selectedStageFilter === 'all'
+                ? KANBAN_COLUMNS
+                : KANBAN_COLUMNS.filter((col) => col.id === selectedStageFilter)
+              ).map((col) => {
                 const ColumnIcon = col.icon;
                 const items = columnsData[col.id] || [];
                 const isDragOver = dragOverColumn === col.id;
+                const isFocusedSingleStage = selectedStageFilter !== 'all';
 
                 return (
                   <div
                     key={col.id}
                     onDragOver={(e) => handleDragOver(e, col.id)}
                     onDrop={(e) => handleDrop(e, col.id)}
-                    className={`rounded-2xl border transition-all flex flex-col min-h-[500px] ${col.bgColor} ${
+                    className={`rounded-2xl border transition-all flex flex-col min-h-[500px] ${
+                      isFocusedSingleStage ? 'col-span-full bg-zinc-950/60 p-4' : col.bgColor
+                    } ${
                       isDragOver ? `${col.borderColor} ring-2 ring-indigo-500/40 bg-zinc-900/60` : 'border-zinc-900'
                     }`}
                   >
                     {/* Column Header */}
                     <div className="p-3.5 border-b border-zinc-900/80 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div
+                        onClick={() => setSelectedStageFilter(selectedStageFilter === col.id ? 'all' : col.id)}
+                        className="flex items-center gap-2 cursor-pointer group"
+                        title={selectedStageFilter === col.id ? 'Show all stages' : `Filter only ${col.title}`}
+                      >
                         <ColumnIcon className={`w-4 h-4 ${col.color}`} />
-                        <h3 className="text-xs font-bold text-white tracking-wide">{col.title}</h3>
+                        <h3 className="text-xs font-bold text-white tracking-wide group-hover:text-indigo-400 transition-colors">
+                          {col.title}
+                        </h3>
+                        {selectedStageFilter === col.id && (
+                          <span className="text-[10px] text-zinc-500 font-normal">(Click to show all)</span>
+                        )}
                       </div>
-                      <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-zinc-900 border border-zinc-800 ${col.color}`}>
-                        {items.length}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {items.length > 0 && (
+                          <button
+                            onClick={() => {
+                              const itemIds = items.map((i) => i.id);
+                              const allColSelected = itemIds.every((id) => selectedEntryIds.includes(id));
+                              if (allColSelected) {
+                                setSelectedEntryIds((prev) => prev.filter((id) => !itemIds.includes(id)));
+                              } else {
+                                const set = new Set([...selectedEntryIds, ...itemIds]);
+                                setSelectedEntryIds(Array.from(set));
+                              }
+                            }}
+                            className="text-[10px] text-zinc-400 hover:text-white px-1.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors"
+                            title="Select all in column"
+                          >
+                            Select All
+                          </button>
+                        )}
+                        <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-zinc-900 border border-zinc-800 ${col.color}`}>
+                          {items.length}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Column Items */}
-                    <div className="p-2.5 space-y-2.5 flex-1 overflow-y-auto max-h-[70vh]">
+                    <div
+                      className={`p-2.5 space-y-2.5 flex-1 overflow-y-auto max-h-[75vh] ${
+                        isFocusedSingleStage ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 space-y-0' : ''
+                      }`}
+                    >
                       {items.length === 0 ? (
-                        <div className="h-32 flex items-center justify-center border-2 border-dashed border-zinc-900 rounded-xl text-[11px] text-zinc-600">
-                          Drop candidates here
+                        <div className="h-32 flex items-center justify-center border-2 border-dashed border-zinc-900 rounded-xl text-[11px] text-zinc-600 col-span-full">
+                          Drop candidates here or change filter
                         </div>
                       ) : (
-                        items.map((entry) => (
-                          <div
-                            key={entry.id}
-                            draggable
-                            onDragStart={() => handleDragStart(entry.id)}
-                            className="bg-zinc-950 hover:bg-zinc-900/80 border border-zinc-800 hover:border-zinc-700 rounded-xl p-3.5 space-y-3 cursor-grab active:cursor-grabbing transition-all shadow-md group relative select-none"
-                          >
-                            {/* Candidate Header */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-300 shrink-0 overflow-hidden">
-                                  {entry.jobSeekerProfile.profilePhotoUrl ? (
-                                    <img
-                                      src={entry.jobSeekerProfile.profilePhotoUrl}
-                                      alt={entry.jobSeekerProfile.fullName}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    entry.jobSeekerProfile.fullName.charAt(0)
+                        items.map((entry) => {
+                          const isSelected = selectedEntryIds.includes(entry.id);
+
+                          return (
+                            <div
+                              key={entry.id}
+                              draggable
+                              onDragStart={() => handleDragStart(entry.id)}
+                              className={`rounded-xl p-3.5 space-y-3 cursor-grab active:cursor-grabbing transition-all shadow-md group relative select-none border ${
+                                isSelected
+                                  ? 'bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/10'
+                                  : 'bg-zinc-950 hover:bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'
+                              }`}
+                            >
+                              {/* Candidate Header with Checkbox */}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  {/* Selection Checkbox */}
+                                  <button
+                                    onClick={(e) => toggleSelectCandidate(entry.id, e)}
+                                    className={`p-0.5 rounded transition-colors shrink-0 ${
+                                      isSelected
+                                        ? 'text-indigo-400 bg-indigo-500/20'
+                                        : 'text-zinc-600 hover:text-zinc-300'
+                                    }`}
+                                    title={isSelected ? 'Deselect candidate' : 'Select candidate'}
+                                  >
+                                    {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                  </button>
+
+                                  <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-300 shrink-0 overflow-hidden">
+                                    {entry.jobSeekerProfile.profilePhotoUrl ? (
+                                      <img
+                                        src={entry.jobSeekerProfile.profilePhotoUrl}
+                                        alt={entry.jobSeekerProfile.fullName}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      entry.jobSeekerProfile.fullName.charAt(0)
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="text-xs font-bold text-white truncate group-hover:text-indigo-400 transition-colors">
+                                      {entry.jobSeekerProfile.fullName}
+                                    </h4>
+                                    <p className="text-[10px] text-zinc-500 truncate">{entry.jobSeekerProfile.email}</p>
+                                  </div>
+                                </div>
+
+                                <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/10 text-indigo-400 rounded shrink-0">
+                                  {Math.round(entry.skillScore)}%
+                                </span>
+                              </div>
+
+                              {/* Scores & Resume Pill */}
+                              <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-900">
+                                <span>
+                                  Priority: <strong className="text-emerald-400 font-semibold">{Math.round(entry.priorityScore)}</strong>
+                                </span>
+
+                                {entry.resume ? (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openCandidateDrawer(entry);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 rounded border border-zinc-800 transition-colors"
+                                    title="View CV"
+                                  >
+                                    <FileText className="w-3 h-3" />
+                                    <span>CV Attached</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-zinc-600">No CV</span>
+                                )}
+                              </div>
+
+                              {/* Actions on Card */}
+                              <div className="pt-2 border-t border-zinc-900 flex items-center justify-between gap-1">
+                                <button
+                                  onClick={() => openCandidateDrawer(entry)}
+                                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
+                                  title="View Full Profile & CV"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+
+                                <div className="flex items-center gap-1">
+                                  {col.id !== 'interviewing' && (
+                                    <button
+                                      onClick={() => handleCallCandidate(entry)}
+                                      className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                                      title="Call into Video Call"
+                                    >
+                                      <Video className="w-3 h-3" />
+                                      <span>Call</span>
+                                    </button>
+                                  )}
+
+                                  {col.id !== 'priority' && col.id !== 'accepted' && (
+                                    <button
+                                      onClick={() => handleMoveCandidateStatus(entry.id, 'priority')}
+                                      className="p-1.5 text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                                      title="Move to Priority"
+                                    >
+                                      <Star className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {col.id !== 'accepted' && (
+                                    <button
+                                      onClick={() => handleMoveCandidateStatus(entry.id, 'accepted')}
+                                      className="p-1.5 text-teal-400 hover:bg-teal-500/10 rounded-lg transition-colors"
+                                      title="Accept / Shortlist"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {col.id !== 'skipped' && (
+                                    <button
+                                      onClick={() => {
+                                        setCandidateToReject(entry);
+                                        setRejectModalOpen(true);
+                                      }}
+                                      className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                      title="Reject / Skip"
+                                    >
+                                      <XCircle className="w-3.5 h-3.5" />
+                                    </button>
                                   )}
                                 </div>
-                                <div className="min-w-0">
-                                  <h4 className="text-xs font-bold text-white truncate group-hover:text-indigo-400 transition-colors">
-                                    {entry.jobSeekerProfile.fullName}
-                                  </h4>
-                                  <p className="text-[10px] text-zinc-500 truncate">{entry.jobSeekerProfile.email}</p>
-                                </div>
-                              </div>
-
-                              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-indigo-500/10 text-indigo-400 rounded">
-                                {Math.round(entry.skillScore)}%
-                              </span>
-                            </div>
-
-                            {/* Scores & Resume Pill */}
-                            <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-900">
-                              <span>Priority: <strong className="text-emerald-400 font-semibold">{Math.round(entry.priorityScore)}</strong></span>
-                              
-                              {entry.resume ? (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openCandidateDrawer(entry);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 rounded border border-zinc-800 transition-colors"
-                                  title="View CV"
-                                >
-                                  <FileText className="w-3 h-3" />
-                                  <span>CV Attached</span>
-                                </button>
-                              ) : (
-                                <span className="text-zinc-600">No CV</span>
-                              )}
-                            </div>
-
-                            {/* Actions on Card */}
-                            <div className="pt-2 border-t border-zinc-900 flex items-center justify-between gap-1">
-                              <button
-                                onClick={() => openCandidateDrawer(entry)}
-                                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
-                                title="View Full Profile & CV"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-
-                              <div className="flex items-center gap-1">
-                                {col.id !== 'interviewing' && (
-                                  <button
-                                    onClick={() => handleCallCandidate(entry)}
-                                    className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
-                                    title="Call into Video Call"
-                                  >
-                                    <Video className="w-3 h-3" />
-                                    <span>Call</span>
-                                  </button>
-                                )}
-
-                                {col.id !== 'priority' && col.id !== 'accepted' && (
-                                  <button
-                                    onClick={() => handleMoveCandidateStatus(entry.id, 'priority')}
-                                    className="p-1.5 text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
-                                    title="Move to Priority"
-                                  >
-                                    <Star className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-
-                                {col.id !== 'accepted' && (
-                                  <button
-                                    onClick={() => handleMoveCandidateStatus(entry.id, 'accepted')}
-                                    className="p-1.5 text-teal-400 hover:bg-teal-500/10 rounded-lg transition-colors"
-                                    title="Accept / Shortlist"
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-
-                                {col.id !== 'skipped' && (
-                                  <button
-                                    onClick={() => {
-                                      setCandidateToReject(entry);
-                                      setRejectModalOpen(true);
-                                    }}
-                                    className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                                    title="Reject / Skip"
-                                  >
-                                    <XCircle className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
@@ -852,6 +1041,19 @@ export default function CompanyWalkInKanbanPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-zinc-800 text-[11px] text-zinc-500 uppercase tracking-wider bg-zinc-900/40">
+                    <th className="p-4 w-12">
+                      <button
+                        onClick={handleSelectAllVisible}
+                        className="text-zinc-500 hover:text-zinc-300"
+                        title="Select All"
+                      >
+                        {selectedEntryIds.length > 0 ? (
+                          <CheckSquare className="w-4 h-4 text-indigo-400" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </th>
                     <th className="p-4">Candidate</th>
                     <th className="p-4">Stage</th>
                     <th className="p-4">Skill Match</th>
@@ -861,72 +1063,163 @@ export default function CompanyWalkInKanbanPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-xs">
-                  {filteredQueue.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-zinc-900/30 transition-colors">
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-300 overflow-hidden">
-                            {entry.jobSeekerProfile.profilePhotoUrl ? (
-                              <img
-                                src={entry.jobSeekerProfile.profilePhotoUrl}
-                                alt={entry.jobSeekerProfile.fullName}
-                                className="w-full h-full object-cover"
-                              />
+                  {filteredQueue
+                    .filter((e) =>
+                      selectedStageFilter === 'all' ? true : e.status === selectedStageFilter
+                    )
+                    .map((entry) => {
+                      const isSelected = selectedEntryIds.includes(entry.id);
+
+                      return (
+                        <tr
+                          key={entry.id}
+                          className={`transition-colors ${
+                            isSelected ? 'bg-indigo-950/20' : 'hover:bg-zinc-900/30'
+                          }`}
+                        >
+                          <td className="p-4">
+                            <button
+                              onClick={(e) => toggleSelectCandidate(entry.id, e)}
+                              className={`p-0.5 rounded transition-colors ${
+                                isSelected ? 'text-indigo-400' : 'text-zinc-600 hover:text-zinc-400'
+                              }`}
+                            >
+                              {isSelected ? (
+                                <CheckSquare className="w-4 h-4 text-indigo-400" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-300 overflow-hidden">
+                                {entry.jobSeekerProfile.profilePhotoUrl ? (
+                                  <img
+                                    src={entry.jobSeekerProfile.profilePhotoUrl}
+                                    alt={entry.jobSeekerProfile.fullName}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  entry.jobSeekerProfile.fullName.charAt(0)
+                                )}
+                              </div>
+                              <div>
+                                <div className="font-bold text-white">{entry.jobSeekerProfile.fullName}</div>
+                                <div className="text-[11px] text-zinc-500">{entry.jobSeekerProfile.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <span className="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-zinc-900 border border-zinc-800 text-zinc-300">
+                              {entry.status}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className="font-bold text-indigo-400">{Math.round(entry.skillScore)}%</span>
+                          </td>
+                          <td className="p-4">
+                            <span className="font-bold text-emerald-400">{Math.round(entry.priorityScore)}</span>
+                          </td>
+                          <td className="p-4">
+                            {entry.resume ? (
+                              <button
+                                onClick={() => openCandidateDrawer(entry)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 rounded-lg border border-zinc-800 text-xs font-semibold"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                                <span>{entry.resume.name || 'View CV'}</span>
+                              </button>
                             ) : (
-                              entry.jobSeekerProfile.fullName.charAt(0)
+                              <span className="text-zinc-600 text-xs">No CV</span>
                             )}
-                          </div>
-                          <div>
-                            <div className="font-bold text-white">{entry.jobSeekerProfile.fullName}</div>
-                            <div className="text-[11px] text-zinc-500">{entry.jobSeekerProfile.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-zinc-900 border border-zinc-800 text-zinc-300">
-                          {entry.status}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-bold text-indigo-400">{Math.round(entry.skillScore)}%</span>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-bold text-emerald-400">{Math.round(entry.priorityScore)}</span>
-                      </td>
-                      <td className="p-4">
-                        {entry.resume ? (
-                          <button
-                            onClick={() => openCandidateDrawer(entry)}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 rounded-lg border border-zinc-800 text-xs font-semibold"
-                          >
-                            <FileText className="w-3.5 h-3.5" />
-                            <span>{entry.resume.name || 'View CV'}</span>
-                          </button>
-                        ) : (
-                          <span className="text-zinc-600 text-xs">No CV</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleCallCandidate(entry)}
-                            className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold flex items-center gap-1"
-                          >
-                            <Video className="w-3.5 h-3.5" />
-                            <span>Call</span>
-                          </button>
-                          <button
-                            onClick={() => openCandidateDrawer(entry)}
-                            className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-lg text-xs font-semibold"
-                          >
-                            Inspect
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleCallCandidate(entry)}
+                                className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold flex items-center gap-1"
+                              >
+                                <Video className="w-3.5 h-3.5" />
+                                <span>Call</span>
+                              </button>
+                              <button
+                                onClick={() => openCandidateDrawer(entry)}
+                                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-lg text-xs font-semibold"
+                              >
+                                Inspect
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* ─── FLOATING BATCH ACTION TOOLBAR ─────────────────────────────── */}
+          {selectedEntryIds.length > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-950/95 border border-indigo-500/60 backdrop-blur-xl shadow-2xl rounded-2xl p-3 sm:px-5 flex items-center gap-3 sm:gap-4 max-w-2xl w-[92vw] sm:w-auto animate-in fade-in slide-in-from-bottom-5">
+              <div className="flex items-center gap-2 shrink-0 text-xs font-bold text-white pr-3 border-r border-zinc-800">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span>
+                  {selectedEntryIds.length} Candidate{selectedEntryIds.length > 1 ? 's' : ''} Selected
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap flex-1 justify-center sm:justify-start">
+                <span className="text-[11px] text-zinc-500 font-semibold hidden md:inline">Assign:</span>
+
+                <button
+                  onClick={() => handleBatchMove('priority')}
+                  disabled={batchUpdating}
+                  className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  title="Move selected to Priority Shortlist"
+                >
+                  <Star className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Priority</span>
+                </button>
+
+                <button
+                  onClick={() => handleBatchMove('waiting')}
+                  disabled={batchUpdating}
+                  className="px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  title="Move selected to Applied Queue"
+                >
+                  <Clock className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Queue</span>
+                </button>
+
+                <button
+                  onClick={() => handleBatchMove('accepted')}
+                  disabled={batchUpdating}
+                  className="px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  title="Mark selected as Accepted / Shortlisted"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Accept / OK</span>
+                </button>
+
+                <button
+                  onClick={() => handleBatchMove('skipped')}
+                  disabled={batchUpdating}
+                  className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  title="Reject / Skip selected candidates"
+                >
+                  <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Reject</span>
+                </button>
+              </div>
+
+              <button
+                onClick={handleDeselectAll}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors ml-auto shrink-0"
+                title="Clear Selection"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           )}
         </>
@@ -1066,7 +1359,7 @@ export default function CompanyWalkInKanbanPage() {
                   setCandidateDrawerOpen(false);
                   handleCallCandidate(selectedCandidate);
                 }}
-                className="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all"
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all"
               >
                 <Video className="w-4 h-4" />
                 <span>Call to Video Interview</span>
