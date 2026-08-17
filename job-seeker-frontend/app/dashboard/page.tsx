@@ -98,7 +98,7 @@ export default function DashboardPage() {
   const resume     = dashboardData?.resume;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 p-4 sm:p-6 lg:p-8 bg-black text-zinc-300 min-h-screen">
+    <div className="max-w-7xl mx-auto space-y-8 p-1">
 
       {/* ── Header ── */}
       <div className="border-b border-zinc-900 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

@@ -324,14 +324,14 @@ export default function TeamPage() {
 
   if (loading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center bg-[#0a0a0a]">
+      <div className="flex h-[60vh] items-center justify-center">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-800 border-t-white"></div>
       </div>
     );
   }
 
   return (
-    <div className="p-8 min-h-screen bg-[#0a0a0a] text-white space-y-6 max-w-7xl mx-auto w-full relative">
+    <div className="space-y-6 max-w-7xl mx-auto w-full relative">
       {/* Header Panel */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>

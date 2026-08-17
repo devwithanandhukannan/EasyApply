@@ -316,7 +316,7 @@ export default function WalkInRoomsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 sm:p-6 lg:p-8 space-y-8 w-full max-w-full">
+    <div className="space-y-8 w-full max-w-full">
       {/* ─── HEADER / HERO SECTION ───────────────────────────────────── */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-950/60 via-zinc-950 to-zinc-950 border border-indigo-500/30 p-6 sm:p-8 lg:p-10 backdrop-blur-xl w-full">
         <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>

@@ -334,14 +334,14 @@ const loadProfile = async (silent = false) => {
 
   if (fetching) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-400 text-xs">
+      <div className="min-h-[50vh] flex items-center justify-center text-zinc-400 text-xs">
         Loading profile...
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100 p-6 md:p-12 max-w-5xl mx-auto">
+    <main className="p-2 md:p-6 max-w-5xl mx-auto space-y-8">
       
       {/* HEADER */}
       <header className="mb-8 border-b border-zinc-900 pb-6">

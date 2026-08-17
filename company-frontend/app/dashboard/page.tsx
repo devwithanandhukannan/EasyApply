@@ -79,12 +79,12 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-8 min-h-screen bg-zinc-950 text-zinc-100 p-1">
+    <div className="space-y-8 p-1">
       
       {/* Header Profile Info Panel */}
       <div className="border-b border-zinc-800/60 pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-zinc-50 tracking-tight sm:text-2xl">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
             Welcome back, {company?.name || 'Workspace Leader'}
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-zinc-400 font-medium">

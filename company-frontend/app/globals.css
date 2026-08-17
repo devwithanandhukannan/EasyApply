@@ -112,17 +112,21 @@ html.light,
 }
 
 [data-theme="light"] .bg-zinc-950,
+[data-theme="light"] .bg-zinc-950\/80,
+[data-theme="light"] .bg-zinc-950\/60,
 [data-theme="light"] .bg-zinc-950\/40,
 [data-theme="light"] .bg-zinc-950\/30,
 [data-theme="light"] .bg-zinc-950\/20,
 [data-theme="light"] .bg-zinc-900,
-[data-theme="light"] .bg-zinc-900\/50,
 [data-theme="light"] .bg-zinc-900\/80,
-[data-theme="light"] .bg-zinc-900\/40,
 [data-theme="light"] .bg-zinc-900\/60,
+[data-theme="light"] .bg-zinc-900\/50,
+[data-theme="light"] .bg-zinc-900\/40,
 [data-theme="light"] .bg-zinc-900\/30,
+[data-theme="light"] .bg-zinc-900\/20,
 [data-theme="light"] .bg-zinc-900\/10,
-[data-theme="light"] .bg-zinc-900\/20 {
+[data-theme="light"] .bg-black\/40,
+[data-theme="light"] .bg-black\/60 {
   background-color: #ffffff !important;
   border-color: #e2e8f0 !important;
 }
@@ -133,27 +137,66 @@ html.light,
 [data-theme="light"] .border-zinc-900\/60,
 [data-theme="light"] .border-zinc-800,
 [data-theme="light"] .border-zinc-800\/80,
+[data-theme="light"] .border-zinc-800\/60,
 [data-theme="light"] .border-zinc-800\/40,
-[data-theme="light"] .border-zinc-700 {
+[data-theme="light"] .border-zinc-700,
+[data-theme="light"] .border-white\/10 {
   border-color: #e2e8f0 !important;
 }
 
+/* Light Mode Typography Inversions */
 [data-theme="light"] .text-white,
+[data-theme="light"] .text-zinc-50,
 [data-theme="light"] .text-zinc-100,
-[data-theme="light"] .text-zinc-200 {
+[data-theme="light"] .text-zinc-200,
+[data-theme="light"] .text-gray-50,
+[data-theme="light"] .text-gray-100,
+[data-theme="light"] .text-gray-200 {
   color: #0f172a !important;
 }
 
 [data-theme="light"] .text-zinc-300,
-[data-theme="light"] .text-zinc-400 {
+[data-theme="light"] .text-zinc-400,
+[data-theme="light"] .text-gray-300,
+[data-theme="light"] .text-gray-400 {
   color: #334155 !important;
 }
 
 [data-theme="light"] .text-zinc-500,
-[data-theme="light"] .text-zinc-600 {
+[data-theme="light"] .text-zinc-600,
+[data-theme="light"] .text-gray-500 {
   color: #64748b !important;
 }
 
+/* Kanban Columns Pastel Light Theme Tints */
+[data-theme="light"] .bg-sky-950\/20 {
+  background-color: #f0f9ff !important;
+  border-color: #bae6fd !important;
+}
+[data-theme="light"] .bg-amber-950\/20 {
+  background-color: #fffbeb !important;
+  border-color: #fde68a !important;
+}
+[data-theme="light"] .bg-emerald-950\/20 {
+  background-color: #ecfdf5 !important;
+  border-color: #a7f3d0 !important;
+}
+[data-theme="light"] .bg-teal-950\/20 {
+  background-color: #f0fdfa !important;
+  border-color: #99f6e4 !important;
+}
+[data-theme="light"] .bg-rose-950\/20 {
+  background-color: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+}
+[data-theme="light"] .bg-indigo-950\/20,
+[data-theme="light"] .bg-indigo-950\/40,
+[data-theme="light"] .bg-indigo-950\/60 {
+  background-color: #eef2ff !important;
+  border-color: #c7d2fe !important;
+}
+
+/* Inputs & Form Fields */
 [data-theme="light"] input,
 [data-theme="light"] textarea,
 [data-theme="light"] select {
@@ -165,6 +208,14 @@ html.light,
 [data-theme="light"] input::placeholder,
 [data-theme="light"] textarea::placeholder {
   color: #94a3b8 !important;
+}
+
+/* Gradient Text In Light Mode */
+[data-theme="light"] .gradient-text {
+  background: linear-gradient(135deg, #0f172a 0%, #334155 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  background-clip: text !important;
 }
 
 /* ── GRADIENT TEXT ──────────────────────────────── */
