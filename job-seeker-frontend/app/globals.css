@@ -126,6 +126,10 @@ html.light,
 [data-theme="light"] .bg-zinc-900\/30,
 [data-theme="light"] .bg-zinc-900\/20,
 [data-theme="light"] .bg-zinc-900\/10,
+[data-theme="light"] .bg-zinc-800,
+[data-theme="light"] .bg-zinc-800\/80,
+[data-theme="light"] .bg-zinc-800\/60,
+[data-theme="light"] .bg-zinc-800\/40,
 [data-theme="light"] .bg-black\/40,
 [data-theme="light"] .bg-black\/60 {
   background-color: #ffffff !important;

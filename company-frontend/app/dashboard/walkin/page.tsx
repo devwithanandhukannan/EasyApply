@@ -760,25 +760,29 @@ export default function CompanyWalkInKanbanPage() {
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center gap-1 bg-zinc-900 p-1 rounded-xl border border-zinc-800 shrink-0 self-end sm:self-auto">
+            <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/80 shrink-0 self-end sm:self-auto">
               <button
                 onClick={() => setViewMode('kanban')}
-                className={`p-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
-                  viewMode === 'kanban' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  viewMode === 'kanban'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
                 }`}
                 title="Kanban Board View"
               >
-                <LayoutGrid className="w-4 h-4" />
+                <LayoutGrid className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Kanban</span>
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1 ${
-                  viewMode === 'list' ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                  viewMode === 'list'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200'
                 }`}
                 title="List View"
               >
-                <List className="w-4 h-4" />
+                <List className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">List</span>
               </button>
             </div>
@@ -790,7 +794,7 @@ export default function CompanyWalkInKanbanPage() {
               onClick={() => setSelectedStageFilter('all')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
                 selectedStageFilter === 'all'
-                  ? 'bg-zinc-800 text-white shadow-sm ring-1 ring-zinc-700'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-500/50'
                   : 'bg-zinc-950 border border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
               }`}
             >
