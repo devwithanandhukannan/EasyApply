@@ -17,7 +17,8 @@ import {
   X,
   AlertCircle,
   Globe,
-  Lock
+  Lock,
+  ShieldAlert,
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
@@ -401,16 +402,23 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
   const { showToast } = useGlassToast();
   const router = useRouter();
 
+  const isFreshUploadRequired = job.metadata?.requireFreshUpload === true || job.metadata?.allowAiResume === false || job.requireFreshUpload === true || job.allowAiResume === false;
+
   const [resumes, setResumes] = useState<any[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState('');
-  const [uploadNew, setUploadNew] = useState(false);
+  const [uploadNew, setUploadNew] = useState(isFreshUploadRequired);
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!isFreshUploadRequired);
 
   useEffect(() => {
-    fetchResumes();
-  }, []);
+    if (isFreshUploadRequired) {
+      setUploadNew(true);
+      setIsLoading(false);
+    } else {
+      fetchResumes();
+    }
+  }, [isFreshUploadRequired]);
 
   const fetchResumes = async () => {
     try {
@@ -454,7 +462,7 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
       return;
     }
     if (uploadNew && !newResumeFile) {
-      showToast('Document Missing', 'Please select a valid document archive.', 'info');
+      showToast('Document Missing', 'Please select a resume file to upload.', 'info');
       return;
     }
 
@@ -501,57 +509,72 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
   };
 
   return (
-    <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-      <div className="bg-zinc-950 border border-zinc-900 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl animate-fade-in">
-        <div className="p-5 border-b border-zinc-900 flex items-center justify-between bg-zinc-900/20">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-lg w-full max-h-[85vh] overflow-hidden flex flex-col shadow-2xl text-[#1d1d1f] dark:text-[#f5f5f7]">
+        <div className="p-5 border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between bg-[#f2f2f7]/40 dark:bg-[#2c2c2e]/40">
           <div>
-            <h2 className="text-sm font-bold text-white tracking-tight">Submit Application</h2>
-            <p className="text-[11px] text-zinc-500 mt-0.5 font-medium">{job.title} — {job.company.name}</p>
+            <h2 className="text-base font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">Submit Application</h2>
+            <p className="text-xs text-[#86868b] mt-0.5 font-medium">{job.title} — {job.company.name}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg border border-zinc-900 hover:border-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors">
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer">
             <X size={15} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          <div className="flex p-1 bg-zinc-900/60 border border-zinc-900 rounded-xl">
-            <button
-              onClick={() => setUploadNew(false)}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                !uploadNew ? 'bg-zinc-950 text-white border border-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              Saved Resumes
-            </button>
-            <button
-              onClick={() => setUploadNew(true)}
-              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                uploadNew ? 'bg-zinc-950 text-white border border-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              Upload Document
-            </button>
-          </div>
+          {/* Policy Banner when Saved/AI resumes are disabled */}
+          {isFreshUploadRequired && (
+            <div className="p-3.5 bg-[#0071e3]/10 border border-[#0071e3]/20 rounded-2xl flex items-start gap-2.5 text-xs text-[#0071e3]">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold">Fresh Resume Required</p>
+                <p className="text-[11px] text-[#0071e3]/80 leading-relaxed">
+                  The employer requires a fresh resume upload from your local device for this vacancy. Saved and AI-generated profile resumes are not accepted.
+                </p>
+              </div>
+            </div>
+          )}
 
-          {!uploadNew && (
+          {!isFreshUploadRequired && (
+            <div className="flex p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
+              <button
+                onClick={() => setUploadNew(false)}
+                className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                  !uploadNew ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs font-bold' : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                }`}
+              >
+                Saved Resumes
+              </button>
+              <button
+                onClick={() => setUploadNew(true)}
+                className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                  uploadNew ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs font-bold' : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                }`}
+              >
+                Upload Document
+              </button>
+            </div>
+          )}
+
+          {!uploadNew && !isFreshUploadRequired && (
             <div className="space-y-2">
               {isLoading ? (
                 <div className="text-center py-6">
-                  <div className="w-4 h-4 border border-zinc-900 border-t-zinc-400 rounded-full animate-spin mx-auto"></div>
+                  <div className="w-5 h-5 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin mx-auto"></div>
                 </div>
               ) : resumes.length === 0 ? (
-                <div className="text-center py-8 bg-zinc-900/10 border border-zinc-900 rounded-xl p-4">
-                  <FileText className="mx-auto mb-2 text-zinc-700" size={20} />
-                  <p className="text-zinc-500 text-xs font-medium">No saved resumes found in profile account</p>
+                <div className="text-center py-8 bg-[#f2f2f7]/50 dark:bg-[#2c2c2e]/50 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl p-4">
+                  <FileText className="mx-auto mb-2 text-[#86868b]" size={20} />
+                  <p className="text-[#86868b] text-xs font-medium">No saved resumes found in your profile</p>
                 </div>
               ) : (
                 resumes.map((resume) => (
                   <label
                     key={resume.id}
-                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
                       selectedResumeId === resume.id
-                        ? 'border-zinc-700 bg-zinc-900/40 shadow-inner'
-                        : 'border-zinc-900 bg-transparent hover:border-zinc-800'
+                        ? 'border-[#0071e3] bg-[#0071e3]/5 shadow-xs'
+                        : 'border-black/[0.06] dark:border-white/[0.08] bg-[#f2f2f7]/30 dark:bg-[#2c2c2e]/30 hover:border-black/[0.12] dark:hover:border-white/[0.15]'
                     }`}
                   >
                     <input
@@ -560,14 +583,14 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
                       value={resume.id}
                       checked={selectedResumeId === resume.id}
                       onChange={() => setSelectedResumeId(resume.id)}
-                      className="accent-white w-3.5 h-3.5 text-zinc-950"
+                      className="accent-[#0071e3] w-4 h-4"
                     />
                     <div className="flex-1 min-w-0">
-                      <h4 className="text-zinc-200 font-semibold text-xs truncate">{resume.name}</h4>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-zinc-500 font-medium">
-                        <span>{resume.source === 'uploaded' ? 'Uploaded PDF' : 'Generated Document'}</span>
+                      <h4 className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-xs truncate">{resume.name}</h4>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#86868b] font-medium">
+                        <span>{resume.source === 'uploaded' ? 'Uploaded PDF' : 'Generated Resume'}</span>
                         {resume.atsScore && (
-                          <span className="text-zinc-400 bg-zinc-900 px-1.5 py-0.2 border border-zinc-800 rounded-md">Match: {resume.atsScore}%</span>
+                          <span className="text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full font-bold">Match: {resume.atsScore}%</span>
                         )}
                       </div>
                     </div>
@@ -579,51 +602,51 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
 
           {uploadNew && (
             <div>
-              <label className="block border border-dashed border-zinc-900 bg-zinc-900/10 hover:bg-zinc-900/20 rounded-xl p-6 text-center hover:border-zinc-700 transition-all cursor-pointer">
+              <label className="block border-2 border-dashed border-black/[0.1] dark:border-white/[0.1] bg-[#f2f2f7]/40 dark:bg-[#2c2c2e]/40 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-3xl p-6 text-center hover:border-[#0071e3] transition-all cursor-pointer">
                 <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="hidden" />
                 {newResumeFile ? (
                   <div className="space-y-2">
-                    <FileText className="mx-auto text-zinc-300 animate-pulse" size={24} />
-                    <p className="text-zinc-200 font-semibold text-xs max-w-xs truncate mx-auto">{newResumeFile.name}</p>
-                    <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-wider">{(newResumeFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <FileText className="mx-auto text-[#0071e3]" size={28} />
+                    <p className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold text-xs max-w-xs truncate mx-auto">{newResumeFile.name}</p>
+                    <p className="text-[#86868b] text-[10px] uppercase font-bold tracking-wider">{(newResumeFile.size / 1024 / 1024).toFixed(2)} MB</p>
                     <button
                       onClick={(e) => { e.preventDefault(); setNewResumeFile(null); }}
-                      className="text-red-400 text-[11px] font-medium hover:underline pt-1 inline-block"
+                      className="text-[#ff3b30] text-xs font-semibold hover:underline pt-1 inline-block cursor-pointer"
                     >
                       Remove File
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    <Upload className="mx-auto text-zinc-600" size={20} />
-                    <p className="text-zinc-300 font-medium text-xs">Choose document archive</p>
-                    <p className="text-zinc-600 text-[10px]">Supports PDF or DOCX formats up to 10MB</p>
+                    <Upload className="mx-auto text-[#0071e3]" size={24} />
+                    <p className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold text-xs">Choose document from device</p>
+                    <p className="text-[#86868b] text-[11px]">Supports PDF or DOCX formats up to 10MB</p>
                   </div>
                 )}
               </label>
             </div>
           )}
 
-          <div className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-3 flex gap-2.5">
-            <AlertCircle className="text-zinc-600 shrink-0 mt-0.5" size={14} />
-            <div className="text-[11px] text-zinc-500 font-medium leading-relaxed">
-              <p className="text-zinc-400 font-semibold mb-0.5">Automated screening note</p>
-              <p>Your resume credentials will be reviewed by the internal system parser to map keyword matching states before HR notifications open.</p>
+          <div className="bg-[#f2f2f7]/50 dark:bg-[#2c2c2e]/50 border border-black/[0.04] dark:border-white/[0.06] rounded-2xl p-3.5 flex gap-2.5">
+            <AlertCircle className="text-[#86868b] shrink-0 mt-0.5" size={15} />
+            <div className="text-xs text-[#86868b] font-medium leading-relaxed">
+              <p className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold mb-0.5">Automated screening</p>
+              <p>Your resume credentials will be analyzed by the platform parser to map matching qualification criteria for this role.</p>
             </div>
           </div>
         </div>
 
-        <div className="p-4 border-t border-zinc-900 flex items-center justify-end gap-2 bg-zinc-900/20">
+        <div className="p-4 border-t border-black/[0.06] dark:border-white/[0.08] flex items-center justify-end gap-2.5 bg-[#f2f2f7]/30 dark:bg-[#2c2c2e]/30">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-medium transition-colors"
+            className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-2xl text-xs font-semibold transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={isSubmitting || (!uploadNew && !selectedResumeId) || (uploadNew && !newResumeFile)}
-            className="px-4 py-1.5 bg-white text-black rounded-xl text-xs font-bold hover:bg-zinc-200 transition-colors disabled:opacity-20 disabled:cursor-not-allowed shadow-sm"
+            className="px-5 py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_2px_8px_rgba(0,113,227,0.25)] cursor-pointer"
           >
             {isSubmitting ? 'Submitting...' : 'Submit Application'}
           </button>
