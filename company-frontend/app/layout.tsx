@@ -1,5 +1,5 @@
 import { AuthProvider } from '@/app/contexts/AuthContext';
-import { ToastProvider } from '@/app/components/GlassToastContainer'; 
+import { ToastProvider } from '@/app/components/GlassToastContainer';
 import { ThemeProvider } from '@/app/lib/theme';
 import '@/app/globals.css';
 
@@ -18,15 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var m = localStorage.getItem('easyapply_theme_mode') || 'dark';
-                var d = document.documentElement;
-                d.classList.remove('light', 'dark');
-                d.classList.add(m);
-                d.setAttribute('data-theme', m);
-              } catch (e) {}
-            `,
+            __html: `try{var m=localStorage.getItem('easyapply_theme_mode')||'light';var d=document.documentElement;d.classList.remove('light','dark');d.classList.add(m);d.setAttribute('data-theme',m);}catch(e){}`,
           }}
         />
       </head>
