@@ -81,6 +81,8 @@ export const listWalkInRooms = async (req: Request, res: Response) => {
 export const getWalkInRoomByCode = async (req: Request, res: Response) => {
   try {
     const { code } = req.params;
+    const userId = req.user?.userId;
+
     const room = await prisma.walkInRoom.findUnique({
       where: { roomCode: code.toUpperCase() },
       include: {
@@ -89,7 +91,28 @@ export const getWalkInRoomByCode = async (req: Request, res: Response) => {
       }
     });
     if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
-    return res.json({ success: true, room });
+
+    let myEntry = null;
+    let hasApplied = false;
+    let queuePosition = null;
+
+    if (userId) {
+      const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
+      if (profile) {
+        myEntry = await prisma.walkInQueueEntry.findUnique({
+          where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
+        });
+        if (myEntry) {
+          hasApplied = true;
+          const ahead = await prisma.walkInQueueEntry.count({
+            where: { roomId: room.id, status: 'waiting', priorityScore: { gt: myEntry.priorityScore } }
+          });
+          queuePosition = ahead + 1;
+        }
+      }
+    }
+
+    return res.json({ success: true, room, myEntry, hasApplied, queuePosition });
   } catch { return res.status(500).json({ success: false, message: 'Server error' }); }
 };
 
@@ -116,21 +139,29 @@ export const joinWalkInQueue = async (req: Request, res: Response) => {
     });
     if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
 
-    // Check if already in queue
+    // Check if already applied / in queue
     const existing = await prisma.walkInQueueEntry.findUnique({
       where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
     });
-    if (existing && existing.status === 'waiting')
-      return res.status(400).json({ success: false, message: 'You are already in this queue', position: existing });
+    if (existing) {
+      const ahead = await prisma.walkInQueueEntry.count({
+        where: { roomId: room.id, status: 'waiting', priorityScore: { gt: existing.priorityScore } }
+      });
+      return res.status(400).json({
+        success: false,
+        alreadyApplied: true,
+        message: 'You have already applied to this walk-in room.',
+        entry: existing,
+        queuePosition: ahead + 1,
+      });
+    }
 
     const candidateSkills = profile.skills.map(s => s.name);
     const skillScore = computeSkillScore(candidateSkills, room.requiredSkills);
     const priorityScore = computePriorityScore(skillScore, 0);
 
-    const entry = await prisma.walkInQueueEntry.upsert({
-      where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } },
-      update: { status: 'waiting', skillScore, priorityScore, agingBonus: 0, waitingSince: new Date(), resumeId: resumeId ?? null },
-      create: {
+    const entry = await prisma.walkInQueueEntry.create({
+      data: {
         roomId: room.id,
         jobSeekerProfileId: profile.id,
         resumeId: resumeId ?? null,
@@ -519,7 +550,6 @@ export const listActiveWalkInRooms = async (req: Request, res: Response) => {
               queue: {
                 where: {
                   jobSeekerProfileId: seekerProfileId,
-                  status: { in: ['waiting', 'interviewing'] },
                 },
                 select: {
                   id: true,
@@ -528,6 +558,7 @@ export const listActiveWalkInRooms = async (req: Request, res: Response) => {
                   priorityScore: true,
                   livekitToken: true,
                   waitingSince: true,
+                  createdAt: true,
                 }
               }
             }
@@ -541,11 +572,13 @@ export const listActiveWalkInRooms = async (req: Request, res: Response) => {
         mySkillMatch = computeSkillScore(candidateSkills, room.requiredSkills);
       }
       const myEntry = (room as any).queue && (room as any).queue.length > 0 ? (room as any).queue[0] : null;
+      const hasApplied = Boolean(myEntry);
       return {
         ...room,
         queue: undefined,
         mySkillMatch,
         myEntry,
+        hasApplied,
       };
     });
 

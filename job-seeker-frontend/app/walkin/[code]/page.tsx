@@ -45,10 +45,10 @@ interface RoomInfo {
 
 interface QueueEntry {
   id: string;
-  status: 'waiting' | 'interviewing' | 'done' | 'skipped';
+  status: 'waiting' | 'priority' | 'interviewing' | 'accepted' | 'done' | 'skipped' | 'rejected' | string;
   skillScore: number;
   priorityScore: number;
-  agingBonus: number;
+  agingBonus?: number;
   livekitToken?: string | null;
 }
 
@@ -109,6 +109,12 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
       const res = await api.get(`/walkin/rooms/${code}/info`);
       if (res.data?.success) {
         setRoom(res.data.room);
+        if (res.data.myEntry) {
+          setEntry(res.data.myEntry);
+          if (res.data.queuePosition) {
+            setQueuePos(res.data.queuePosition);
+          }
+        }
       } else {
         setError(res.data?.message || 'Room not found');
       }
@@ -142,10 +148,20 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
         setQueuePos(res.data.queuePosition);
         showToast('Joined Queue', res.data.message || 'You are now waiting in the walk-in queue!', 'success');
       } else {
-        showToast('Cannot Join', res.data?.message || 'Failed to join queue', 'danger');
+        if (res.data?.entry) {
+          setEntry(res.data.entry);
+          setQueuePos(res.data.queuePosition || 1);
+        }
+        showToast('Already Applied', res.data?.message || 'You have already applied to this room.', 'info');
       }
     } catch (err: any) {
-      showToast('Error', err.response?.data?.message || 'Failed to join queue. Make sure you are logged in.', 'danger');
+      if (err.response?.data?.alreadyApplied && err.response?.data?.entry) {
+        setEntry(err.response.data.entry);
+        setQueuePos(err.response.data.queuePosition || 1);
+        showToast('Already Applied', err.response.data.message || 'You have already applied to this room.', 'info');
+      } else {
+        showToast('Error', err.response?.data?.message || 'Failed to join queue. Make sure you are logged in.', 'danger');
+      }
     } finally {
       setJoining(false);
     }
@@ -260,32 +276,39 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
           )}
 
           {/* Required Skills */}
-          {room.requiredSkills.length > 0 && (
+          {room.requiredSkills && room.requiredSkills.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Required Skills for Scoring</div>
-              <div className="flex flex-wrap gap-1.5">
-                {room.requiredSkills.map((s, idx) => (
-                  <span key={idx} className="px-2.5 py-1 text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg font-medium">
-                    {s}
+              <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Required Skills</div>
+              <div className="flex flex-wrap gap-2">
+                {room.requiredSkills.map((skill, idx) => (
+                  <span
+                    key={idx}
+                    className="px-3 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg text-xs font-medium"
+                  >
+                    {skill}
                   </span>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Room Queue Meta */}
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-900 text-xs">
-            <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/40 flex items-center gap-2.5">
-              <Users className="w-4 h-4 text-indigo-400" />
+          {/* Real-time Room Details */}
+          <div className="pt-4 border-t border-zinc-900 grid grid-cols-2 gap-4 text-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-zinc-900 rounded-lg border border-zinc-800 text-zinc-400">
+                <Users className="w-4 h-4" />
+              </div>
               <div>
-                <div className="text-zinc-500 text-[10px]">Queue Size</div>
+                <div className="text-zinc-500 text-[10px]">Queue Capacity</div>
                 <div className="font-semibold text-zinc-200">
-                  {room._count.queue} / {room.maxQueue}
+                  {room._count?.queue ?? 0} / {room.maxQueue} Waiting
                 </div>
               </div>
             </div>
-            <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/40 flex items-center gap-2.5">
-              <Sparkles className="w-4 h-4 text-amber-400" />
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-zinc-900 rounded-lg border border-zinc-800 text-indigo-400">
+                <Sparkles className="w-4 h-4" />
+              </div>
               <div>
                 <div className="text-zinc-500 text-[10px]">Queue Algorithm</div>
                 <div className="font-semibold text-zinc-200">Skill + Aging Priority</div>
@@ -300,16 +323,32 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 bg-indigo-500/20 border border-indigo-500/40 rounded-xl text-indigo-400">
-                  <Clock className="w-5 h-5 animate-pulse" />
+                  {entry.status === 'accepted' || entry.status === 'done' ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                  ) : entry.status === 'rejected' || entry.status === 'skipped' ? (
+                    <AlertCircle className="w-5 h-5 text-rose-400" />
+                  ) : (
+                    <Clock className="w-5 h-5 animate-pulse" />
+                  )}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white">
-                    {entry.status === 'interviewing' ? '🎉 You are being called!' : 'You are in the Live Queue'}
+                    {entry.status === 'interviewing'
+                      ? '🎉 You are being called!'
+                      : entry.status === 'accepted' || entry.status === 'done'
+                      ? '🎉 Application Shortlisted!'
+                      : entry.status === 'rejected' || entry.status === 'skipped'
+                      ? 'Application Status Updated'
+                      : 'You Have Applied (In Queue)'}
                   </h3>
                   <p className="text-xs text-zinc-400">
                     {entry.status === 'interviewing'
                       ? 'The recruiter is waiting for you in the video room.'
-                      : 'Please stay on this page. Your position updates automatically.'}
+                      : entry.status === 'accepted' || entry.status === 'done'
+                      ? 'Congratulations! The recruiter has marked your interview as accepted/shortlisted.'
+                      : entry.status === 'rejected' || entry.status === 'skipped'
+                      ? 'The recruiter has completed review for this walk-in session.'
+                      : 'Your application is registered in the live queue.'}
                   </p>
                 </div>
               </div>
@@ -317,6 +356,10 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
                 className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
                   entry.status === 'interviewing'
                     ? 'bg-emerald-500 text-black animate-bounce font-extrabold'
+                    : entry.status === 'accepted' || entry.status === 'done'
+                    ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400'
+                    : entry.status === 'rejected' || entry.status === 'skipped'
+                    ? 'bg-rose-500/20 border border-rose-500/40 text-rose-400'
                     : 'bg-indigo-500/20 border border-indigo-500/40 text-indigo-300'
                 }`}
               >
@@ -328,7 +371,9 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 text-center space-y-1">
                 <div className="text-[10px] text-zinc-500 font-bold uppercase">Queue Position</div>
-                <div className="text-2xl font-black text-white">#{queuePos ?? 1}</div>
+                <div className="text-2xl font-black text-white">
+                  {entry.status === 'waiting' || entry.status === 'priority' ? `#${queuePos ?? 1}` : '—'}
+                </div>
               </div>
               <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 text-center space-y-1">
                 <div className="text-[10px] text-zinc-500 font-bold uppercase">Skill Match</div>
@@ -352,7 +397,7 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
                 <span>Join Video Interview Room Now</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
-            ) : (
+            ) : entry.status === 'waiting' || entry.status === 'priority' ? (
               <div className="pt-2 flex items-center justify-between gap-3">
                 <button
                   onClick={checkMyPosition}
@@ -368,6 +413,16 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
                   <LogOut className="w-3.5 h-3.5" />
                   <span>{leaving ? 'Leaving...' : 'Leave Queue'}</span>
                 </button>
+              </div>
+            ) : (
+              <div className="pt-2">
+                <Link
+                  href="/dashboard/walkin"
+                  className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                >
+                  <span>Browse Other Walk-In Rooms</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
             )}
           </div>

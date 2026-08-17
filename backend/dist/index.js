@@ -10578,6 +10578,7 @@ var listWalkInRooms = async (req, res) => {
 var getWalkInRoomByCode = async (req, res) => {
   try {
     const { code } = req.params;
+    const userId = req.user?.userId;
     const room = await prisma.walkInRoom.findUnique({
       where: { roomCode: code.toUpperCase() },
       include: {
@@ -10586,7 +10587,25 @@ var getWalkInRoomByCode = async (req, res) => {
       }
     });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
-    return res.json({ success: true, room });
+    let myEntry = null;
+    let hasApplied = false;
+    let queuePosition = null;
+    if (userId) {
+      const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
+      if (profile) {
+        myEntry = await prisma.walkInQueueEntry.findUnique({
+          where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
+        });
+        if (myEntry) {
+          hasApplied = true;
+          const ahead = await prisma.walkInQueueEntry.count({
+            where: { roomId: room.id, status: "waiting", priorityScore: { gt: myEntry.priorityScore } }
+          });
+          queuePosition = ahead + 1;
+        }
+      }
+    }
+    return res.json({ success: true, room, myEntry, hasApplied, queuePosition });
   } catch {
     return res.status(500).json({ success: false, message: "Server error" });
   }
@@ -10611,15 +10630,23 @@ var joinWalkInQueue = async (req, res) => {
     const existing = await prisma.walkInQueueEntry.findUnique({
       where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
     });
-    if (existing && existing.status === "waiting")
-      return res.status(400).json({ success: false, message: "You are already in this queue", position: existing });
+    if (existing) {
+      const ahead2 = await prisma.walkInQueueEntry.count({
+        where: { roomId: room.id, status: "waiting", priorityScore: { gt: existing.priorityScore } }
+      });
+      return res.status(400).json({
+        success: false,
+        alreadyApplied: true,
+        message: "You have already applied to this walk-in room.",
+        entry: existing,
+        queuePosition: ahead2 + 1
+      });
+    }
     const candidateSkills = profile.skills.map((s) => s.name);
     const skillScore = computeSkillScore(candidateSkills, room.requiredSkills);
     const priorityScore = computePriorityScore(skillScore, 0);
-    const entry = await prisma.walkInQueueEntry.upsert({
-      where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } },
-      update: { status: "waiting", skillScore, priorityScore, agingBonus: 0, waitingSince: /* @__PURE__ */ new Date(), resumeId: resumeId ?? null },
-      create: {
+    const entry = await prisma.walkInQueueEntry.create({
+      data: {
         roomId: room.id,
         jobSeekerProfileId: profile.id,
         resumeId: resumeId ?? null,
@@ -10938,8 +10965,7 @@ var listActiveWalkInRooms = async (req, res) => {
         ...seekerProfileId ? {
           queue: {
             where: {
-              jobSeekerProfileId: seekerProfileId,
-              status: { in: ["waiting", "interviewing"] }
+              jobSeekerProfileId: seekerProfileId
             },
             select: {
               id: true,
@@ -10947,7 +10973,8 @@ var listActiveWalkInRooms = async (req, res) => {
               skillScore: true,
               priorityScore: true,
               livekitToken: true,
-              waitingSince: true
+              waitingSince: true,
+              createdAt: true
             }
           }
         } : {}
@@ -10959,11 +10986,13 @@ var listActiveWalkInRooms = async (req, res) => {
         mySkillMatch = computeSkillScore(candidateSkills, room.requiredSkills);
       }
       const myEntry = room.queue && room.queue.length > 0 ? room.queue[0] : null;
+      const hasApplied = Boolean(myEntry);
       return {
         ...room,
         queue: void 0,
         mySkillMatch,
-        myEntry
+        myEntry,
+        hasApplied
       };
     });
     return res.json({ success: true, rooms: enrichedRooms });
@@ -11132,7 +11161,7 @@ var getDiscoverableSeekerProfile = async (req, res) => {
 // src/routes/walkIn.routes.ts
 var router12 = Router6();
 router12.get("/active-rooms", optionalAuth, listActiveWalkInRooms);
-router12.get("/rooms/:code/info", getWalkInRoomByCode);
+router12.get("/rooms/:code/info", optionalAuth, getWalkInRoomByCode);
 router12.post("/rooms", authenticateCompany, createWalkInRoom);
 router12.get("/rooms", authenticateCompany, listWalkInRooms);
 router12.get("/rooms/:code/queue", authenticateCompany, getQueueByRoom);

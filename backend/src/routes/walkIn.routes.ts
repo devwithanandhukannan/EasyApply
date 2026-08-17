@@ -18,8 +18,8 @@ const router = Router();
 // Public / Seeker — list open & paused walk-in rooms
 router.get('/active-rooms', optionalAuth, listActiveWalkInRooms);
 
-// Public — look up a specific room by code
-router.get('/rooms/:code/info', getWalkInRoomByCode);
+// Public / Seeker — look up a specific room by code
+router.get('/rooms/:code/info', optionalAuth, getWalkInRoomByCode);
 
 // Company — manage rooms
 router.post('/rooms', authenticateCompany, createWalkInRoom);

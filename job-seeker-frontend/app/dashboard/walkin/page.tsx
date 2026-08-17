@@ -48,6 +48,7 @@ interface WalkInRoom {
     queue: number;
   };
   mySkillMatch?: number | null;
+  hasApplied?: boolean;
   myEntry?: {
     id: string;
     status: string;
@@ -504,6 +505,12 @@ export default function WalkInRoomsPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        {room.hasApplied && (
+                          <span className="px-2.5 py-0.5 text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Applied</span>
+                          </span>
+                        )}
                         <span
                           className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
                             room.status === 'OPEN'
@@ -565,12 +572,13 @@ export default function WalkInRoomsPage() {
                     </div>
 
                     {/* Action button */}
-                    {inQueue ? (
+                    {room.hasApplied || inQueue ? (
                       <Link
                         href={`/walkin/${room.roomCode}`}
-                        className="w-full py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
+                        className="w-full py-2.5 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
                       >
-                        <span>You are in Queue (View Status)</span>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Applied • View Queue Status</span>
                         <ArrowRight className="w-3.5 h-3.5" />
                       </Link>
                     ) : (
