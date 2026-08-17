@@ -17,10 +17,8 @@ import {
   ChevronLeft, 
   X,
   LogOut,
-  User,
   DoorOpen,
   Search,
-  Palette
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -73,7 +71,7 @@ export default function CompanySidebar({
       { 
         name: 'Templates', 
         href: '/dashboard/offer-templates', 
-        icon: ScrollText, // Unique icon for templates
+        icon: ScrollText,
         visible: hasAccess && (isAdmin || isHR) 
       },
       { 
@@ -91,7 +89,7 @@ export default function CompanySidebar({
       { 
         name: 'Company Talent Pool', 
         href: '/dashboard/talent-pool', 
-        icon: UserCheck, // Distinct validation profile icon for evaluated candidates
+        icon: UserCheck,
         visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) 
       },
       { 
@@ -139,14 +137,14 @@ export default function CompanySidebar({
             key={item.name}
             href={item.href}
             onClick={onClickItem}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all group duration-200 ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all group duration-200 ${
               isActive 
-                ? 'bg-zinc-900 border border-zinc-800 text-white shadow-md shadow-black/40' 
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/30 border border-transparent'
+                ? 'bg-black/[0.07] dark:bg-white/[0.12] text-[#1d1d1f] dark:text-white' 
+                : 'text-[#6e6e73] dark:text-[#aeaeb2] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] hover:bg-black/[0.03] dark:hover:bg-white/[0.05] border border-transparent'
             }`}
           >
             <item.icon className={`h-4 w-4 shrink-0 transition-colors ${
-              isActive ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'
+              isActive ? 'text-[#1d1d1f] dark:text-white' : 'text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white'
             }`} />
             <span className={`transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
               {item.name}
@@ -161,28 +159,28 @@ export default function CompanySidebar({
     <>
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────── */}
       <aside 
-        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-r-zinc-900 transition-all duration-300 relative z-30 select-none shrink-0 ${
+        className={`hidden md:flex flex-col h-screen bg-white dark:bg-[#1c1c1e] border-r border-black/[0.06] dark:border-white/[0.08] transition-all duration-300 relative z-30 select-none shrink-0 ${
           isCollapsed ? 'w-[70px]' : 'w-64'
         }`}
       >
         {/* Brand Space */}
-        <div className="p-4 border-b border-zinc-900 h-auto min-h-[73px] py-4 flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
+        <div className="p-4 border-b border-black/[0.06] dark:border-white/[0.08] min-h-[73px] py-4 flex items-center justify-between gap-3 overflow-hidden bg-[#f2f2f7]/40 dark:bg-[#2c2c2e]/40">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="h-8 w-8 border border-zinc-800 rounded-xl bg-zinc-900 flex-shrink-0 flex items-center justify-center overflow-hidden">
+            <div className="h-9 w-9 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex-shrink-0 flex items-center justify-center overflow-hidden">
               {company?.logoUrl ? (
                 <img src={company.logoUrl} alt={company.name} className="h-full w-full object-cover" />
               ) : (
-                <Building2 className="w-4 h-4 text-zinc-300" />
+                <Building2 className="w-4 h-4 text-[#1d1d1f] dark:text-[#f5f5f7]" />
               )}
             </div>
             {!isCollapsed && company && (
               <div className="min-w-0 transition-opacity duration-200">
-                <h2 className="font-semibold text-xs tracking-wide text-zinc-100 truncate uppercase">
+                <h2 className="font-bold text-xs tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
                   {company.name}
                 </h2>
-                <p className="text-[10px] text-zinc-400 truncate mt-0.5">{user?.email || company.email}</p>
+                <p className="text-[10px] text-[#86868b] truncate mt-0.5">{user?.email || company.email}</p>
                 <div className="mt-1">
-                  <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded">
+                  <span className="inline-block px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full">
                     {getRoleLabel()}
                   </span>
                 </div>
@@ -194,9 +192,9 @@ export default function CompanySidebar({
         {/* Action Toggle Pin */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute top-5 -right-3 p-1.5 rounded-full border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors shadow-xl"
+          className="absolute top-5 -right-3 p-1.5 rounded-full border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1c1c1e] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-colors shadow-md cursor-pointer"
         >
-          <ChevronLeft className={`w-3 h-3 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
+          <ChevronLeft className={`w-3.5 h-3.5 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
         </button>
 
         {/* Navigation Layer */}
@@ -205,12 +203,12 @@ export default function CompanySidebar({
         </nav>
 
         {/* Desktop Logout Button */}
-        <div className="p-3 border-t border-zinc-900">
+        <div className="p-3 border-t border-black/[0.06] dark:border-white/[0.08]">
           <button
             onClick={() => logout()}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/20 border border-transparent transition-all duration-200 group"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-semibold text-[#ff3b30] hover:bg-[#ff3b30]/10 transition-all duration-200 group cursor-pointer"
           >
-            <LogOut className="h-4 w-4 shrink-0 text-red-500/70 group-hover:text-red-400" />
+            <LogOut className="h-4 w-4 shrink-0 text-[#ff3b30]" />
             <span className={`transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
               Logout
             </span>
@@ -221,31 +219,31 @@ export default function CompanySidebar({
       {/* ─── MOBILE DRAWER SHEET ───────────────────────────── */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm md:hidden animate-fade-in"
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md md:hidden animate-fade-in"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
       
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-zinc-950 border-r border-zinc-900 flex flex-col transform transition-transform duration-300 md:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-[#1c1c1e] border-r border-black/[0.06] dark:border-white/[0.08] flex flex-col transform transition-transform duration-300 md:hidden ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="p-5 border-b border-zinc-900 h-auto min-h-[73px] py-4 flex items-center justify-between gap-3">
+        <div className="p-5 border-b border-black/[0.06] dark:border-white/[0.08] min-h-[73px] py-4 flex items-center justify-between gap-3 bg-[#f2f2f7]/40 dark:bg-[#2c2c2e]/40">
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="h-8 w-8 border border-zinc-800 rounded-xl bg-zinc-900 flex-shrink-0 flex items-center justify-center overflow-hidden">
+            <div className="h-9 w-9 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex-shrink-0 flex items-center justify-center overflow-hidden">
               {company?.logoUrl ? (
                 <img src={company.logoUrl} alt={company.name} className="h-full w-full object-cover" />
               ) : (
-                <Building2 className="w-4 h-4 text-zinc-300" />
+                <Building2 className="w-4 h-4 text-[#1d1d1f] dark:text-[#f5f5f7]" />
               )}
             </div>
             {company && (
               <div className="min-w-0">
-                <h2 className="font-semibold text-xs tracking-wide text-zinc-200 truncate uppercase">{company.name}</h2>
-                <p className="text-[10px] text-zinc-400 truncate mt-0.5">{user?.email || company.email}</p>
+                <h2 className="font-bold text-xs tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] truncate">{company.name}</h2>
+                <p className="text-[10px] text-[#86868b] truncate mt-0.5">{user?.email || company.email}</p>
                 <div className="mt-1">
-                  <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded">
+                  <span className="inline-block px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full">
                     {getRoleLabel()}
                   </span>
                 </div>
@@ -254,7 +252,7 @@ export default function CompanySidebar({
           </div>
           <button 
             onClick={() => setIsMobileOpen(false)}
-            className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer text-xs"
             aria-label="Close menu"
           >
             <X className="w-4 h-4" />
@@ -266,15 +264,15 @@ export default function CompanySidebar({
         </nav>
 
         {/* Mobile Logout Button */}
-        <div className="p-4 border-t border-zinc-900">
+        <div className="p-4 border-t border-black/[0.06] dark:border-white/[0.08]">
           <button
             onClick={() => {
               setIsMobileOpen(false);
               logout();
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-950/20 transition-all duration-200"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-semibold text-[#ff3b30] hover:bg-[#ff3b30]/10 transition-all duration-200 cursor-pointer"
           >
-            <LogOut className="h-4 w-4 shrink-0 text-red-500/70" />
+            <LogOut className="h-4 w-4 shrink-0 text-[#ff3b30]" />
             <span>Logout</span>
           </button>
         </div>

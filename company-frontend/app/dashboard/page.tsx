@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { ArrowUpRight, Briefcase, Users, FileText, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowUpRight, Briefcase, Users, FileText, Loader2 } from 'lucide-react';
 import api from '@/app/lib/axios';
 
 interface Job {
@@ -37,7 +37,7 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get('/company/dashboard'); // Corresponds to getCompanyDashboard
+      const response = await api.get('/company/dashboard');
       if (response.data.success) {
         setSummary(response.data.summary);
         setJobs(response.data.jobs || []);
@@ -60,45 +60,39 @@ export default function DashboardPage() {
       value: loading ? '...' : String(summary.activeJobs), 
       context: `Out of ${summary.totalJobs} total roles`, 
       icon: Briefcase,
-      accent: 'text-zinc-400 bg-zinc-900 border-zinc-800'
     },
     { 
       label: 'Total Applications', 
       value: loading ? '...' : String(summary.totalApplications), 
       context: 'Aggregated across cycles', 
       icon: Users,
-      accent: 'text-zinc-400 bg-zinc-900 border-zinc-800'
     },
     { 
       label: 'Average Velocity', 
       value: loading ? '...' : summary.totalJobs > 0 ? (summary.totalApplications / summary.totalJobs).toFixed(1) : '0.0', 
       context: 'Applicants per cluster node', 
       icon: FileText,
-      accent: 'text-zinc-400 bg-zinc-900 border-zinc-800'
     },
   ];
 
   return (
-    <div className="space-y-8 p-1">
-      
+    <div className="space-y-6">
       {/* Header Profile Info Panel */}
-      <div className="border-b border-zinc-800/60 pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+          <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">
             Welcome back, {company?.name || 'Workspace Leader'}
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-zinc-400 font-medium">
+          <p className="mt-1 text-sm text-[#86868b] font-medium">
             Review your dynamic team metrics and platform pipeline logs.
           </p>
         </div>
-        
-        
       </div>
 
       {/* Error Bound Warning Block */}
       {error && (
-        <div className="p-4 bg-red-950/40 border border-red-900/50 rounded-xl text-sm text-red-400 flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-red-400" />
+        <div className="p-4 bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-2xl text-sm text-[#ff3b30] flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-[#ff3b30]" />
           {error}
         </div>
       )}
@@ -108,20 +102,20 @@ export default function DashboardPage() {
         {metrics.map((stat, idx) => (
           <div
             key={idx}
-            className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-5 hover:border-zinc-800 transition-all duration-200 flex flex-col justify-between"
+            className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md transition-all flex flex-col justify-between"
           >
             <div className="flex items-start justify-between w-full">
-              <span className="text-xs text-zinc-400 font-semibold tracking-wider uppercase">{stat.label}</span>
-              <div className={`p-2 rounded-xl border ${stat.accent}`}>
+              <span className="text-xs text-[#86868b] font-bold tracking-wider uppercase">{stat.label}</span>
+              <div className="w-9 h-9 rounded-2xl bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center shrink-0">
                 <stat.icon className="w-4 h-4" />
               </div>
             </div>
             
             <div className="mt-4">
-              <span className="text-3xl font-bold text-zinc-50 tracking-tight">
+              <span className="text-3xl font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
                 {stat.value}
               </span>
-              <p className="text-[11px] text-zinc-500 font-medium mt-1">
+              <p className="text-xs text-[#86868b] font-medium mt-1">
                 {stat.context}
               </p>
             </div>
@@ -130,73 +124,73 @@ export default function DashboardPage() {
       </div>
 
       {/* Structured Pipelines / Job Posting Monitor */}
-      <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-5 border-b border-zinc-800 bg-zinc-900/40 flex items-center justify-between">
-          <h2 className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Active Pipeline Sourcing Profiles</h2>
-          <span className="text-[10px] text-zinc-500 font-medium tracking-wide uppercase">Real-Time Sync</span>
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+        <div className="p-5 border-b border-black/[0.06] dark:border-white/[0.08] bg-[#f2f2f7]/50 dark:bg-[#2c2c2e]/50 flex items-center justify-between">
+          <h2 className="text-xs font-bold text-[#86868b] uppercase tracking-wider">Active Pipeline Sourcing Profiles</h2>
+          <span className="text-[10px] text-[#86868b] font-bold tracking-wider uppercase bg-[#f2f2f7] dark:bg-[#2c2c2e] px-2.5 py-1 rounded-full border border-black/[0.04] dark:border-white/[0.06]">Real-Time Sync</span>
         </div>
         
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3">
-            <Loader2 className="w-6 h-6 text-zinc-600 animate-spin" />
-            <p className="text-xs text-zinc-500">Resolving cluster telemetry logs...</p>
+            <Loader2 className="w-6 h-6 text-[#0071e3] animate-spin" />
+            <p className="text-xs text-[#86868b]">Resolving cluster telemetry logs...</p>
           </div>
         ) : jobs.length === 0 ? (
-          <div className="text-center py-20 border-t border-zinc-900">
-            <p className="text-xs text-zinc-500">No telemetry parameters found on active postings.</p>
+          <div className="text-center py-20">
+            <p className="text-xs text-[#86868b]">No telemetry parameters found on active postings.</p>
           </div>
         ) : (
-          <div className="divide-y divide-zinc-800/60">
+          <div className="divide-y divide-black/[0.04] dark:divide-white/[0.06]">
             {jobs.map((job) => (
               <div
                 key={job.id}
-                className="p-5 hover:bg-zinc-900/40 transition-all duration-150 group flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="p-5 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors group flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
-                <div className="min-w-0 space-y-1">
+                <div className="min-w-0 space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm font-bold text-zinc-100 group-hover:text-zinc-50 tracking-tight">
+                    <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
                       {job.title}
                     </h3>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border uppercase tracking-wider ${
+                    <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
                       job.status === 'active' 
-                        ? 'bg-green-950/30 text-green-400 border-green-900/30' 
-                        : 'bg-zinc-800 text-zinc-400 border-zinc-700/60'
+                        ? 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border border-[#34c759]/20' 
+                        : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] border border-black/[0.04] dark:border-white/[0.06]'
                     }`}>
                       {job.status}
                     </span>
                     {job.department && (
-                      <span className="text-[10px] bg-zinc-950 text-zinc-400 border border-zinc-800/80 px-2 py-0.5 rounded-md">
+                      <span className="text-[10px] bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20 px-2.5 py-0.5 rounded-full font-semibold">
                         {job.department}
                       </span>
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-3 text-[11px] text-zinc-500 flex-wrap">
-                    <span>{job.jobType.replace('_', ' ')}</span>
+                  <div className="flex items-center gap-2.5 text-xs text-[#86868b] flex-wrap">
+                    <span className="capitalize">{job.jobType.replace('_', ' ')}</span>
                     <span>•</span>
-                    <span>{job.locationType} {job.location ? `(${job.location})` : ''}</span>
+                    <span className="capitalize">{job.locationType} {job.location ? `(${job.location})` : ''}</span>
                     <span>•</span>
-                    <span>{job.openings} Openings</span>
+                    <span>{job.openings} {job.openings === 1 ? 'Opening' : 'Openings'}</span>
                   </div>
                 </div>
 
                 {/* Pipeline Progression Metrics mapping */}
                 <div className="flex items-center gap-6 justify-between md:justify-end shrink-0">
                   <div className="text-left md:text-right min-w-[100px]">
-                    <span className="block text-lg font-bold text-zinc-200 tracking-tight">
+                    <span className="block text-lg font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">
                       {job.totalApplications}
                     </span>
-                    <span className="block text-[10px] uppercase font-semibold text-zinc-600 tracking-wide">
+                    <span className="block text-[10px] uppercase font-bold text-[#86868b] tracking-wider">
                       Total Profiles
                     </span>
                   </div>
 
-                  <div className="h-9 w-[1px] bg-zinc-800 hidden sm:block" />
+                  <div className="h-8 w-[1px] bg-black/[0.06] dark:bg-white/[0.08] hidden sm:block" />
 
                   {/* Navigation Route Link Trigger */}
                   <a
                     href={`/dashboard/jobs/${job.id}`}
-                    className="p-2 text-zinc-500 hover:text-zinc-200 border border-transparent hover:border-zinc-800 rounded-xl hover:bg-zinc-950 transition-all flex items-center justify-center group/btn"
+                    className="w-9 h-9 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#0071e3] text-[#86868b] hover:text-white transition-all flex items-center justify-center group/btn shadow-xs"
                     title="Inspect application nodes"
                   >
                     <ArrowUpRight className="w-4 h-4 transform group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" />

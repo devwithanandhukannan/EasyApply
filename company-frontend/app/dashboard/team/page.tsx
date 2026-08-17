@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { teamApi, TeamMember } from '@/app/lib/api/team';
+import { teamApi } from '@/app/lib/api/team';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
-import { MoreHorizontal, UserPlus, Trash2, Shield, Mail, Calendar, X, ChevronDown } from 'lucide-react';
+import { MoreHorizontal, UserPlus, Trash2, Shield, Mail, Calendar, X, ChevronDown, Loader2 } from 'lucide-react';
 
 // ─── BITWISE SYSTEM ROLE CONSTANTS ───────────────────────────────────────────
 const ROLES = {
@@ -23,18 +23,18 @@ interface CustomButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement
 }
 
 const CustomButton = ({ variant = 'default', size = 'default', className = '', children, ...props }: CustomButtonProps) => {
-  const baseStyles = 'inline-flex items-center justify-center font-medium transition-all focus:outline-none disabled:pointer-events-none disabled:opacity-50';
+  const baseStyles = 'inline-flex items-center justify-center font-semibold transition-all focus:outline-none disabled:pointer-events-none disabled:opacity-50 cursor-pointer';
   
   const variants = {
-    default: 'bg-white text-black hover:bg-zinc-200 rounded-xl font-bold text-xs',
-    ghost: 'hover:bg-zinc-900/50 text-zinc-400 hover:text-white rounded-lg',
-    outline: 'border border-zinc-800/80 bg-zinc-900 hover:border-zinc-700 text-zinc-400 hover:text-white rounded-lg',
+    default: 'bg-[#0071e3] text-white hover:bg-[#0077ed] rounded-2xl text-xs shadow-[0_2px_8px_rgba(0,113,227,0.25)]',
+    ghost: 'hover:bg-black/[0.04] dark:hover:bg-white/[0.06] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white rounded-2xl',
+    outline: 'border border-black/[0.06] dark:border-white/[0.08] bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-2xl',
   };
 
   const sizes = {
-    default: 'h-9 px-4',
+    default: 'h-10 px-4',
     sm: 'h-8 px-3 text-xs',
-    icon: 'h-7 w-7 p-0',
+    icon: 'h-8 w-8 p-0',
   };
 
   return (
@@ -48,7 +48,7 @@ const CustomButton = ({ variant = 'default', size = 'default', className = '', c
   );
 };
 
-// ─── INLINE MONOSPACE SELECT DROPDOWN (BYPASSES SHADCN PRIMITIVE) ────────────
+// ─── INLINE SELECT DROPDOWN ──────────────────────────────────────────────────
 interface CustomSelectProps {
   value: string;
   onValueChange: (val: string) => void;
@@ -73,18 +73,18 @@ const CustomSelect = ({ value, onValueChange, options }: CustomSelectProps) => {
   const selectedOption = options.find((o) => o.value === value);
 
   return (
-    <div ref={containerRef} className="relative w-full font-mono text-xs">
+    <div ref={containerRef} className="relative w-full text-xs">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 rounded-lg px-3 h-9 flex items-center justify-between text-left focus:outline-none focus:border-zinc-700 transition-colors"
+        className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-2xl px-4 h-10 flex items-center justify-between text-left focus:outline-none focus:border-[#0071e3] transition-colors cursor-pointer"
       >
-        <span>{selectedOption ? selectedOption.label : 'Select role...'}</span>
-        <ChevronDown className={`h-3.5 w-3.5 text-zinc-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="font-semibold">{selectedOption ? selectedOption.label : 'Select role...'}</span>
+        <ChevronDown className={`h-4 w-4 text-[#86868b] transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute w-full mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl z-50 p-1 divide-y divide-zinc-800/40">
+        <div className="absolute w-full mt-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-xl z-50 p-1.5 space-y-1">
           {options.map((opt) => (
             <button
               key={opt.value}
@@ -93,8 +93,10 @@ const CustomSelect = ({ value, onValueChange, options }: CustomSelectProps) => {
                 onValueChange(opt.value);
                 setOpen(false);
               }}
-              className={`w-full text-left px-3 py-2 rounded-md transition-colors text-zinc-300 hover:bg-zinc-800 hover:text-white ${
-                value === opt.value ? 'bg-zinc-800/60 text-white font-semibold' : ''
+              className={`w-full text-left px-3.5 py-2 rounded-xl transition-colors text-xs font-semibold cursor-pointer ${
+                value === opt.value 
+                  ? 'bg-[#0071e3] text-white' 
+                  : 'text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
               }`}
             >
               {opt.label}
@@ -106,9 +108,9 @@ const CustomSelect = ({ value, onValueChange, options }: CustomSelectProps) => {
   );
 };
 
-// ─── INLINE TEAM ROW MODULE (CROP PROOF / EXPANDABLE DESIGN) ─────────────────
+// ─── INLINE TEAM ROW MODULE ──────────────────────────────────────────────────
 interface TeamRowProps {
-  member: any; // Using any to flexibly match rolesMask or globalRolesMask fields from your real API response
+  member: any;
   getRoleBadge: (role: number | string) => React.ReactNode;
   handleRoleChange: (id: string, mask: number) => void;
   handleRemove: (id: string, name: string) => void;
@@ -117,37 +119,36 @@ interface TeamRowProps {
 const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamRowProps) => {
   const [panelOpen, setPanelOpen] = useState(false);
 
-  // Read raw rolesMask from your response payload, default to Viewer (16) if undefined
   const currentRoleValue = typeof member.rolesMask === 'number' 
     ? member.rolesMask 
     : (typeof member.roleMask === 'number' ? member.roleMask : ROLES.COMPANY_VIEWER);
 
   return (
     <>
-      <tr className={`border-b border-zinc-900/40 transition-colors ${panelOpen ? 'bg-zinc-900/20' : 'hover:bg-zinc-900/10'}`}>
-        <td className="px-4 py-3.5 flex items-center gap-3">
-          <div className="h-9 w-9 border border-zinc-800 rounded-xl bg-zinc-900 flex-shrink-0 flex items-center justify-center overflow-hidden">
+      <tr className={`border-b border-black/[0.04] dark:border-white/[0.06] transition-colors ${panelOpen ? 'bg-black/[0.02] dark:bg-white/[0.02]' : 'hover:bg-black/[0.02] dark:hover:bg-white/[0.02]'}`}>
+        <td className="px-5 py-4 flex items-center gap-3">
+          <div className="h-9 w-9 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex-shrink-0 flex items-center justify-center overflow-hidden">
             {member.avatar ? (
               <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
             ) : (
-              <span className="text-zinc-400 text-xs font-mono font-bold">
+              <span className="text-[#0071e3] text-xs font-bold">
                 {member.name ? member.name.charAt(0).toUpperCase() : 'U'}
               </span>
             )}
           </div>
           <div className="space-y-0.5">
-            <div className="text-xs font-semibold text-zinc-900 dark:text-dark">{member.name || 'Pending Member'}</div>
-            <div className="text-[11px] text-zinc-500 font-mono tracking-tight">{member.email}</div>
+            <div className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{member.name || 'Pending Member'}</div>
+            <div className="text-[11px] text-[#86868b]">{member.email}</div>
           </div>
         </td>
         
-        <td className="px-4 py-3.5 align-middle">
+        <td className="px-5 py-4 align-middle">
           {getRoleBadge(currentRoleValue)}
         </td>
         
-        <td className="px-4 py-3.5 font-mono text-xs text-zinc-600 dark:text-zinc-400 align-middle">
+        <td className="px-5 py-4 text-xs text-[#86868b] align-middle">
           <div className="flex items-center gap-1.5">
-            <Calendar className="h-3.5 w-3.5 text-zinc-400" />
+            <Calendar className="h-3.5 w-3.5 text-[#86868b]" />
             <span>
               {member.joinedAt || member.createdAt
                 ? new Date(member.joinedAt || member.createdAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -157,14 +158,14 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
           </div>
         </td>
         
-        <td className="px-4 py-3.5 text-right align-middle">
+        <td className="px-5 py-4 text-right align-middle">
           <CustomButton 
             variant={panelOpen ? 'default' : 'outline'} 
             size="icon" 
             onClick={() => setPanelOpen(!panelOpen)}
             className="transition-transform duration-150"
           >
-            <MoreHorizontal className="h-3.5 w-3.5" />
+            <MoreHorizontal className="h-4 w-4" />
           </CustomButton>
         </td>
       </tr>
@@ -172,10 +173,10 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
       {/* ─── INLINE SUBMENU DRAW PANEL ─── */}
       {panelOpen && (
         <tr>
-          <td colSpan={4} className="bg-zinc-950/80 border-b border-zinc-900 px-4 py-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[11px]">
-              <div className="flex items-center gap-2 text-zinc-500 uppercase tracking-wider text-[10px]">
-                <Shield className="h-3 w-3" /> Control Action Stream:
+          <td colSpan={4} className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border-b border-black/[0.06] dark:border-white/[0.08] px-5 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-[#86868b] font-bold uppercase tracking-wider text-[10px]">
+                <Shield className="h-3.5 w-3.5 text-[#0071e3]" /> Control Action Stream:
               </div>
               
               <div className="flex items-center gap-2">
@@ -184,21 +185,21 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
                     <button
                       type="button"
                       onClick={() => { handleRoleChange(member.id, ROLES.BASE_USER + ROLES.COMPANY_HR); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] hover:bg-[#0071e3] text-[#1d1d1f] dark:text-[#f5f5f7] hover:text-white transition-all text-xs font-semibold cursor-pointer shadow-xs"
                     >
                       Make HR
                     </button>
                     <button
                       type="button"
                       onClick={() => { handleRoleChange(member.id, ROLES.BASE_USER + ROLES.COMPANY_INTERVIEWER); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] hover:bg-[#0071e3] text-[#1d1d1f] dark:text-[#f5f5f7] hover:text-white transition-all text-xs font-semibold cursor-pointer shadow-xs"
                     >
                       Make Interviewer
                     </button>
                     <button
                       type="button"
                       onClick={() => { handleRoleChange(member.id, ROLES.BASE_USER + ROLES.COMPANY_VIEWER); setPanelOpen(false); }}
-                      className="px-2.5 py-1 rounded-lg border border-zinc-800 bg-zinc-900 hover:border-zinc-700 text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] hover:bg-[#0071e3] text-[#1d1d1f] dark:text-[#f5f5f7] hover:text-white transition-all text-xs font-semibold cursor-pointer shadow-xs"
                     >
                       Make Viewer
                     </button>
@@ -208,15 +209,15 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
                 <button
                   type="button"
                   onClick={() => { handleRemove(member.id, member.name || 'this member'); setPanelOpen(false); }}
-                  className="px-2.5 py-1 rounded-lg border border-red-950/60 bg-red-950/20 hover:bg-red-950/40 text-red-400 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl border border-[#ff3b30]/20 bg-[#ff3b30]/10 hover:bg-[#ff3b30] text-[#ff3b30] hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
-                  <Trash2 className="h-3 w-3" /> Revoke Access
+                  <Trash2 className="h-3.5 w-3.5" /> Revoke Access
                 </button>
                 
                 <button
                   type="button"
                   onClick={() => setPanelOpen(false)}
-                  className="p-1 text-zinc-500 hover:text-white rounded transition-colors ml-1"
+                  className="w-7 h-7 rounded-full bg-black/[0.04] dark:bg-white/[0.06] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors ml-1 cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -308,31 +309,30 @@ export default function TeamPage() {
       else if (clean.includes('interviewer')) mask = ROLES.COMPANY_INTERVIEWER;
     }
 
-    // 🟢 Priority checking layout via bitwise logic safely handles 4, 5, 8, 9, etc.
     if ((mask & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN) {
       return (
-        <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-purple-100 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-800/80 text-purple-700 dark:text-purple-300 shadow-xs">
+        <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full bg-[#af52de]/10 border border-[#af52de]/20 text-[#af52de]">
           Admin
         </span>
       );
     }
     if ((mask & ROLES.COMPANY_HR) === ROLES.COMPANY_HR) {
       return (
-        <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-blue-100 dark:bg-blue-950/60 border border-blue-300 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 shadow-xs">
+        <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3]">
           HR Manager
         </span>
       );
     }
     if ((mask & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER) {
       return (
-        <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 shadow-xs">
+        <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158]">
           Interviewer
         </span>
       );
     }
     
     return (
-      <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 shadow-xs">
+      <span className="inline-flex items-center px-2.5 py-0.5 text-[10px] uppercase tracking-wider font-bold rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#86868b]">
         Viewer
       </span>
     );
@@ -341,7 +341,7 @@ export default function TeamPage() {
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-800 border-t-white"></div>
+        <Loader2 className="h-7 w-7 animate-spin text-[#0071e3]" />
       </div>
     );
   }
@@ -351,37 +351,37 @@ export default function TeamPage() {
       {/* Header Panel */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">Team Management</h1>
-          <p className="text-xs text-zinc-400 mt-1">Provision corporate user access controls, manage department roles, and track invitation links.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">Team Management</h1>
+          <p className="text-sm text-[#86868b] mt-1 font-medium">Provision corporate user access controls, manage department roles, and track invitation links.</p>
         </div>
         
         <CustomButton 
           onClick={() => setInviteOpen(true)}
-          className="flex items-center gap-1.5 self-start sm:self-auto"
+          className="flex items-center gap-2 self-start sm:self-auto"
         >
-          <UserPlus className="w-3.5 h-3.5" />
+          <UserPlus className="w-4 h-4" />
           Invite Member
         </CustomButton>
       </div>
 
       {/* Corporate Table Architecture */}
       {members.length === 0 ? (
-        <div className="border border-dashed border-zinc-200 dark:border-zinc-900 bg-white/50 dark:bg-zinc-950/20 p-12 rounded-2xl text-center">
-          <p className="text-xs text-zinc-500 font-mono">No registered team members linked to this corporate workspace identifier.</p>
+        <div className="border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-12 rounded-3xl text-center shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+          <p className="text-sm text-[#86868b]">No registered team members linked to this corporate workspace.</p>
         </div>
       ) : (
-        <div className="border border-zinc-900 bg-zinc-950/40 rounded-2xl shadow-xl">
+        <div className="border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden">
           <div className="w-full overflow-x-auto">
             <table className="w-full border-collapse text-left min-w-[600px]">
               <thead>
-                <tr className="bg-zinc-950 border-b border-zinc-900 font-mono text-[11px] text-zinc-500">
-                  <th className="font-medium h-10 px-4">Workspace Member</th>
-                  <th className="font-medium h-10 px-4">System Role</th>
-                  <th className="font-medium h-10 px-4">Affiliation Date</th>
-                  <th className="font-medium h-10 px-4 w-12 text-right"></th>
+                <tr className="bg-[#f2f2f7]/50 dark:bg-[#2c2c2e]/50 border-b border-black/[0.06] dark:border-white/[0.08] text-[11px] font-bold text-[#86868b] uppercase tracking-wider">
+                  <th className="h-11 px-5">Workspace Member</th>
+                  <th className="h-11 px-5">System Role</th>
+                  <th className="h-11 px-5">Affiliation Date</th>
+                  <th className="h-11 px-5 w-12 text-right"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-900/60">
+              <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.06]">
                 {members.map((member) => (
                   <TeamRow 
                     key={member.id}
@@ -401,41 +401,41 @@ export default function TeamPage() {
       {inviteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-md transition-opacity" 
+            className="absolute inset-0 bg-black/40 backdrop-blur-md transition-opacity" 
             onClick={() => setInviteOpen(false)}
           />
           
-          <div className="relative bg-zinc-950 border border-zinc-900 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+          <div className="relative bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-3xl max-w-md w-full p-6 shadow-2xl">
             <button 
               type="button"
               onClick={() => setInviteOpen(false)}
-              className="absolute right-4 top-4 text-zinc-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-zinc-900 focus:outline-none"
+              className="absolute right-5 top-5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] flex items-center justify-center transition-colors cursor-pointer"
             >
               <X className="h-4 w-4" />
             </button>
 
-            <div className="space-y-1 pr-6">
-              <h2 className="text-sm font-semibold tracking-tight text-white">Invite a Team Member</h2>
-              <p className="text-[11px] text-zinc-500 font-mono">DISPATCH SECURE CORPORATE ALIGNMENT LINK</p>
+            <div className="space-y-1 pr-8">
+              <h2 className="text-lg font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">Invite a Team Member</h2>
+              <p className="text-xs text-[#86868b]">Dispatch secure corporate alignment link to new collaborator</p>
             </div>
             
             <div className="space-y-4 pt-5">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Email Address</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Email Address</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-2.5 h-3.5 w-3.5 text-zinc-600" />
+                  <Mail className="absolute left-3.5 top-3 h-4 w-4 text-[#86868b]" />
                   <input
                     type="email"
                     placeholder="colleague@company.com"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    className="w-full h-9 bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder:text-zinc-600 rounded-lg pl-9 pr-3 text-xs focus:outline-none focus:border-zinc-700 font-mono transition-colors"
+                    className="w-full h-10 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7] placeholder:text-[#86868b] rounded-2xl pl-10 pr-4 text-xs focus:outline-none focus:border-[#0071e3] font-medium transition-colors"
                   />
                 </div>
               </div>
               
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Workspace Role</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-[#86868b]">Workspace Role</label>
                 <CustomSelect 
                   value={inviteRole} 
                   onValueChange={setInviteRole} 
@@ -445,8 +445,8 @@ export default function TeamPage() {
                     { value: 'viewer', label: 'Viewer (Read-only)' }
                   ]}
                 />
-                <p className="text-[11px] text-zinc-500 leading-normal pt-1">
-                  HR Managers can post jobs and manage candidate streams. Interviewers can execute assigned evaluations. Viewers have absolute read-only metrics access.
+                <p className="text-[11px] text-[#86868b] leading-normal pt-1">
+                  HR Managers can post jobs and manage candidate streams. Interviewers can execute evaluations. Viewers have read-only access.
                 </p>
               </div>
               
@@ -454,9 +454,9 @@ export default function TeamPage() {
                 type="button"
                 onClick={handleInvite} 
                 disabled={submitting || !inviteEmail} 
-                className="w-full bg-zinc-100 text-black hover:bg-white text-xs font-bold rounded-xl h-9 transition-all mt-2 disabled:pointer-events-none disabled:opacity-50 focus:outline-none"
+                className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold rounded-2xl h-10 transition-all mt-2 disabled:pointer-events-none disabled:opacity-50 focus:outline-none shadow-[0_2px_8px_rgba(0,113,227,0.25)] cursor-pointer"
               >
-                {submitting ? 'Processing Transaction...' : 'Send Corporate Invitation'}
+                {submitting ? 'Sending Invitation...' : 'Send Corporate Invitation'}
               </button>
             </div>
           </div>
