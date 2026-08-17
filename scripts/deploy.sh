@@ -163,7 +163,7 @@ fi
 
 MIGRATE_CMD=""
 if [[ "$DO_MIGRATE" -eq 1 ]]; then
-  MIGRATE_CMD=$'echo "→ Generate Prisma & Run database migrations"\nnpx prisma generate\nnpx prisma migrate deploy\n'
+  MIGRATE_CMD=$'echo "→ Generate Prisma, Run database migrations & Seed"\nnpx prisma generate\nnpx prisma migrate deploy\nnpx prisma db seed\n'
 fi
 
 REMOTE_SCRIPT=$(cat <<EOF
@@ -189,15 +189,22 @@ npm install
 rm -rf .next
 NEXT_PUBLIC_API_URL=https://api.interviewer.stibe.in/api npm run build
 
+echo "→ Building Admin Frontend"
+cd ../admin-frontend
+npm install
+rm -rf .next
+NEXT_PUBLIC_API_URL=https://api.interviewer.stibe.in/api npm run build
+
 echo "→ Reload PM2 configuration"
 cd ..
 pm2 startOrReload deploy/ecosystem.config.cjs --update-env
 
-echo "→ Test and reload Nginx configuration"
+echo "→ Update and reload Nginx configuration"
+cp deploy/nginx/interviewer.stibe.in.conf /etc/nginx/sites-available/interviewer.stibe.in.conf || true
 nginx -t && systemctl reload nginx
 
 echo "→ PM2 status check"
-pm2 status interviewer-backend interviewer-job-seeker interviewer-company
+pm2 status interviewer-backend interviewer-job-seeker interviewer-company interviewer-admin
 
 echo "→ Deployed commit details"
 git log -1 --oneline
@@ -206,6 +213,7 @@ echo "→ Health checking Services"
 curl -sf http://127.0.0.1:8040/ || echo "Backend check failed"
 curl -sf -o /dev/null -w "Job Seeker Web status: %{http_code}\n" http://127.0.0.1:3040/login || echo "Job Seeker Web check failed"
 curl -sf -o /dev/null -w "Company Web status: %{http_code}\n" http://127.0.0.1:3041/login || echo "Company Web check failed"
+curl -sf -o /dev/null -w "Admin Web status: %{http_code}\n" http://127.0.0.1:3042/login || echo "Admin Web check failed"
 EOF
 )
 

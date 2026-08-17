@@ -433,6 +433,17 @@ export default function MeetPage() {
     if (!interviewId) return;
     let cancelled = false;
 
+    // Direct token provided via query parameter (e.g. Walk-In Instant Interview)
+    const passedToken = searchParams.get('token');
+    if (passedToken) {
+      setCredentials({
+        token: passedToken,
+        serverUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || 'http://localhost:7880',
+      });
+      setLoading(false);
+      return;
+    }
+
     const fetchCreds = async () => {
       try {
         const endpoint =
@@ -465,7 +476,7 @@ export default function MeetPage() {
     return () => { 
       cancelled = true; 
     };
-  }, [interviewId, roleType]);
+  }, [interviewId, roleType, searchParams]);
 
   // Whiteboard canvas redraw
   useEffect(() => {

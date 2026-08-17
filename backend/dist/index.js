@@ -952,6 +952,27 @@ var updatePassword = async (req, res) => {
     return res.status(500).json({ success: false, message: "Password update failed." });
   }
 };
+var toggleDiscoverable = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+    const { discoverable } = req.body;
+    if (typeof discoverable !== "boolean")
+      return res.status(400).json({ success: false, message: "discoverable must be a boolean" });
+    const profile = await prisma.jobSeekerProfile.update({
+      where: { userId },
+      data: { discoverable },
+      select: { id: true, discoverable: true }
+    });
+    return res.json({
+      success: true,
+      discoverable: profile.discoverable,
+      message: discoverable ? "Your profile is now visible to companies" : "Your profile is now hidden"
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
 // src/utils/multer.ts
 import multer from "multer";
@@ -5439,7 +5460,18 @@ var getJobSeekerDashboard = async (req, res) => {
     const userId = req.user.userId;
     const profileId = await getProfileId4(userId);
     if (!profileId) {
-      return res.status(404).json({ success: false, message: "Profile not found. Complete your profile to get started." });
+      return res.json({
+        success: true,
+        data: {
+          profile: null,
+          applicationSummary: { total: 0, active: 0, hired: 0, rejected: 0, inInterview: 0, offerStage: 0, rejectedThisMonth: 0, byStatus: {} },
+          recentApplications: [],
+          upcomingInterviews: [],
+          pendingOffers: [],
+          resume: null,
+          activityChart: []
+        }
+      });
     }
     const now = /* @__PURE__ */ new Date();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 864e5);
@@ -5652,7 +5684,19 @@ var getApplicationInsights = async (req, res) => {
   try {
     const userId = req.user.userId;
     const profileId = await getProfileId4(userId);
-    if (!profileId) return res.status(404).json({ success: false, message: "Profile not found" });
+    if (!profileId) {
+      return res.json({
+        success: true,
+        data: {
+          totalApplications: 0,
+          responseRate: 0,
+          avgAtsScore: null,
+          avgResponseTimeDays: null,
+          industryBreakdown: [],
+          monthlyTrend: []
+        }
+      });
+    }
     const applications = await prisma.application.findMany({
       where: { jobSeekerProfileId: profileId },
       include: {
@@ -6429,6 +6473,7 @@ router3.use(requireJobSeeker);
 router3.get("/profile", getProfile);
 router3.put("/profile", upload.single("profileImage"), updateProfile);
 router3.patch("/profile/password", updatePassword);
+router3.put("/profile/discoverable", authenticateToken, requireJobSeeker, toggleDiscoverable);
 var parseResumeUpload = multer2({
   storage: multer2.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -9789,6 +9834,1321 @@ router10.get("/:jobId", optionalAuth, getPublicJobDetails);
 router10.get("/auth/me", optionalAuth, getCurrentUser);
 var publicJobs_routes_default = router10;
 
+// src/routes/admin.routes.ts
+import { Router as Router5 } from "express";
+
+// src/controllers/adminAuth.controller.ts
+import bcrypt5 from "bcrypt";
+import jwt6 from "jsonwebtoken";
+var adminLogin = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password)
+      return res.status(400).json({ success: false, message: "Email and password required" });
+    const admin2 = await prisma.platformAdmin.findUnique({ where: { email } });
+    if (!admin2)
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    const valid = await bcrypt5.compare(password, admin2.passwordHash);
+    if (!valid)
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    const token = jwt6.sign(
+      { adminId: admin2.id, email: admin2.email, role: "platform_admin" },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
+    return res.json({
+      success: true,
+      token,
+      admin: { id: admin2.id, name: admin2.name, email: admin2.email }
+    });
+  } catch (err) {
+    console.error("[Admin Login]", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getAdminProfile = async (req, res) => {
+  try {
+    const adminId = req.adminId;
+    const admin2 = await prisma.platformAdmin.findUnique({
+      where: { id: adminId },
+      select: { id: true, name: true, email: true, createdAt: true }
+    });
+    if (!admin2) return res.status(404).json({ success: false, message: "Admin not found" });
+    return res.json({ success: true, admin: admin2 });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// src/middleware/adminAuth.middleware.ts
+import jwt7 from "jsonwebtoken";
+var adminAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ success: false, message: "Unauthorized: No admin token provided" });
+    return;
+  }
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt7.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== "platform_admin") {
+      res.status(403).json({ success: false, message: "Forbidden: Platform admin access required" });
+      return;
+    }
+    req.adminId = decoded.adminId;
+    next();
+  } catch {
+    res.status(401).json({ success: false, message: "Unauthorized: Invalid or expired admin token" });
+  }
+};
+
+// src/controllers/admin.controller.ts
+var getPlatformStats = async (_req, res) => {
+  try {
+    const [companies, seekers, applications, subscriptions, jobs, walkinRooms] = await Promise.all([
+      prisma.company.count(),
+      prisma.jobSeekerProfile.count(),
+      prisma.application.count(),
+      prisma.companySubscription.count({ where: { isActive: true } }),
+      prisma.jobPosting.count({ where: { status: "active" } }),
+      prisma.walkInRoom.count({ where: { status: "OPEN" } })
+    ]);
+    return res.json({ success: true, stats: { companies, seekers, applications, subscriptions, activeJobs: jobs, openWalkInRooms: walkinRooms } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var listCompanies = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page ?? "1");
+    const limit = parseInt(req.query.limit ?? "20");
+    const search = req.query.search ?? "";
+    const skip = (page - 1) * limit;
+    const where = {};
+    if (search) where.name = { contains: search, mode: "insensitive" };
+    const [companies, total] = await Promise.all([
+      prisma.company.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          industry: true,
+          size: true,
+          isVerified: true,
+          verificationBadge: true,
+          aiResumeBuilderEnabled: true,
+          createdAt: true,
+          subscription: { include: { plan: { select: { name: true, features: true } } } },
+          _count: { select: { jobPostings: true, teamMembers: true } }
+        }
+      }),
+      prisma.company.count({ where })
+    ]);
+    return res.json({ success: true, companies, total, page, totalPages: Math.ceil(total / limit) });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getCompanyDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const company = await prisma.company.findUnique({
+      where: { id },
+      include: {
+        subscription: { include: { plan: true } },
+        _count: { select: { jobPostings: true, teamMembers: true, spotJobs: true, walkInRooms: true } }
+      }
+    });
+    if (!company) return res.status(404).json({ success: false, message: "Company not found" });
+    return res.json({ success: true, company });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var verifyCompany = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isVerified, verificationBadge } = req.body;
+    const company = await prisma.company.update({
+      where: { id },
+      data: {
+        isVerified: isVerified ?? true,
+        verificationBadge: verificationBadge ?? "verified"
+      }
+    });
+    return res.json({ success: true, company });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateCompanyFeatures = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { aiResumeBuilderEnabled } = req.body;
+    const updateData = {};
+    if (typeof aiResumeBuilderEnabled === "boolean") updateData.aiResumeBuilderEnabled = aiResumeBuilderEnabled;
+    const company = await prisma.company.update({ where: { id }, data: updateData });
+    return res.json({ success: true, company });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var overrideWalkInRoomMaxQueue = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { maxQueue } = req.body;
+    if (typeof maxQueue !== "number" || maxQueue < 1)
+      return res.status(400).json({ success: false, message: "maxQueue must be a positive number" });
+    const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    const globalMax = settings?.walkInQueueMaxGlobal ?? 200;
+    if (maxQueue > globalMax)
+      return res.status(400).json({ success: false, message: `maxQueue cannot exceed global platform cap of ${globalMax}` });
+    const room = await prisma.walkInRoom.update({ where: { id: roomId }, data: { maxQueue } });
+    return res.json({ success: true, room });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var listSeekers = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page ?? "1");
+    const limit = parseInt(req.query.limit ?? "20");
+    const search = req.query.search ?? "";
+    const skip = (page - 1) * limit;
+    const where = {};
+    if (search) where.OR = [
+      { fullName: { contains: search, mode: "insensitive" } },
+      { email: { contains: search, mode: "insensitive" } }
+    ];
+    const [seekers, total] = await Promise.all([
+      prisma.jobSeekerProfile.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          location: true,
+          availabilityStatus: true,
+          discoverable: true,
+          createdAt: true,
+          _count: { select: { applications: true, skills: true } }
+        }
+      }),
+      prisma.jobSeekerProfile.count({ where })
+    ]);
+    return res.json({ success: true, seekers, total, page, totalPages: Math.ceil(total / limit) });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// src/controllers/adminSubscription.controller.ts
+var DEFAULT_FREE_FEATURES = {
+  jobPostings: true,
+  atsScoring: true,
+  aiResumeScan: true,
+  aiResumeBuilder: true,
+  walkinInterview: false,
+  seekerDiscovery: false,
+  crmTalentPool: false,
+  spotJobs: false,
+  offerLetters: true,
+  interviewScheduling: true,
+  kanban: true
+};
+var listPlans = async (_req, res) => {
+  try {
+    const plans = await prisma.subscriptionPlan.findMany({
+      orderBy: { createdAt: "asc" },
+      include: { _count: { select: { companySubscriptions: true } } }
+    });
+    return res.json({ success: true, plans });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var createPlan = async (req, res) => {
+  try {
+    const { name, description, features, maxJobPostings, maxTeamMembers, price, isCustom } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Plan name is required" });
+    const plan = await prisma.subscriptionPlan.create({
+      data: {
+        name,
+        description: description ?? null,
+        features: features ?? DEFAULT_FREE_FEATURES,
+        maxJobPostings: maxJobPostings ?? 3,
+        maxTeamMembers: maxTeamMembers ?? 2,
+        price: price ?? null,
+        isCustom: isCustom ?? false
+      }
+    });
+    return res.status(201).json({ success: true, plan });
+  } catch (err) {
+    if (err?.code === "P2002") return res.status(409).json({ success: false, message: "A plan with this name already exists" });
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updatePlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, features, maxJobPostings, maxTeamMembers, price, isActive, isCustom } = req.body;
+    const plan = await prisma.subscriptionPlan.update({
+      where: { id },
+      data: { name, description, features, maxJobPostings, maxTeamMembers, price, isActive, isCustom }
+    });
+    return res.json({ success: true, plan });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var deactivatePlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.subscriptionPlan.update({ where: { id }, data: { isActive: false } });
+    return res.json({ success: true, message: "Plan deactivated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var assignSubscription = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { planId, features, expiresAt, notes } = req.body;
+    if (!planId) return res.status(400).json({ success: false, message: "planId is required" });
+    const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+    if (!plan) return res.status(404).json({ success: false, message: "Plan not found" });
+    const subscription = await prisma.companySubscription.upsert({
+      where: { companyId },
+      update: {
+        planId,
+        features: features ?? null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        isActive: true,
+        notes: notes ?? null,
+        startsAt: /* @__PURE__ */ new Date()
+      },
+      create: {
+        companyId,
+        planId,
+        features: features ?? null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        isActive: true,
+        notes: notes ?? null
+      },
+      include: { plan: true }
+    });
+    return res.json({ success: true, subscription });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateCompanyFeatureOverride = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { features } = req.body;
+    const sub = await prisma.companySubscription.findUnique({ where: { companyId } });
+    if (!sub) return res.status(404).json({ success: false, message: "No subscription found for this company" });
+    const existing = sub.features ?? {};
+    const updated = await prisma.companySubscription.update({
+      where: { companyId },
+      data: { features: { ...existing, ...features } },
+      include: { plan: true }
+    });
+    return res.json({ success: true, subscription: updated });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// src/controllers/adminSettings.controller.ts
+import nodemailer2 from "nodemailer";
+
+// src/utils/settingsEncryption.ts
+import crypto from "crypto";
+var ALGORITHM = "aes-256-cbc";
+var IV_LENGTH = 16;
+function getKey() {
+  const raw = process.env.SETTINGS_ENCRYPTION_KEY ?? "default-dev-key-change-in-production!!";
+  return crypto.createHash("sha256").update(raw).digest();
+}
+function encrypt(plaintext) {
+  const key = getKey();
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  return `${iv.toString("hex")}:${encrypted.toString("hex")}`;
+}
+function maskSecret(value) {
+  if (!value) return null;
+  if (value.length <= 4) return "\u2022\u2022\u2022\u2022";
+  return `${"\u2022".repeat(Math.min(value.length - 4, 8))}${value.slice(-4)}`;
+}
+
+// src/services/platformSettings.service.ts
+var cachedSettings = null;
+var cacheExpiry = 0;
+var CACHE_TTL_MS = 6e4;
+async function getSettings() {
+  if (cachedSettings && Date.now() < cacheExpiry) return cachedSettings;
+  const s = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+  cachedSettings = s;
+  cacheExpiry = Date.now() + CACHE_TTL_MS;
+  return s;
+}
+function invalidateSettingsCache() {
+  cachedSettings = null;
+  cacheExpiry = 0;
+}
+async function getWalkInQueueMax() {
+  const s = await getSettings();
+  return s?.walkInQueueMaxGlobal ?? 200;
+}
+
+// src/controllers/adminSettings.controller.ts
+async function upsertSettings(data) {
+  return prisma.platformSettings.upsert({
+    where: { id: "singleton" },
+    update: data,
+    create: { id: "singleton", ...data }
+  });
+}
+var getSettings2 = async (_req, res) => {
+  try {
+    const s = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    return res.json({
+      success: true,
+      settings: {
+        // Walk-in
+        walkInQueueMaxGlobal: s?.walkInQueueMaxGlobal ?? 200,
+        // Razorpay
+        razorpayKeyId: s?.razorpayKeyId ?? null,
+        razorpayKeySecret: maskSecret(s?.razorpayKeySecret),
+        razorpayWebhookSecret: maskSecret(s?.razorpayWebhookSecret),
+        razorpayMode: s?.razorpayMode ?? "test",
+        // SMTP
+        smtpHost: s?.smtpHost ?? "smtp.gmail.com",
+        smtpPort: s?.smtpPort ?? 587,
+        smtpUser: s?.smtpUser ?? null,
+        smtpPass: maskSecret(s?.smtpPass),
+        emailFrom: s?.emailFrom ?? null,
+        emailFromName: s?.emailFromName ?? "EasyApply",
+        // Groq
+        groqApiKey: maskSecret(s?.groqApiKey),
+        groqModel: s?.groqModel ?? "llama-3.3-70b-versatile",
+        // LiveKit
+        livekitApiUrl: s?.livekitApiUrl ?? null,
+        livekitApiKey: s?.livekitApiKey ?? null,
+        livekitApiSecret: maskSecret(s?.livekitApiSecret),
+        // General
+        platformName: s?.platformName ?? "EasyApply",
+        platformLogoUrl: s?.platformLogoUrl ?? null,
+        supportEmail: s?.supportEmail ?? null,
+        maintenanceMode: s?.maintenanceMode ?? false,
+        allowNewCompanyReg: s?.allowNewCompanyReg ?? true,
+        allowNewSeekerReg: s?.allowNewSeekerReg ?? true
+      }
+    });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updatePaymentSettings = async (req, res) => {
+  try {
+    const { razorpayKeyId, razorpayKeySecret, razorpayWebhookSecret, razorpayMode } = req.body;
+    const data = {};
+    if (razorpayKeyId !== void 0) data.razorpayKeyId = razorpayKeyId;
+    if (razorpayKeySecret && !razorpayKeySecret.includes("\u2022")) data.razorpayKeySecret = encrypt(razorpayKeySecret);
+    if (razorpayWebhookSecret && !razorpayWebhookSecret.includes("\u2022")) data.razorpayWebhookSecret = encrypt(razorpayWebhookSecret);
+    if (razorpayMode) data.razorpayMode = razorpayMode;
+    await upsertSettings(data);
+    invalidateSettingsCache();
+    return res.json({ success: true, message: "Payment settings updated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var testPaymentSettings = async (req, res) => {
+  try {
+    const { razorpayKeyId, razorpayKeySecret } = req.body;
+    const resp = await fetch("https://api.razorpay.com/v1/orders?count=1", {
+      headers: { Authorization: "Basic " + Buffer.from(`${razorpayKeyId}:${razorpayKeySecret}`).toString("base64") }
+    });
+    if (resp.ok) return res.json({ success: true, message: "Razorpay credentials are valid \u2705" });
+    return res.json({ success: false, message: `Razorpay responded with ${resp.status}: Invalid credentials` });
+  } catch {
+    return res.status(500).json({ success: false, message: "Could not reach Razorpay API" });
+  }
+};
+var updateEmailSettings = async (req, res) => {
+  try {
+    const { smtpHost, smtpPort, smtpUser, smtpPass, emailFrom, emailFromName } = req.body;
+    const data = {};
+    if (smtpHost !== void 0) data.smtpHost = smtpHost;
+    if (smtpPort !== void 0) data.smtpPort = parseInt(smtpPort);
+    if (smtpUser !== void 0) data.smtpUser = smtpUser;
+    if (smtpPass && !smtpPass.includes("\u2022")) data.smtpPass = encrypt(smtpPass);
+    if (emailFrom !== void 0) data.emailFrom = emailFrom;
+    if (emailFromName !== void 0) data.emailFromName = emailFromName;
+    await upsertSettings(data);
+    invalidateSettingsCache();
+    return res.json({ success: true, message: "Email settings updated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var testEmailSettings = async (req, res) => {
+  try {
+    const { smtpHost, smtpPort, smtpUser, smtpPass, emailFrom, sendTo } = req.body;
+    if (!smtpHost || !smtpUser || !smtpPass || !sendTo)
+      return res.status(400).json({ success: false, message: "smtpHost, smtpUser, smtpPass, sendTo are required" });
+    const transporter2 = nodemailer2.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort ?? "587"),
+      secure: parseInt(smtpPort ?? "587") === 465,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+    await transporter2.sendMail({
+      from: `"EasyApply Admin" <${emailFrom ?? smtpUser}>`,
+      to: sendTo,
+      subject: "\u2705 EasyApply SMTP Test",
+      html: "<h2>SMTP test successful!</h2><p>Your email settings are correctly configured on EasyApply.</p>"
+    });
+    return res.json({ success: true, message: `Test email sent to ${sendTo} \u2705` });
+  } catch (err) {
+    return res.status(400).json({ success: false, message: `SMTP error: ${err.message}` });
+  }
+};
+var updateAiSettings = async (req, res) => {
+  try {
+    const { groqApiKey, groqModel } = req.body;
+    const data = {};
+    if (groqApiKey && !groqApiKey.includes("\u2022")) data.groqApiKey = encrypt(groqApiKey);
+    if (groqModel) data.groqModel = groqModel;
+    await upsertSettings(data);
+    invalidateSettingsCache();
+    return res.json({ success: true, message: "AI settings updated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateVideoSettings = async (req, res) => {
+  try {
+    const { livekitApiUrl, livekitApiKey, livekitApiSecret } = req.body;
+    const data = {};
+    if (livekitApiUrl !== void 0) data.livekitApiUrl = livekitApiUrl;
+    if (livekitApiKey !== void 0) data.livekitApiKey = livekitApiKey;
+    if (livekitApiSecret && !livekitApiSecret.includes("\u2022")) data.livekitApiSecret = encrypt(livekitApiSecret);
+    await upsertSettings(data);
+    invalidateSettingsCache();
+    return res.json({ success: true, message: "Video settings updated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateGeneralSettings = async (req, res) => {
+  try {
+    const { platformName, platformLogoUrl, supportEmail, maintenanceMode, allowNewCompanyReg, allowNewSeekerReg } = req.body;
+    const data = {};
+    if (platformName !== void 0) data.platformName = platformName;
+    if (platformLogoUrl !== void 0) data.platformLogoUrl = platformLogoUrl;
+    if (supportEmail !== void 0) data.supportEmail = supportEmail;
+    if (typeof maintenanceMode === "boolean") data.maintenanceMode = maintenanceMode;
+    if (typeof allowNewCompanyReg === "boolean") data.allowNewCompanyReg = allowNewCompanyReg;
+    if (typeof allowNewSeekerReg === "boolean") data.allowNewSeekerReg = allowNewSeekerReg;
+    await upsertSettings(data);
+    invalidateSettingsCache();
+    return res.json({ success: true, message: "General settings updated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateQueueSettings = async (req, res) => {
+  try {
+    const { walkInQueueMaxGlobal } = req.body;
+    if (typeof walkInQueueMaxGlobal !== "number" || walkInQueueMaxGlobal < 1)
+      return res.status(400).json({ success: false, message: "walkInQueueMaxGlobal must be a positive number" });
+    await upsertSettings({ walkInQueueMaxGlobal });
+    invalidateSettingsCache();
+    return res.json({ success: true, message: "Queue settings updated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// src/controllers/adminAts.controller.ts
+var runningJobs = /* @__PURE__ */ new Map();
+var triggerBatchRecalculation = async (req, res) => {
+  try {
+    const { jobPostingId } = req.params;
+    if (runningJobs.has(jobPostingId)) {
+      const job2 = runningJobs.get(jobPostingId);
+      if (job2.status === "running")
+        return res.json({ success: false, message: "A recalculation is already running for this job", job: job2 });
+    }
+    const applications = await prisma.application.findMany({
+      where: { jobPostingId, isWithdrawn: false },
+      select: { id: true, resumeId: true, jobPostingId: true }
+    });
+    if (!applications.length)
+      return res.status(404).json({ success: false, message: "No applications found for this job posting" });
+    const job = { status: "running", total: applications.length, done: 0, startedAt: /* @__PURE__ */ new Date() };
+    runningJobs.set(jobPostingId, job);
+    res.json({ success: true, message: `Batch recalculation started for ${applications.length} applications`, job });
+    const BATCH_SIZE = 5;
+    const DELAY_MS = 3e3;
+    (async () => {
+      for (let i = 0; i < applications.length; i += BATCH_SIZE) {
+        const batch = applications.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(
+          batch.map((app2) => processApplicationMatchAsync(app2.id, app2.resumeId, app2.jobPostingId))
+        );
+        runningJobs.get(jobPostingId).done += batch.length;
+        if (i + BATCH_SIZE < applications.length) {
+          await new Promise((r) => setTimeout(r, DELAY_MS));
+        }
+      }
+      runningJobs.get(jobPostingId).status = "completed";
+      console.log(`[ATS Batch] Recalculation completed for job ${jobPostingId}`);
+    })();
+  } catch (err) {
+    console.error("[ATS Batch]", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getBatchJobs = async (_req, res) => {
+  const jobs = Array.from(runningJobs.entries()).map(([jobPostingId, job]) => ({
+    jobPostingId,
+    ...job
+  }));
+  return res.json({ success: true, jobs });
+};
+
+// src/routes/admin.routes.ts
+var router11 = Router5();
+router11.post("/auth/login", adminLogin);
+router11.get("/auth/me", adminAuth, getAdminProfile);
+router11.get("/stats", adminAuth, getPlatformStats);
+router11.get("/companies", adminAuth, listCompanies);
+router11.get("/companies/:id", adminAuth, getCompanyDetail);
+router11.put("/companies/:id/verify", adminAuth, verifyCompany);
+router11.put("/companies/:id/features", adminAuth, updateCompanyFeatures);
+router11.put("/companies/:companyId/subscription", adminAuth, assignSubscription);
+router11.put("/companies/:companyId/subscription/features", adminAuth, updateCompanyFeatureOverride);
+router11.put("/walkin/rooms/:roomId/max-queue", adminAuth, overrideWalkInRoomMaxQueue);
+router11.get("/seekers", adminAuth, listSeekers);
+router11.get("/subscriptions", adminAuth, listPlans);
+router11.post("/subscriptions", adminAuth, createPlan);
+router11.put("/subscriptions/:id", adminAuth, updatePlan);
+router11.delete("/subscriptions/:id", adminAuth, deactivatePlan);
+router11.get("/settings", adminAuth, getSettings2);
+router11.put("/settings/payment", adminAuth, updatePaymentSettings);
+router11.post("/settings/payment/test", adminAuth, testPaymentSettings);
+router11.put("/settings/email", adminAuth, updateEmailSettings);
+router11.post("/settings/email/test", adminAuth, testEmailSettings);
+router11.put("/settings/ai", adminAuth, updateAiSettings);
+router11.put("/settings/video", adminAuth, updateVideoSettings);
+router11.put("/settings/general", adminAuth, updateGeneralSettings);
+router11.put("/settings/queue", adminAuth, updateQueueSettings);
+router11.post("/ats/recalculate/:jobPostingId", adminAuth, triggerBatchRecalculation);
+router11.get("/ats/jobs", adminAuth, getBatchJobs);
+var admin_routes_default = router11;
+
+// src/routes/walkIn.routes.ts
+import { Router as Router6 } from "express";
+
+// src/controllers/walkIn.controller.ts
+import { AccessToken as AccessToken2 } from "livekit-server-sdk";
+
+// src/services/walkInQueue.service.ts
+function computeSkillScore(candidateSkills, requiredSkills) {
+  if (!requiredSkills.length) return 50;
+  const normalizedReq = requiredSkills.map((s) => s.trim().toLowerCase());
+  const normalizedCand = candidateSkills.map((s) => s.trim().toLowerCase());
+  let matches = 0;
+  for (const req of normalizedReq) {
+    if (normalizedCand.some((c) => c.includes(req) || req.includes(c))) matches++;
+  }
+  return Math.round(matches / normalizedReq.length * 100);
+}
+function computePriorityScore(skillScore, agingBonus) {
+  return skillScore + Math.min(agingBonus, 30);
+}
+async function applyAgingToQueue(roomId) {
+  const waitingEntries = await prisma.walkInQueueEntry.findMany({
+    where: { roomId, status: "waiting" },
+    select: { id: true, waitingSince: true, skillScore: true, agingBonus: true }
+  });
+  const now = /* @__PURE__ */ new Date();
+  const updates = waitingEntries.map((entry) => {
+    const minutesWaiting = (now.getTime() - new Date(entry.waitingSince).getTime()) / 6e4;
+    const newAgingBonus = minutesWaiting * 0.5;
+    const newPriorityScore = computePriorityScore(entry.skillScore, newAgingBonus);
+    return prisma.walkInQueueEntry.update({
+      where: { id: entry.id },
+      data: { agingBonus: newAgingBonus, priorityScore: newPriorityScore }
+    });
+  });
+  await Promise.allSettled(updates);
+}
+function startAgingInterval(roomId) {
+  return setInterval(() => applyAgingToQueue(roomId), 6e4);
+}
+var agingIntervals = /* @__PURE__ */ new Map();
+function ensureAgingRunning(roomId) {
+  if (!agingIntervals.has(roomId)) {
+    const interval = startAgingInterval(roomId);
+    agingIntervals.set(roomId, interval);
+  }
+}
+function stopAging(roomId) {
+  const interval = agingIntervals.get(roomId);
+  if (interval) {
+    clearInterval(interval);
+    agingIntervals.delete(roomId);
+  }
+}
+
+// src/controllers/walkIn.controller.ts
+function generateRoomCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+async function generateLiveKitToken2(roomName, identity, name) {
+  const apiKey = process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LIVEKIT_API_SECRET;
+  const token = new AccessToken2(apiKey, apiSecret, { identity, name });
+  token.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true, canPublishData: true });
+  return await token.toJwt();
+}
+var createWalkInRoom = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { title, description, requiredSkills, maxQueue } = req.body;
+    if (!title) return res.status(400).json({ success: false, message: "title is required" });
+    const globalMax = await getWalkInQueueMax();
+    const roomMaxQueue = Math.min(maxQueue ?? 50, globalMax);
+    let roomCode;
+    let attempts = 0;
+    do {
+      roomCode = generateRoomCode();
+      attempts++;
+      if (attempts > 10) return res.status(500).json({ success: false, message: "Could not generate unique room code" });
+    } while (await prisma.walkInRoom.findUnique({ where: { roomCode } }));
+    const livekitRoom = `walkin-${roomCode}-${Date.now()}`;
+    const room = await prisma.walkInRoom.create({
+      data: {
+        companyId,
+        title,
+        description: description ?? null,
+        requiredSkills: requiredSkills ?? [],
+        roomCode,
+        livekitRoom,
+        maxQueue: roomMaxQueue,
+        status: "OPEN"
+      }
+    });
+    ensureAgingRunning(room.id);
+    return res.status(201).json({ success: true, room });
+  } catch (err) {
+    console.error("[WalkIn] createRoom", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var listWalkInRooms = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const rooms = await prisma.walkInRoom.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { queue: true } } }
+    });
+    return res.json({ success: true, rooms });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getWalkInRoomByCode = async (req, res) => {
+  try {
+    const { code } = req.params;
+    const room = await prisma.walkInRoom.findUnique({
+      where: { roomCode: code.toUpperCase() },
+      include: {
+        company: { select: { name: true, logoUrl: true, industry: true } },
+        _count: { select: { queue: true } }
+      }
+    });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    return res.json({ success: true, room });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var joinWalkInQueue = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { code } = req.params;
+    const { resumeId } = req.body;
+    const room = await prisma.walkInRoom.findUnique({
+      where: { roomCode: code.toUpperCase() },
+      include: { _count: { select: { queue: { where: { status: "waiting" } } } } }
+    });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    if (room.status !== "OPEN") return res.status(400).json({ success: false, message: "This room is not currently accepting candidates" });
+    if (room._count.queue >= room.maxQueue) return res.status(400).json({ success: false, message: "Queue is full. Please try again later." });
+    const profile = await prisma.jobSeekerProfile.findUnique({
+      where: { userId },
+      include: { skills: { select: { name: true } } }
+    });
+    if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
+    const existing = await prisma.walkInQueueEntry.findUnique({
+      where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
+    });
+    if (existing && existing.status === "waiting")
+      return res.status(400).json({ success: false, message: "You are already in this queue", position: existing });
+    const candidateSkills = profile.skills.map((s) => s.name);
+    const skillScore = computeSkillScore(candidateSkills, room.requiredSkills);
+    const priorityScore = computePriorityScore(skillScore, 0);
+    const entry = await prisma.walkInQueueEntry.upsert({
+      where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } },
+      update: { status: "waiting", skillScore, priorityScore, agingBonus: 0, waitingSince: /* @__PURE__ */ new Date(), resumeId: resumeId ?? null },
+      create: {
+        roomId: room.id,
+        jobSeekerProfileId: profile.id,
+        resumeId: resumeId ?? null,
+        skillScore,
+        priorityScore,
+        status: "waiting",
+        waitingSince: /* @__PURE__ */ new Date()
+      }
+    });
+    const ahead = await prisma.walkInQueueEntry.count({
+      where: { roomId: room.id, status: "waiting", priorityScore: { gt: priorityScore } }
+    });
+    return res.status(201).json({
+      success: true,
+      entry,
+      queuePosition: ahead + 1,
+      message: `You are #${ahead + 1} in the queue`
+    });
+  } catch (err) {
+    console.error("[WalkIn] joinQueue", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getQueueByRoom = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { code } = req.params;
+    const room = await prisma.walkInRoom.findFirst({
+      where: { roomCode: code.toUpperCase(), companyId },
+      include: {
+        _count: {
+          select: { queue: true }
+        }
+      }
+    });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    const queue = await prisma.walkInQueueEntry.findMany({
+      where: { roomId: room.id },
+      orderBy: [
+        { priorityScore: "desc" },
+        { waitingSince: "asc" }
+      ],
+      include: {
+        resume: {
+          select: {
+            id: true,
+            name: true,
+            filePath: true,
+            atsScore: true,
+            content: true,
+            aiSuggestions: true,
+            createdAt: true
+          }
+        },
+        jobSeekerProfile: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            profilePhotoUrl: true,
+            location: true,
+            phone: true,
+            linkedin: true,
+            github: true,
+            bio: true,
+            skills: { select: { name: true } },
+            education: {
+              select: { institution: true, degree: true, field: true, startYear: true, endYear: true }
+            },
+            experience: {
+              select: { company: true, role: true, startYear: true, endYear: true, current: true }
+            }
+          }
+        }
+      }
+    });
+    return res.json({ success: true, room, queue });
+  } catch (err) {
+    console.error("[WalkIn] getQueueByRoom error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var callNextCandidate = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { code } = req.params;
+    const { entryId } = req.body || {};
+    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    let targetEntry;
+    if (entryId) {
+      targetEntry = await prisma.walkInQueueEntry.findFirst({
+        where: { id: entryId, roomId: room.id },
+        include: { jobSeekerProfile: { select: { userId: true, fullName: true, email: true } } }
+      });
+    } else {
+      targetEntry = await prisma.walkInQueueEntry.findFirst({
+        where: { roomId: room.id, status: { in: ["priority", "waiting"] } },
+        orderBy: [
+          { status: "asc" },
+          // 'priority' before 'waiting' alphabetically
+          { priorityScore: "desc" }
+        ],
+        include: { jobSeekerProfile: { select: { userId: true, fullName: true, email: true } } }
+      });
+    }
+    if (!targetEntry) return res.status(404).json({ success: false, message: "No candidates available to call" });
+    const livekitToken = await generateLiveKitToken2(
+      room.livekitRoom,
+      `seeker-${targetEntry.jobSeekerProfileId}`,
+      targetEntry.jobSeekerProfile.fullName
+    );
+    const recruiterToken = await generateLiveKitToken2(
+      room.livekitRoom,
+      `recruiter-${req.user?.userId || req.company?.companyId}`,
+      req.company?.companyName || "Interviewer"
+    );
+    const updated = await prisma.walkInQueueEntry.update({
+      where: { id: targetEntry.id },
+      data: { status: "interviewing", livekitToken }
+    });
+    return res.json({
+      success: true,
+      entry: updated,
+      livekitRoom: room.livekitRoom,
+      livekitToken,
+      recruiterToken
+    });
+  } catch (err) {
+    console.error("[WalkIn] callNext", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateQueueEntryStatus = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { entryId } = req.params;
+    const { status, notes } = req.body;
+    const validStatuses = ["waiting", "priority", "interviewing", "accepted", "done", "skipped", "rejected"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: `status must be one of: ${validStatuses.join(", ")}` });
+    }
+    const entry = await prisma.walkInQueueEntry.findUnique({
+      where: { id: entryId },
+      include: {
+        room: true,
+        jobSeekerProfile: { select: { fullName: true } }
+      }
+    });
+    if (!entry || entry.room.companyId !== companyId) {
+      return res.status(404).json({ success: false, message: "Queue entry not found" });
+    }
+    let livekitToken = entry.livekitToken;
+    if (status === "interviewing" && !livekitToken) {
+      livekitToken = await generateLiveKitToken2(
+        entry.room.livekitRoom,
+        `seeker-${entry.jobSeekerProfileId}`,
+        entry.jobSeekerProfile.fullName
+      );
+    }
+    const updated = await prisma.walkInQueueEntry.update({
+      where: { id: entryId },
+      data: {
+        status,
+        notes: notes !== void 0 ? notes : entry.notes,
+        livekitToken
+      }
+    });
+    return res.json({ success: true, entry: updated });
+  } catch (err) {
+    console.error("[WalkIn] updateQueueEntryStatus error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateQueueEntryPriority = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { entryId } = req.params;
+    const { priorityScore, status } = req.body;
+    const entry = await prisma.walkInQueueEntry.findUnique({
+      where: { id: entryId },
+      include: { room: true }
+    });
+    if (!entry || entry.room.companyId !== companyId) {
+      return res.status(404).json({ success: false, message: "Queue entry not found" });
+    }
+    const updated = await prisma.walkInQueueEntry.update({
+      where: { id: entryId },
+      data: {
+        priorityScore: priorityScore !== void 0 ? Number(priorityScore) : entry.priorityScore,
+        status: status || entry.status
+      }
+    });
+    return res.json({ success: true, entry: updated });
+  } catch (err) {
+    console.error("[WalkIn] updateQueueEntryPriority error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateRoomSettings = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { code } = req.params;
+    const { title, description, requiredSkills, maxQueue, status } = req.body;
+    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    const globalMax = await getWalkInQueueMax();
+    const updateData = {};
+    if (title) updateData.title = title.trim();
+    if (description !== void 0) updateData.description = description ? description.trim() : null;
+    if (requiredSkills && Array.isArray(requiredSkills)) updateData.requiredSkills = requiredSkills;
+    if (maxQueue !== void 0) updateData.maxQueue = Math.min(Number(maxQueue), globalMax);
+    if (status && ["OPEN", "PAUSED", "CLOSED"].includes(status)) updateData.status = status;
+    const updated = await prisma.walkInRoom.update({
+      where: { id: room.id },
+      data: updateData
+    });
+    if (status === "OPEN") ensureAgingRunning(room.id);
+    else if (status === "CLOSED") stopAging(room.id);
+    return res.json({ success: true, room: updated });
+  } catch (err) {
+    console.error("[WalkIn] updateRoomSettings error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateRoomStatus = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { code } = req.params;
+    const { status } = req.body;
+    if (!["OPEN", "PAUSED", "CLOSED"].includes(status))
+      return res.status(400).json({ success: false, message: "status must be OPEN, PAUSED, or CLOSED" });
+    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    const updated = await prisma.walkInRoom.update({ where: { id: room.id }, data: { status } });
+    if (status === "OPEN") ensureAgingRunning(room.id);
+    if (status === "CLOSED") stopAging(room.id);
+    return res.json({ success: true, room: updated });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getSeekerQueuePosition = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { code } = req.params;
+    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code.toUpperCase() } });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
+    if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
+    const entry = await prisma.walkInQueueEntry.findUnique({
+      where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
+    });
+    if (!entry) return res.status(404).json({ success: false, message: "You are not in this queue" });
+    const ahead = await prisma.walkInQueueEntry.count({
+      where: { roomId: room.id, status: "waiting", priorityScore: { gt: entry.priorityScore } }
+    });
+    return res.json({ success: true, entry, queuePosition: ahead + 1 });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var listActiveWalkInRooms = async (req, res) => {
+  try {
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const userId = req.user?.userId;
+    let candidateSkills = [];
+    let seekerProfileId = null;
+    if (userId) {
+      const profile = await prisma.jobSeekerProfile.findUnique({
+        where: { userId },
+        include: { skills: { select: { name: true } } }
+      });
+      if (profile) {
+        seekerProfileId = profile.id;
+        candidateSkills = profile.skills.map((s) => s.name);
+      }
+    }
+    const whereClause = {
+      status: { in: ["OPEN", "PAUSED"] }
+    };
+    if (search) {
+      whereClause.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+        { company: { name: { contains: search, mode: "insensitive" } } },
+        { requiredSkills: { hasSome: [search] } }
+      ];
+    }
+    const rooms = await prisma.walkInRoom.findMany({
+      where: whereClause,
+      orderBy: [
+        { status: "asc" },
+        // OPEN before PAUSED
+        { createdAt: "desc" }
+      ],
+      include: {
+        company: {
+          select: {
+            name: true,
+            logoUrl: true,
+            industry: true,
+            isVerified: true,
+            verificationBadge: true
+          }
+        },
+        _count: {
+          select: { queue: { where: { status: "waiting" } } }
+        },
+        ...seekerProfileId ? {
+          queue: {
+            where: {
+              jobSeekerProfileId: seekerProfileId,
+              status: { in: ["waiting", "interviewing"] }
+            },
+            select: {
+              id: true,
+              status: true,
+              skillScore: true,
+              priorityScore: true,
+              livekitToken: true,
+              waitingSince: true
+            }
+          }
+        } : {}
+      }
+    });
+    const enrichedRooms = rooms.map((room) => {
+      let mySkillMatch = null;
+      if (candidateSkills.length > 0) {
+        mySkillMatch = computeSkillScore(candidateSkills, room.requiredSkills);
+      }
+      const myEntry = room.queue && room.queue.length > 0 ? room.queue[0] : null;
+      return {
+        ...room,
+        queue: void 0,
+        mySkillMatch,
+        myEntry
+      };
+    });
+    return res.json({ success: true, rooms: enrichedRooms });
+  } catch (err) {
+    console.error("[WalkIn] listActiveRooms", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getMyWalkInQueues = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
+    if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
+    const entries = await prisma.walkInQueueEntry.findMany({
+      where: {
+        jobSeekerProfileId: profile.id,
+        status: { in: ["waiting", "interviewing"] }
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        room: {
+          include: {
+            company: {
+              select: {
+                name: true,
+                logoUrl: true,
+                industry: true,
+                isVerified: true,
+                verificationBadge: true
+              }
+            },
+            _count: { select: { queue: { where: { status: "waiting" } } } }
+          }
+        }
+      }
+    });
+    const enrichedEntries = await Promise.all(
+      entries.map(async (entry) => {
+        let queuePosition = 1;
+        if (entry.status === "waiting") {
+          const ahead = await prisma.walkInQueueEntry.count({
+            where: {
+              roomId: entry.roomId,
+              status: "waiting",
+              priorityScore: { gt: entry.priorityScore }
+            }
+          });
+          queuePosition = ahead + 1;
+        }
+        return {
+          ...entry,
+          queuePosition
+        };
+      })
+    );
+    return res.json({ success: true, queues: enrichedEntries });
+  } catch (err) {
+    console.error("[WalkIn] getMyQueues", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var leaveWalkInQueue = async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { code } = req.params;
+    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code.toUpperCase() } });
+    if (!room) return res.status(404).json({ success: false, message: "Room not found" });
+    const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
+    if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
+    const existing = await prisma.walkInQueueEntry.findUnique({
+      where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
+    });
+    if (!existing || !["waiting", "interviewing"].includes(existing.status)) {
+      return res.status(400).json({ success: false, message: "You are not in this queue" });
+    }
+    await prisma.walkInQueueEntry.update({
+      where: { id: existing.id },
+      data: { status: "skipped", notes: "Left queue voluntarily" }
+    });
+    return res.json({ success: true, message: "You have left the queue" });
+  } catch (err) {
+    console.error("[WalkIn] leaveQueue", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// src/controllers/seekerDiscovery.controller.ts
+var listDiscoverableSeekers = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const page = parseInt(req.query.page ?? "1");
+    const limit = parseInt(req.query.limit ?? "20");
+    const skills = req.query.skills;
+    const location = req.query.location;
+    const availability = req.query.availability;
+    const skip = (page - 1) * limit;
+    const where = { discoverable: true };
+    if (location) where.location = { contains: location, mode: "insensitive" };
+    if (availability) where.availabilityStatus = availability;
+    if (skills) {
+      const skillList = skills.split(",").map((s) => s.trim()).filter(Boolean);
+      if (skillList.length) {
+        where.skills = {
+          some: {
+            name: { in: skillList, mode: "insensitive" }
+          }
+        };
+      }
+    }
+    const [seekers, total] = await Promise.all([
+      prisma.jobSeekerProfile.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          fullName: true,
+          profilePhotoUrl: true,
+          location: true,
+          bio: true,
+          availabilityStatus: true,
+          linkedin: true,
+          github: true,
+          portfolio: true,
+          skills: { select: { name: true } },
+          experience: { select: { role: true, company: true, current: true }, orderBy: { createdAt: "desc" }, take: 2 },
+          education: { select: { degree: true, institution: true }, orderBy: { createdAt: "desc" }, take: 1 },
+          _count: { select: { applications: true, skills: true } }
+        }
+      }),
+      prisma.jobSeekerProfile.count({ where })
+    ]);
+    return res.json({ success: true, seekers, total, page, totalPages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error("[Discovery]", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getDiscoverableSeekerProfile = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { profileId } = req.params;
+    const seeker = await prisma.jobSeekerProfile.findFirst({
+      where: { id: profileId, discoverable: true },
+      include: {
+        skills: true,
+        experience: { orderBy: { createdAt: "desc" } },
+        education: { orderBy: { createdAt: "desc" } },
+        projects: { orderBy: { createdAt: "desc" } },
+        certifications: true,
+        languages: true,
+        achievements: true
+      }
+    });
+    if (!seeker) return res.status(404).json({ success: false, message: "Seeker not found or not discoverable" });
+    const { user, ...safeProfile } = seeker;
+    return res.json({ success: true, seeker: safeProfile });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// src/routes/walkIn.routes.ts
+var router12 = Router6();
+router12.get("/active-rooms", optionalAuth, listActiveWalkInRooms);
+router12.get("/rooms/:code/info", getWalkInRoomByCode);
+router12.post("/rooms", authenticateCompany, createWalkInRoom);
+router12.get("/rooms", authenticateCompany, listWalkInRooms);
+router12.get("/rooms/:code/queue", authenticateCompany, getQueueByRoom);
+router12.post("/rooms/:code/call-next", authenticateCompany, callNextCandidate);
+router12.put("/rooms/:code/status", authenticateCompany, updateRoomStatus);
+router12.put("/rooms/:code/settings", authenticateCompany, updateRoomSettings);
+router12.put("/queue/:entryId/status", authenticateCompany, updateQueueEntryStatus);
+router12.put("/queue/:entryId/priority", authenticateCompany, updateQueueEntryPriority);
+router12.get("/my-queues", authenticateToken, getMyWalkInQueues);
+router12.post("/rooms/:code/join", authenticateToken, joinWalkInQueue);
+router12.get("/rooms/:code/position", authenticateToken, getSeekerQueuePosition);
+router12.post("/rooms/:code/leave", authenticateToken, leaveWalkInQueue);
+router12.get("/discovery/seekers", authenticateCompany, listDiscoverableSeekers);
+router12.get("/discovery/seekers/:profileId", authenticateCompany, getDiscoverableSeekerProfile);
+var walkIn_routes_default = router12;
+
 // src/index.ts
 var app = express8();
 app.use(cookieParser());
@@ -9811,11 +11171,13 @@ app.use(
 app.use(express8.json({ limit: "10mb" }));
 app.use("/api/auth", auth_routes_default);
 app.use("/api/company/auth", companyAuth_routes_default);
+app.use("/api/admin", admin_routes_default);
 app.use("/api/jobseeker", jobseeker_routes_default);
 app.use("/api/company", company_routes_default);
 app.use("/api/interviews", interview_routes_default);
 app.use("/api/kanban", kanban_routes_default);
 app.use("/api/crm", crm_routes_default);
+app.use("/api/walkin", walkIn_routes_default);
 app.use("/api/public", publicJobs_routes_default);
 app.get("/", (_req, res) => res.send("Backend Running"));
 var PORT = process.env.PORT || 8e3;

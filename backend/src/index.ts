@@ -11,6 +11,8 @@ import publicJobRoutes from './routes/publicJobs.routes.ts';
 import interviewRouter from './routes/interview.routes.ts';
 import kanbanRouter from './routes/kanban.routes.ts';
 import crmRoutes from './routes/crm.routes.ts';
+import adminRoutes from './routes/admin.routes.ts';
+import walkInRoutes from './routes/walkIn.routes.ts';
 
 const app = express();
 app.use(cookieParser());
@@ -49,12 +51,18 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/company/auth', companyAuthRoutes);
 
+// Platform admin routes
+app.use('/api/admin', adminRoutes);
+
 // Protected routes
 app.use('/api/jobseeker', jobseekerRoutes);
 app.use('/api/company', companyJobRoutes);
 app.use('/api/interviews', interviewRouter);
 app.use('/api/kanban', kanbanRouter);
 app.use('/api/crm', crmRoutes);
+
+// Walk-in interviews & seeker discovery
+app.use('/api/walkin', walkInRoutes);
 
 // Public routes last (to avoid conflicts)
 app.use('/api/public', publicJobRoutes);

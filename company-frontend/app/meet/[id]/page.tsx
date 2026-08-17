@@ -31,6 +31,15 @@ export default function UnifiedLiveKitMeetPage() {
     if (!interviewId || hasFetched.current) return;
     hasFetched.current = true;
 
+    // Check for direct token from Walk-In Room
+    const directToken = searchParams.get('token');
+    if (directToken) {
+      setServerUrl(process.env.NEXT_PUBLIC_LIVEKIT_URL || 'http://localhost:7880');
+      setToken(directToken);
+      setLoading(false);
+      return;
+    }
+
     const fetchRoomCredentials = async () => {
       try {
         const endpoint = roleType === 'jobseeker'
@@ -59,17 +68,22 @@ export default function UnifiedLiveKitMeetPage() {
     };
 
     fetchRoomCredentials();
-  }, [interviewId, roleType]);
+  }, [interviewId, roleType, searchParams]);
 
   const handleDisconnected = () => {
     console.log('🚪 Gracefully leaving room layout context.');
     
-    // 🎯 REDIRECT LOGIC: Interviewers are routed to the feedback submission screen
+    // Walk-In rooms return directly back to walk-in dashboard
+    if (typeof interviewId === 'string' && interviewId.startsWith('walkin-')) {
+      router.replace('/dashboard/walkin');
+      return;
+    }
+
+    // Standard scheduled interviewers are routed to the feedback submission screen
     if (roleType === 'company' && interviewId) {
       console.log(`Redirecting host node to evaluation matrix: /dashboard/interviews/${interviewId}/review`);
       router.replace(`/dashboard/interviews/${interviewId}/review`);
     } else {
-      // Candidates return safely back to their standard layout registry stream
       router.replace('/dashboard/interviews');
     }
   };

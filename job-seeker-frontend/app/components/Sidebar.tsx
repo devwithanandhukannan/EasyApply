@@ -14,7 +14,9 @@ import {
   Settings,
   Home,
   ChevronLeft,
-  Compass
+  Compass,
+  Video,
+  Zap,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -42,8 +44,9 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
     { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
     { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
     { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
+    { icon: Video, label: 'Walk-In Rooms', href: '/dashboard/walkin' },
     { icon: User, label: 'Profile Workspace', href: '/dashboard/profile' },
-    { icon: User, label: 'Spot Jobs', href: '/dashboard/spot-jobs' },
+    { icon: Zap, label: 'Spot Jobs', href: '/dashboard/spot-jobs' },
   ];
 
   const handleLogout = () => {

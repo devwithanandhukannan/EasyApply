@@ -17,7 +17,9 @@ import {
   ChevronLeft, 
   X,
   LogOut,
-  User
+  User,
+  DoorOpen,
+  Search
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -102,6 +104,18 @@ export default function CompanySidebar({
         href: '/dashboard/team', 
         icon: Users, 
         visible: hasAccess && (isAdmin) 
+      },
+      { 
+        name: 'Walk-In Rooms', 
+        href: '/dashboard/walkin', 
+        icon: DoorOpen, 
+        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer) 
+      },
+      { 
+        name: 'Seeker Discovery', 
+        href: '/dashboard/discovery', 
+        icon: Search, 
+        visible: hasAccess && (isAdmin || isHR || isViewer) 
       },
       { 
         name: 'Company Profile', 

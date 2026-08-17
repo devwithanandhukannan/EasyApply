@@ -38,5 +38,18 @@ module.exports = {
       autorestart: true,
       max_memory_restart: '512M',
     },
+    {
+      name: 'interviewer-admin',
+      cwd: '/var/www/interviewer/admin-frontend',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3042',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3042',
+      },
+      instances: 1,
+      autorestart: true,
+      max_memory_restart: '512M',
+    },
   ],
 };

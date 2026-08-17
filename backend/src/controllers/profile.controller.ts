@@ -447,3 +447,24 @@ export const updatePassword = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: 'Password update failed.' });
   }
 };
+export const toggleDiscoverable = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return res.status(401).json({ success: false, message: 'Unauthorized' });
+    const { discoverable } = req.body;
+    if (typeof discoverable !== 'boolean')
+      return res.status(400).json({ success: false, message: 'discoverable must be a boolean' });
+    const profile = await prisma.jobSeekerProfile.update({
+      where: { userId },
+      data: { discoverable },
+      select: { id: true, discoverable: true }
+    });
+    return res.json({
+      success: true,
+      discoverable: profile.discoverable,
+      message: discoverable ? 'Your profile is now visible to companies' : 'Your profile is now hidden'
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};

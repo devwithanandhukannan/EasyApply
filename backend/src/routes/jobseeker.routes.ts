@@ -8,7 +8,7 @@ import {
   authenticateToken, 
   requireJobSeeker,
 } from '../middleware/auth.middleware.ts';
-import { getProfile, updateProfile, updatePassword } from '../controllers/profile.controller.ts';
+import { getProfile, updateProfile, updatePassword, toggleDiscoverable } from '../controllers/profile.controller.ts';
 import { upload as profileUpload } from '../utils/multer.ts';
 import {
   uploadAndAnalyze,
@@ -65,6 +65,7 @@ router.use(requireJobSeeker);
 router.get('/profile', getProfile as any);
 router.put('/profile', profileUpload.single('profileImage'), updateProfile as any);
 router.patch('/profile/password', updatePassword as any);
+router.put('/profile/discoverable', authenticateToken, requireJobSeeker, toggleDiscoverable as any);
 
 // ─── RESUME PARSE — uses memoryStorage so req.file.buffer is populated ────
 const parseResumeUpload = multer({

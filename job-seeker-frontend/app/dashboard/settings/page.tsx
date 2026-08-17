@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Lock, Eye, EyeOff, ShieldCheck, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Lock, Eye, EyeOff, ShieldCheck, Loader2, Search, Sparkles } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
 
@@ -12,10 +12,55 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Discovery toggle state
+  const [discoverable, setDiscoverable] = useState(false);
+  const [loadingDiscovery, setLoadingDiscovery] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+
   // Password visibility states
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
+
+  const fetchProfile = async () => {
+    try {
+      setInitialLoading(true);
+      const res = await api.get('/jobseeker/profile');
+      if (res.data?.success && res.data.profile) {
+        setDiscoverable(!!res.data.profile.discoverable);
+      }
+    } catch (err) {
+      console.error('Failed to load profile for discovery setting', err);
+    } finally {
+      setInitialLoading(false);
+    }
+  };
+
+  const handleToggleDiscovery = async () => {
+    const nextVal = !discoverable;
+    try {
+      setLoadingDiscovery(true);
+      const res = await api.put('/jobseeker/profile/discoverable', { discoverable: nextVal });
+      if (res.data?.success) {
+        setDiscoverable(nextVal);
+        showToast(
+          nextVal ? 'Discovery Enabled' : 'Discovery Disabled',
+          res.data.message || (nextVal ? 'Your profile is now visible to all employers.' : 'Your profile is now private.'),
+          'success'
+        );
+      } else {
+        showToast('Error', res.data?.message || 'Failed to update discovery preference', 'danger');
+      }
+    } catch (err: any) {
+      showToast('Error', err.response?.data?.message || 'Failed to update discovery preference', 'danger');
+    } finally {
+      setLoadingDiscovery(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,10 +112,53 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-xl">
       {/* Header Info */}
       <div className="border-b border-zinc-900 pb-5">
-        <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Account Settings</h1>
+        <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Account & Visibility Settings</h1>
         <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
-          Manage your account credentials, security configuration, and workspace preferences.
+          Manage your account credentials, security configuration, and recruiter discovery preferences.
         </p>
+      </div>
+
+      {/* Recruiter Discovery Opt-In Card */}
+      <div className="bg-gradient-to-br from-indigo-950/20 via-zinc-950/30 to-zinc-950/20 border border-indigo-500/20 rounded-xl p-6 space-y-4 backdrop-blur-md">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-indigo-400">
+              <Search className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
+                  Recruiter Discovery Database
+                </h3>
+                <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full">
+                  100% Free
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                Allow all verified companies on EasyApply to browse your profile, match your skills, and invite you to interviews directly.
+              </p>
+            </div>
+          </div>
+
+          <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+            <input
+              type="checkbox"
+              checked={discoverable}
+              onChange={handleToggleDiscovery}
+              disabled={initialLoading || loadingDiscovery}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
+        <div className="pt-2 border-t border-indigo-500/10 flex items-center justify-between text-[11px] text-zinc-500">
+          <div className="flex items-center gap-1.5 text-zinc-400">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Status: <strong className={discoverable ? 'text-emerald-400' : 'text-zinc-500'}>{discoverable ? 'Visible to all employers' : 'Hidden from searches'}</strong></span>
+          </div>
+          {loadingDiscovery && <span className="text-indigo-400 animate-pulse">Updating...</span>}
+        </div>
       </div>
 
       {/* Change Password Card */}

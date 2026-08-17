@@ -152,13 +152,15 @@ export default function FaceTracker({
     };
   }, [mediaTrack]);
 
+  const lastTimestampRef = useRef<number>(0);
+
   // Memoized detection callback
   const runDetection = useCallback((video: HTMLVideoElement, now: number) => {
     // Additional strict guard rails to verify canvas frame buffer state before sending to WASM
     if (
       !landmarkerRef.current || 
       !video || 
-      video.readyState < 3 || 
+      video.readyState < 2 || 
       video.videoWidth === 0 || 
       video.videoHeight === 0 ||
       video.paused
@@ -166,10 +168,13 @@ export default function FaceTracker({
       return;
     }
 
+    const timestamp = Math.max(Math.floor(now), (lastTimestampRef.current || 0) + 1);
+    lastTimestampRef.current = timestamp;
+
     try {
       const results: FaceLandmarkerResult = landmarkerRef.current.detectForVideo(
         video,
-        Math.floor(now)
+        timestamp
       );
 
       if (!results) return;
@@ -207,7 +212,10 @@ export default function FaceTracker({
         drawDebugVisualization(video, canvasRef.current, results);
       }
     } catch (err) {
-      console.warn('WASM pipeline dropped invalid hardware frame:', err);
+      // Gracefully suppress frame skip or WASM lifecycle transitions
+      if (debug) {
+        console.warn('WASM pipeline dropped invalid hardware frame:', err);
+      }
     }
   }, [onDetection, debug]);
 
@@ -220,17 +228,21 @@ export default function FaceTracker({
     const video = videoRef.current;
     if (!video) return;
 
+    let isMounted = true;
     let lastDetectionTime = 0;
-    const DETECTION_INTERVAL = 150; // Increased interval slightly to prevent loop crowding
+    const DETECTION_INTERVAL = 150;
     let isDetecting = false;
 
     function detect() {
+      if (!isMounted) return;
+
       if (
         !video ||
         !landmarkerRef.current ||
-        video.readyState < 3 || // Require HAVE_FUTURE_DATA minimum
+        video.readyState < 2 ||
         video.videoWidth === 0 ||
-        video.videoHeight === 0
+        video.videoHeight === 0 ||
+        video.paused
       ) {
         animationFrameRef.current = requestAnimationFrame(detect);
         return;
@@ -246,20 +258,24 @@ export default function FaceTracker({
       isDetecting = true;
       lastDetectionTime = now;
 
-      runDetection(video, now);
-      isDetecting = false;
+      try {
+        runDetection(video, now);
+      } finally {
+        isDetecting = false;
+      }
 
-      animationFrameRef.current = requestAnimationFrame(detect);
+      if (isMounted) {
+        animationFrameRef.current = requestAnimationFrame(detect);
+      }
     }
 
-    console.log('Starting face detection loop');
     animationFrameRef.current = requestAnimationFrame(detect);
 
     return () => {
+      isMounted = false;
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
-      console.log('Stopped face detection loop');
     };
   }, [isInitialized, isVideoReady, runDetection]);
 

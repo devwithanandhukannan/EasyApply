@@ -56,18 +56,24 @@ function StatCard({ label, value, sub, subColor = 'text-zinc-500', icon: Icon }:
 export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [insightsData, setInsightsData]   = useState<any>(null);
+  const [walkInQueues, setWalkInQueues]   = useState<any[]>([]);
+  const [activeRoomsCount, setActiveRoomsCount] = useState<number>(0);
   const [activeView, setActiveView]       = useState<'overview' | 'insights'>('overview');
   const [isLoading, setIsLoading]         = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const [dashRes, insightRes] = await Promise.all([
-          api.get('/jobseeker/dashboard'),
-          api.get('/jobseeker/insights'),
+        const [dashRes, insightRes, walkInRes, roomsRes] = await Promise.all([
+          api.get('/jobseeker/dashboard').catch(() => null),
+          api.get('/jobseeker/insights').catch(() => null),
+          api.get('/walkin/my-queues').catch(() => null),
+          api.get('/walkin/active-rooms').catch(() => null),
         ]);
-        if (dashRes.data?.success)    setDashboardData(dashRes.data.data);
-        if (insightRes.data?.success) setInsightsData(insightRes.data.data);
+        if (dashRes?.data?.success)    setDashboardData(dashRes.data.data);
+        if (insightRes?.data?.success) setInsightsData(insightRes.data.data);
+        if (walkInRes?.data?.success)  setWalkInQueues(walkInRes.data.queues || []);
+        if (roomsRes?.data?.success)   setActiveRoomsCount(roomsRes.data.rooms?.length || 0);
       } catch (e) {
         console.error(e);
       } finally {
@@ -127,6 +133,60 @@ export default function DashboardPage() {
 
       {activeView === 'overview' ? (
         <>
+          {/* ── Live Walk-In Interview / Queue Banner ── */}
+          {walkInQueues.length > 0 ? (
+            <div className="rounded-2xl border p-5 sm:p-6 bg-gradient-to-r from-indigo-950/60 via-zinc-950 to-zinc-950 border-indigo-500/40 relative overflow-hidden backdrop-blur-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0 text-indigo-400">
+                    <Video className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Active Walk-In Queue</span>
+                      <span className="px-2 py-0.5 text-[10px] font-bold bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 rounded-full">
+                        #{walkInQueues[0].queuePosition} in Queue
+                      </span>
+                    </div>
+                    <h3 className="text-base font-bold text-white mt-0.5">{walkInQueues[0].room?.title}</h3>
+                    <p className="text-xs text-zinc-400">{walkInQueues[0].room?.company?.name} • Skill Match: {Math.round(walkInQueues[0].skillScore)}%</p>
+                  </div>
+                </div>
+                <Link
+                  href="/dashboard/walkin"
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 shrink-0"
+                >
+                  <span>{walkInQueues[0].status === 'interviewing' ? '🎉 Join Interview Room' : 'View Live Queue'}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </div>
+            </div>
+          ) : activeRoomsCount > 0 ? (
+            <div className="rounded-2xl border p-5 bg-zinc-950 border-zinc-800/80 hover:border-indigo-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-indigo-400">
+                  <Video className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span className="text-xs font-bold text-white">{activeRoomsCount} Live Walk-In {activeRoomsCount === 1 ? 'Room' : 'Rooms'} Open</span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Companies are actively hosting instant walk-in interviews. Queue up directly with your skills.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/dashboard/walkin"
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 shrink-0"
+              >
+                <span>Browse Walk-In Rooms</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          ) : null}
+
           {/* ── Profile Completion ── */}
           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">

@@ -12,7 +12,18 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
     const profileId = await getProfileId(userId);
 
     if (!profileId) {
-      return res.status(404).json({ success: false, message: 'Profile not found. Complete your profile to get started.' });
+      return res.json({
+        success: true,
+        data: {
+          profile: null,
+          applicationSummary: { total: 0, active: 0, hired: 0, rejected: 0, inInterview: 0, offerStage: 0, rejectedThisMonth: 0, byStatus: {} },
+          recentApplications: [],
+          upcomingInterviews: [],
+          pendingOffers: [],
+          resume: null,
+          activityChart: [],
+        }
+      });
     }
 
     const now = new Date();
@@ -233,7 +244,19 @@ export const getApplicationInsights = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const profileId = await getProfileId(userId);
-    if (!profileId) return res.status(404).json({ success: false, message: 'Profile not found' });
+    if (!profileId) {
+      return res.json({
+        success: true,
+        data: {
+          totalApplications: 0,
+          responseRate: 0,
+          avgAtsScore: null,
+          avgResponseTimeDays: null,
+          industryBreakdown: [],
+          monthlyTrend: [],
+        }
+      });
+    }
 
     const applications = await prisma.application.findMany({
       where: { jobSeekerProfileId: profileId },

@@ -192,6 +192,7 @@ model JobSeekerProfile {
   bio                String?
   availabilityStatus AvailabilityStatus @default(available)
   jobPreferences     Json?
+  discoverable       Boolean            @default(false)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -207,9 +208,11 @@ model JobSeekerProfile {
   companyCrmProfiles    CompanyCandidateProfile[]
   talentPoolMemberships TalentPoolMember[]
   spotJobBookings       SpotJobBooking[]
+  walkInQueueEntries    WalkInQueueEntry[]
 
   @@index([email])
   @@index([userId])
+  @@index([discoverable])
 }
 
 model Resume {
@@ -226,6 +229,7 @@ model Resume {
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
   applications       Application[]
+  walkInQueueEntries WalkInQueueEntry[]
 
   @@index([jobSeekerProfileId])
 }
@@ -356,18 +360,21 @@ model Company {
   youtubeLink        String?
   officeLocations    Json?
   socialMedia        Json?
-  corporateLink      String?
-  pendingMobile      String?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
+  corporateLink          String?
+  pendingMobile          String?
+  aiResumeBuilderEnabled Boolean                   @default(true)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
 
-  teamMembers        TeamMember[]
-  jobPostings        JobPosting[]
-  interviewBatches   InterviewBatch[]
-  offerTemplates     OfferTemplate[]
-  crmProfiles        CompanyCandidateProfile[]
-  talentPools        TalentPool[]
-  spotJobs           SpotJob[]
+  teamMembers            TeamMember[]
+  jobPostings            JobPosting[]
+  interviewBatches       InterviewBatch[]
+  offerTemplates         OfferTemplate[]
+  crmProfiles            CompanyCandidateProfile[]
+  talentPools            TalentPool[]
+  spotJobs               SpotJob[]
+  subscription           CompanySubscription?
+  walkInRooms            WalkInRoom[]
 
   @@index([name])
   @@index([email])
@@ -752,4 +759,149 @@ model SpotJobBooking {
   @@unique([spotJobId, jobSeekerProfileId])
   @@index([spotJobId])
   @@index([jobSeekerProfileId])
+}
+// ─── PLATFORM ADMIN ─────────────────────────────────────────────
+
+model PlatformAdmin {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([email])
+}
+
+model PlatformSettings {
+  id                    String   @id @default("singleton")
+
+  // ─── WALK-IN QUEUE ───────────────────────────────────────
+  walkInQueueMaxGlobal  Int      @default(200)
+
+  // ─── RAZORPAY ─────────────────────────────────────────────
+  razorpayKeyId         String?
+  razorpayKeySecret     String?  // AES-256-CBC encrypted
+  razorpayWebhookSecret String?  // AES-256-CBC encrypted
+  razorpayMode          String   @default("test")
+
+  // ─── SMTP / EMAIL ─────────────────────────────────────────
+  smtpHost              String?  @default("smtp.gmail.com")
+  smtpPort              Int?     @default(587)
+  smtpUser              String?
+  smtpPass              String?  // AES-256-CBC encrypted
+  emailFrom             String?
+  emailFromName         String?  @default("EasyApply")
+
+  // ─── AI (GROQ) ────────────────────────────────────────────
+  groqApiKey            String?  // AES-256-CBC encrypted
+  groqModel             String?  @default("llama-3.3-70b-versatile")
+
+  // ─── LIVEKIT ──────────────────────────────────────────────
+  livekitApiUrl         String?
+  livekitApiKey         String?
+  livekitApiSecret      String?  // AES-256-CBC encrypted
+
+  // ─── GENERAL PLATFORM ─────────────────────────────────────
+  platformName          String?  @default("EasyApply")
+  platformLogoUrl       String?  @db.Text
+  supportEmail          String?
+  maintenanceMode       Boolean  @default(false)
+  allowNewCompanyReg    Boolean  @default(true)
+  allowNewSeekerReg     Boolean  @default(true)
+
+  updatedAt             DateTime @updatedAt
+}
+
+// ─── SUBSCRIPTION SYSTEM ─────────────────────────────────────────
+
+model SubscriptionPlan {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  description    String?  @db.Text
+  features       Json
+  maxJobPostings Int      @default(3)
+  maxTeamMembers Int      @default(2)
+  isActive       Boolean  @default(true)
+  isCustom       Boolean  @default(false)
+  price          Decimal? @db.Decimal(10, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  companySubscriptions CompanySubscription[]
+
+  @@index([name])
+  @@index([isActive])
+}
+
+model CompanySubscription {
+  id        String           @id @default(uuid())
+  companyId String           @unique
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  planId    String
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id])
+  features  Json?            // per-company feature overrides
+  startsAt  DateTime         @default(now())
+  expiresAt DateTime?
+  isActive  Boolean          @default(true)
+  notes     String?          @db.Text
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([companyId])
+  @@index([planId])
+  @@index([isActive])
+}
+
+// ─── WALK-IN INTERVIEW ROOMS ─────────────────────────────────────
+
+enum WalkInRoomStatus {
+  OPEN
+  PAUSED
+  CLOSED
+}
+
+model WalkInRoom {
+  id             String           @id @default(uuid())
+  companyId      String
+  company        Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?          @db.Text
+  requiredSkills String[]         @default([])
+  roomCode       String           @unique
+  livekitRoom    String           @unique
+  status         WalkInRoomStatus @default(OPEN)
+  maxQueue       Int              @default(50)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  queue WalkInQueueEntry[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([roomCode])
+}
+
+model WalkInQueueEntry {
+  id                 String           @id @default(uuid())
+  roomId             String
+  room               WalkInRoom       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  resumeId           String?
+  resume             Resume?          @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  skillScore         Float            @default(0)
+  priorityScore      Float            @default(0)
+  waitingSince       DateTime         @default(now())
+  status             String           @default("waiting")
+  agingBonus         Float            @default(0)
+  livekitToken       String?
+  notes              String?          @db.Text
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([roomId, jobSeekerProfileId])
+  @@index([roomId])
+  @@index([status])
+  @@index([priorityScore])
 }

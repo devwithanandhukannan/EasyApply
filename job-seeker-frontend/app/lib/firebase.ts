@@ -39,15 +39,21 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       scope: "/",
     });
 
-    // Fetch the token using your public VAPID key
-    const currentToken = await getToken(messaging, {
-      vapidKey: "BA3Ue91cqFkFrfPUJ_QlVp653Dj8k5JgJrqwysusX3eEhSIR4xK2OMWsPdBxxO8SpW8F3r25v2op19DGp2vp4u8",
-      serviceWorkerRegistration: registration,
-    });
+    // Fetch the token using your public VAPID key with safe error handling
+    let currentToken: string | null = null;
+    try {
+      currentToken = await getToken(messaging, {
+        vapidKey: "BA3Ue91cqFkFrfPUJ_QlVp653Dj8k5JgJrqwysusX3eEhSIR4xK2OMWsPdBxxO8SpW8F3r25v2op19DGp2vp4u8",
+        serviceWorkerRegistration: registration,
+      });
+    } catch (tokenErr: any) {
+      console.warn("FCM getToken skipped (browser push service unavailable or blocked):", tokenErr?.message || tokenErr);
+      return null;
+    }
     
     return currentToken;
-  } catch (error) {
-    console.error("Error generating FCM Token:", error);
+  } catch (error: any) {
+    console.warn("Push notification registration skipped:", error?.message || error);
     return null;
   }
 };

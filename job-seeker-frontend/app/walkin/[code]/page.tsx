@@ -1,0 +1,500 @@
+'use client';
+
+import { useEffect, useState, use } from 'react';
+import { useRouter } from 'next/navigation';
+import api from '@/app/lib/axios';
+import {
+  Users,
+  Video,
+  Sparkles,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ArrowRight,
+  ArrowLeft,
+  Loader2,
+  Building2,
+  FileText,
+  BadgeCheck,
+  LogOut,
+  Upload,
+} from 'lucide-react';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
+import Link from 'next/link';
+import { uploadResume } from '@/app/lib/resumeApi';
+
+interface RoomInfo {
+  id: string;
+  title: string;
+  description: string | null;
+  requiredSkills: string[];
+  roomCode: string;
+  livekitRoom: string;
+  status: 'OPEN' | 'PAUSED' | 'CLOSED';
+  maxQueue: number;
+  company: {
+    name: string;
+    logoUrl: string | null;
+    industry: string;
+    isVerified?: boolean;
+  };
+  _count: {
+    queue: number;
+  };
+}
+
+interface QueueEntry {
+  id: string;
+  status: 'waiting' | 'interviewing' | 'done' | 'skipped';
+  skillScore: number;
+  priorityScore: number;
+  agingBonus: number;
+  livekitToken?: string | null;
+}
+
+interface ResumeItem {
+  id: string;
+  name: string;
+  isPrimary: boolean;
+}
+
+export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code: string }> }) {
+  const resolvedParams = use(params);
+  const code = resolvedParams.code.toUpperCase();
+  const router = useRouter();
+  const { showToast } = useGlassToast();
+
+  const [room, setRoom] = useState<RoomInfo | null>(null);
+  const [entry, setEntry] = useState<QueueEntry | null>(null);
+  const [queuePos, setQueuePos] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [resumes, setResumes] = useState<ResumeItem[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState<string>('');
+
+  useEffect(() => {
+    fetchRoomInfo();
+    checkMyPosition();
+    fetchResumes();
+  }, [code]);
+
+  // Poll position every 5s if in queue
+  useEffect(() => {
+    if (!entry || entry.status === 'done' || entry.status === 'skipped') return;
+    const interval = setInterval(() => {
+      checkMyPosition();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [entry?.status, code]);
+
+  const fetchResumes = async () => {
+    try {
+      const res = await api.get('/resumes');
+      if (res.data?.success) {
+        setResumes(res.data.resumes || []);
+        const primary = res.data.resumes?.find((r: ResumeItem) => r.isPrimary);
+        if (primary) setSelectedResumeId(primary.id);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const fetchRoomInfo = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/walkin/rooms/${code}/info`);
+      if (res.data?.success) {
+        setRoom(res.data.room);
+      } else {
+        setError(res.data?.message || 'Room not found');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load walk-in room');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkMyPosition = async () => {
+    try {
+      const res = await api.get(`/walkin/rooms/${code}/position`);
+      if (res.data?.success) {
+        setEntry(res.data.entry);
+        setQueuePos(res.data.queuePosition);
+      }
+    } catch {
+      // Not in queue
+    }
+  };
+
+  const handleJoinQueue = async () => {
+    try {
+      setJoining(true);
+      const res = await api.post(`/walkin/rooms/${code}/join`, {
+        resumeId: selectedResumeId || undefined,
+      });
+      if (res.data?.success) {
+        setEntry(res.data.entry);
+        setQueuePos(res.data.queuePosition);
+        showToast('Joined Queue', res.data.message || 'You are now waiting in the walk-in queue!', 'success');
+      } else {
+        showToast('Cannot Join', res.data?.message || 'Failed to join queue', 'danger');
+      }
+    } catch (err: any) {
+      showToast('Error', err.response?.data?.message || 'Failed to join queue. Make sure you are logged in.', 'danger');
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  const handleLeaveQueue = async () => {
+    setLeaving(true);
+    try {
+      const res = await api.post(`/walkin/rooms/${code}/leave`);
+      if (res.data?.success) {
+        showToast('Left Queue', 'You have left the walk-in queue.', 'info');
+        setEntry(null);
+        setQueuePos(null);
+        fetchRoomInfo();
+      } else {
+        showToast('Error', res.data?.message || 'Failed to leave queue', 'danger');
+      }
+    } catch (err: any) {
+      showToast('Error', err.response?.data?.message || 'Failed to leave queue', 'danger');
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="text-center space-y-3">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto" />
+          <p className="text-sm text-zinc-500">Connecting to Walk-In Room...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !room) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+        <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-8 max-w-md w-full text-center space-y-4">
+          <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
+          <h2 className="text-xl font-bold text-zinc-100">Walk-In Room Unavailable</h2>
+          <p className="text-xs text-zinc-500">{error || 'This interview room does not exist or has ended.'}</p>
+          <div className="pt-2 flex flex-col gap-2">
+            <Link
+              href="/dashboard/walkin"
+              className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all"
+            >
+              Browse Active Walk-In Rooms
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 sm:p-6">
+      <div className="max-w-xl w-full space-y-6">
+        {/* Navigation Link */}
+        <div className="flex items-center justify-between">
+          <Link
+            href="/dashboard/walkin"
+            className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Walk-In Hub</span>
+          </Link>
+          <span className="text-xs text-zinc-500 font-mono">
+            Room: <strong className="text-indigo-400">{room.roomCode}</strong>
+          </span>
+        </div>
+
+        {/* Company & Room Header Card */}
+        <div className="bg-zinc-950 border border-zinc-800/80 rounded-2xl p-6 sm:p-8 space-y-6 relative overflow-hidden backdrop-blur-xl">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 text-[10px] font-bold bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-full uppercase tracking-wider">
+                  Instant Walk-In
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
+                    room.status === 'OPEN'
+                      ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                      : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
+                  }`}
+                >
+                  {room.status}
+                </span>
+              </div>
+              <h1 className="text-2xl font-extrabold text-white tracking-tight pt-2">{room.title}</h1>
+              <p className="text-sm font-medium text-zinc-400">
+                {room.company.name} • {room.company.industry || 'General'}
+              </p>
+            </div>
+
+            <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xl font-bold shrink-0 overflow-hidden">
+              {room.company.logoUrl ? (
+                <img src={room.company.logoUrl} alt={room.company.name} className="w-full h-full object-contain rounded-2xl" />
+              ) : (
+                <Building2 className="w-7 h-7 text-indigo-400" />
+              )}
+            </div>
+          </div>
+
+          {room.description && (
+            <p className="text-xs text-zinc-400 leading-relaxed bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/50">
+              {room.description}
+            </p>
+          )}
+
+          {/* Required Skills */}
+          {room.requiredSkills.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">Required Skills for Scoring</div>
+              <div className="flex flex-wrap gap-1.5">
+                {room.requiredSkills.map((s, idx) => (
+                  <span key={idx} className="px-2.5 py-1 text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg font-medium">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Room Queue Meta */}
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-zinc-900 text-xs">
+            <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/40 flex items-center gap-2.5">
+              <Users className="w-4 h-4 text-indigo-400" />
+              <div>
+                <div className="text-zinc-500 text-[10px]">Queue Size</div>
+                <div className="font-semibold text-zinc-200">
+                  {room._count.queue} / {room.maxQueue}
+                </div>
+              </div>
+            </div>
+            <div className="bg-zinc-900/40 p-3 rounded-xl border border-zinc-800/40 flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <div>
+                <div className="text-zinc-500 text-[10px]">Queue Algorithm</div>
+                <div className="font-semibold text-zinc-200">Skill + Aging Priority</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Queue Status Card / Action Card */}
+        {entry ? (
+          <div className="bg-gradient-to-br from-indigo-950/40 via-zinc-950 to-zinc-950 border border-indigo-500/30 rounded-2xl p-6 sm:p-8 space-y-6 backdrop-blur-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-indigo-500/20 border border-indigo-500/40 rounded-xl text-indigo-400">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    {entry.status === 'interviewing' ? '🎉 You are being called!' : 'You are in the Live Queue'}
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    {entry.status === 'interviewing'
+                      ? 'The recruiter is waiting for you in the video room.'
+                      : 'Please stay on this page. Your position updates automatically.'}
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${
+                  entry.status === 'interviewing'
+                    ? 'bg-emerald-500 text-black animate-bounce font-extrabold'
+                    : 'bg-indigo-500/20 border border-indigo-500/40 text-indigo-300'
+                }`}
+              >
+                {entry.status}
+              </span>
+            </div>
+
+            {/* Score & Position Stats */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 text-center space-y-1">
+                <div className="text-[10px] text-zinc-500 font-bold uppercase">Queue Position</div>
+                <div className="text-2xl font-black text-white">#{queuePos ?? 1}</div>
+              </div>
+              <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 text-center space-y-1">
+                <div className="text-[10px] text-zinc-500 font-bold uppercase">Skill Match</div>
+                <div className="text-2xl font-black text-indigo-400">{Math.round(entry.skillScore)}%</div>
+              </div>
+              <div className="bg-zinc-900/60 p-4 rounded-xl border border-zinc-800 text-center space-y-1">
+                <div className="text-[10px] text-zinc-500 font-bold uppercase">Priority Score</div>
+                <div className="text-2xl font-black text-emerald-400">{Math.round(entry.priorityScore)}</div>
+              </div>
+            </div>
+
+            {/* Action when called */}
+            {entry.status === 'interviewing' ? (
+              <button
+                onClick={() =>
+                  router.push(`/meet/${room.livekitRoom}?token=${encodeURIComponent(entry.livekitToken || '')}`)
+                }
+                className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all scale-[1.02] animate-pulse"
+              >
+                <Video className="w-5 h-5" />
+                <span>Join Video Interview Room Now</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="pt-2 flex items-center justify-between gap-3">
+                <button
+                  onClick={checkMyPosition}
+                  className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold"
+                >
+                  Refresh Position
+                </button>
+                <button
+                  onClick={handleLeaveQueue}
+                  disabled={leaving}
+                  className="px-4 py-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40 text-rose-400 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>{leaving ? 'Leaving...' : 'Leave Queue'}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-5">
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-white">Ready for Instant Evaluation?</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Join the room directly. Candidates with matching skills get prioritized, with anti-starvation aging bonus added continuously.
+              </p>
+            </div>
+
+            {/* Resume / CV Selection & Upload */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-zinc-300">
+                  Select or Upload Resume / CV
+                </label>
+                <label className="cursor-pointer text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                  <Upload className="w-3 h-3" />
+                  <span>Upload New CV</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        showToast('Uploading CV...', 'Analyzing resume with AI parsing', 'info');
+                        const res = await uploadResume(file, file.name.replace(/\.[^/.]+$/, ''));
+                        if (res?.data?.success && res?.data?.data) {
+                          showToast('CV Uploaded', `${res.data.data.name} is ready!`, 'success');
+                          await fetchResumes();
+                          setSelectedResumeId(res.data.data.id);
+                        }
+                      } catch (err: any) {
+                        showToast('Upload Error', err.response?.data?.message || 'Failed to upload CV', 'danger');
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              {resumes.length > 0 ? (
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                  {resumes.map((r) => (
+                    <label
+                      key={r.id}
+                      onClick={() => setSelectedResumeId(r.id)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all ${
+                        selectedResumeId === r.id
+                          ? 'bg-indigo-600/10 border-indigo-500/50 text-white'
+                          : 'bg-zinc-900/40 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <FileText className={`w-3.5 h-3.5 shrink-0 ${selectedResumeId === r.id ? 'text-indigo-400' : 'text-zinc-500'}`} />
+                        <span className="text-xs font-medium truncate">{r.name}</span>
+                        {r.isPrimary && (
+                          <span className="px-1.5 py-0.5 text-[9px] font-bold bg-zinc-800 text-zinc-300 rounded">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="radio"
+                        name="resumePicker"
+                        checked={selectedResumeId === r.id}
+                        onChange={() => setSelectedResumeId(r.id)}
+                        className="accent-indigo-500"
+                      />
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-dashed border-zinc-800 text-center space-y-2 bg-zinc-900/30">
+                  <p className="text-xs text-zinc-400">No resumes found in your profile.</p>
+                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Resume PDF</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.docx"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          showToast('Uploading CV...', 'Analyzing resume with AI parsing', 'info');
+                          const res = await uploadResume(file, file.name.replace(/\.[^/.]+$/, ''));
+                          if (res?.data?.success && res?.data?.data) {
+                            showToast('CV Uploaded', `${res.data.data.name} uploaded!`, 'success');
+                            await fetchResumes();
+                            setSelectedResumeId(res.data.data.id);
+                          }
+                        } catch (err: any) {
+                          showToast('Upload Error', err.response?.data?.message || 'Failed to upload CV', 'danger');
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={handleJoinQueue}
+              disabled={joining || room.status !== 'OPEN'}
+              className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition-all active:scale-98"
+            >
+              {joining ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Computing Skill Match & Joining...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Join Walk-In Queue Now</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
