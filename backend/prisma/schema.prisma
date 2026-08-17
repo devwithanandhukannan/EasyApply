@@ -375,6 +375,7 @@ model Company {
   spotJobs               SpotJob[]
   subscription           CompanySubscription?
   walkInRooms            WalkInRoom[]
+  featureRequests        CompanyFeatureRequest[]
 
   @@index([name])
   @@index([email])
@@ -441,6 +442,7 @@ model JobPosting {
   deadline           DateTime?
   openings           Int              @default(1)
   status             JobPostingStatus @default(active)
+  disallowAiCv       Boolean          @default(false)
   metadata           Json?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
@@ -823,6 +825,7 @@ model SubscriptionPlan {
   maxJobPostings Int      @default(3)
   maxTeamMembers Int      @default(2)
   isActive       Boolean  @default(true)
+  isPublic       Boolean  @default(true)
   isCustom       Boolean  @default(false)
   price          Decimal? @db.Decimal(10, 2)
   createdAt      DateTime @default(now())
@@ -832,6 +835,7 @@ model SubscriptionPlan {
 
   @@index([name])
   @@index([isActive])
+  @@index([isPublic])
 }
 
 model CompanySubscription {
@@ -851,6 +855,22 @@ model CompanySubscription {
   @@index([companyId])
   @@index([planId])
   @@index([isActive])
+}
+
+model CompanyFeatureRequest {
+  id                String   @id @default(uuid())
+  companyId         String
+  company           Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requestedFeatures Json
+  message           String?  @db.Text
+  budgetRange       String?
+  status            String   @default("PENDING") // PENDING, REVIEWED, FULFILLED, REJECTED
+  adminNotes        String?  @db.Text
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([status])
 }
 
 // ─── WALK-IN INTERVIEW ROOMS ─────────────────────────────────────

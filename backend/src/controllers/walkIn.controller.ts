@@ -652,13 +652,13 @@ export const getSeekerQueuePosition = async (req: Request, res: Response) => {
     if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
 
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
-    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+    if (!profile) return res.json({ success: false, inQueue: false, message: 'Profile not found' });
 
     const entry = await prisma.walkInQueueEntry.findUnique({
       where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
     });
 
-    if (!entry) return res.status(404).json({ success: false, message: 'You are not in this queue' });
+    if (!entry) return res.json({ success: false, inQueue: false, message: 'You are not in this queue' });
 
     const ahead = await prisma.walkInQueueEntry.count({
       where: { roomId: room.id, status: 'waiting', priorityScore: { gt: entry.priorityScore } }
@@ -741,6 +741,10 @@ export const listActiveWalkInRooms = async (req: Request, res: Response) => {
       }
     });
 
+    let availableRoomsCount = 0;
+    let openRoomsCount = 0;
+    let pausedRoomsCount = 0;
+
     const enrichedRooms = rooms.map(room => {
       let mySkillMatch: number | null = null;
       if (candidateSkills.length > 0) {
@@ -748,16 +752,41 @@ export const listActiveWalkInRooms = async (req: Request, res: Response) => {
       }
       const myEntry = (room as any).queue && (room as any).queue.length > 0 ? (room as any).queue[0] : null;
       const hasApplied = Boolean(myEntry);
+      const isFinished = Boolean(myEntry && ['rejected', 'passed', 'hired', 'skipped', 'completed'].includes(myEntry.status.toLowerCase()));
+      const isActiveInQueue = Boolean(myEntry && ['waiting', 'interviewing'].includes(myEntry.status.toLowerCase()));
+      const canJoin = room.status === 'OPEN' && !hasApplied;
+
+      if (room.status === 'OPEN') {
+        openRoomsCount++;
+        if (!hasApplied) {
+          availableRoomsCount++;
+        }
+      } else if (room.status === 'PAUSED') {
+        pausedRoomsCount++;
+      }
+
       return {
         ...room,
         queue: undefined,
         mySkillMatch,
         myEntry,
         hasApplied,
+        isFinished,
+        isActiveInQueue,
+        canJoin,
       };
     });
 
-    return res.json({ success: true, rooms: enrichedRooms });
+    return res.json({ 
+      success: true, 
+      rooms: enrichedRooms,
+      stats: {
+        totalActive: rooms.length,
+        openRooms: openRoomsCount,
+        pausedRooms: pausedRoomsCount,
+        availableToJoin: availableRoomsCount,
+      }
+    });
   } catch (err) {
     console.error('[WalkIn] listActiveRooms', err);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -770,7 +799,7 @@ export const getMyWalkInQueues = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
-    if (!profile) return res.status(404).json({ success: false, message: 'Profile not found' });
+    if (!profile) return res.json({ success: true, queues: [] });
 
     const entries = await prisma.walkInQueueEntry.findMany({
       where: {

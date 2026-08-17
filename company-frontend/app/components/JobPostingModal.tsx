@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Sparkles, Plus, Wand2 } from 'lucide-react';
+import { X, Sparkles, Plus, Wand2, ShieldAlert } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { useGlassToast } from './GlassToastContainer';
 
@@ -31,6 +31,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
     deadline: '',
     openings: 1,
     status: 'active',
+    disallowAiCv: false,
   });
 
   // Load edit data when editJob changes
@@ -49,6 +50,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
         deadline: editJob.deadline ? new Date(editJob.deadline).toISOString().split('T')[0] : '',
         openings: editJob.openings || 1,
         status: editJob.status || 'active',
+        disallowAiCv: Boolean(editJob.disallowAiCv),
       });
     } else {
       // Reset form for new job
@@ -65,6 +67,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
         deadline: '',
         openings: 1,
         status: 'active',
+        disallowAiCv: false,
       });
     }
   }, [editJob, isOpen]);
@@ -167,6 +170,7 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
       deadline: '',
       openings: 1,
       status: 'active',
+      disallowAiCv: false,
     });
     onClose();
   };
@@ -427,6 +431,30 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
                 <option value="draft">Draft</option>
               </select>
             </div>
+          </div>
+
+          {/* Anti-AI CV / Verified Manual PDF Toggle */}
+          <div className="p-4 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0" />
+                <h4 className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                  Require Manually Uploaded PDF (Disallow Direct AI CV)
+                </h4>
+              </div>
+              <p className="text-[11px] text-[#86868b] mt-1 leading-relaxed">
+                When enabled, applicants cannot attach 1-click platform-generated AI resumes. They must download their resume as a PDF and upload the document file to verify human review and reduce spam.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+              <input
+                type="checkbox"
+                checked={formData.disallowAiCv}
+                onChange={(e) => setFormData(prev => ({ ...prev, disallowAiCv: e.target.checked }))}
+                className="sr-only peer"
+              />
+              <div className="w-9 h-5 bg-gray-300 dark:bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0071e3]"></div>
+            </label>
           </div>
         </form>
 

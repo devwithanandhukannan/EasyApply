@@ -144,13 +144,17 @@ export default function WalkInRoomsPage() {
     [rooms]
   );
   const newRoomsCount = useMemo(
-    () => rooms.filter((r) => !r.hasApplied && !r.myEntry).length,
+    () => rooms.filter((r) => !r.hasApplied && !r.myEntry && r.status === 'OPEN').length,
+    [rooms]
+  );
+  const pausedRoomsCount = useMemo(
+    () => rooms.filter((r) => r.status === 'PAUSED').length,
     [rooms]
   );
 
   const displayedRooms = useMemo(() => {
     if (activeTab === 'new') {
-      return rooms.filter((r) => !r.hasApplied && !r.myEntry);
+      return rooms.filter((r) => !r.hasApplied && !r.myEntry && r.status === 'OPEN');
     }
     if (activeTab === 'applied') {
       return rooms.filter((r) => r.hasApplied || r.myEntry);
@@ -205,9 +209,9 @@ export default function WalkInRoomsPage() {
 
   const fetchMyQueues = async () => {
     try {
-      const res = await api.get('/walkin/my-queues');
-      if (res.data?.success) {
-        setMyQueues(res.data.queues);
+      const res = await api.get('/walkin/my-queues').catch(() => null);
+      if (res?.data?.success) {
+        setMyQueues(res.data.queues || []);
       }
     } catch (err) {
       console.error('Failed to fetch queues', err);
@@ -216,9 +220,9 @@ export default function WalkInRoomsPage() {
 
   const fetchMyQueuesSilent = async () => {
     try {
-      const res = await api.get('/walkin/my-queues');
-      if (res.data?.success) {
-        setMyQueues(res.data.queues);
+      const res = await api.get('/walkin/my-queues').catch(() => null);
+      if (res?.data?.success) {
+        setMyQueues(res.data.queues || []);
       }
     } catch {
       // silent
@@ -781,15 +785,17 @@ export default function WalkInRoomsPage() {
                       <button
                         onClick={() => openJoinModal(room)}
                         disabled={isPaused || isFull}
-                        className="w-full py-2.5 bg-zinc-900 hover:bg-indigo-600 border border-zinc-800 hover:border-indigo-500 disabled:opacity-40 disabled:hover:bg-zinc-900 disabled:hover:border-zinc-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-black/40"
+                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:bg-gray-200 disabled:text-gray-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
                       >
                         {isPaused ? (
-                          <span>Room Temporarily Paused</span>
+                          <span className="flex items-center gap-1.5 text-amber-700">
+                            <Clock className="w-3.5 h-3.5" /> Room Temporarily Paused by Recruiter
+                          </span>
                         ) : isFull ? (
                           <span>Queue Capacity Full</span>
                         ) : (
                           <>
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                            <Sparkles className="w-3.5 h-3.5" />
                             <span>Join Walk-In Queue</span>
                             <ArrowRight className="w-3.5 h-3.5" />
                           </>

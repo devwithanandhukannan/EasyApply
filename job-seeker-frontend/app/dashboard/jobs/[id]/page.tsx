@@ -178,6 +178,15 @@ export default function JobDetailsPage() {
               <span className="text-[#0071e3] font-semibold">{job.company?.name}</span>
               <span>•</span>
               <span className="uppercase tracking-wider text-[10px] font-bold">{job.company?.industry || 'Technology'}</span>
+              {job.disallowAiCv && (
+                <>
+                  <span>•</span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-[10px] font-bold">
+                    <ShieldCheck size={12} />
+                    <span>Verified PDF Upload Required</span>
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -344,9 +353,17 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
       setIsLoading(true);
       const response = await api.get('/jobseeker/resumes');
       if (response.data.success) {
-        setResumes(response.data.data);
-        if (response.data.data.length > 0) {
-          setSelectedResumeId(response.data.data[0].id);
+        const list = response.data.data || [];
+        setResumes(list);
+        if (job?.disallowAiCv) {
+          const firstUploaded = list.find((r: any) => r.source === 'uploaded');
+          if (firstUploaded) {
+            setSelectedResumeId(firstUploaded.id);
+          } else {
+            setUploadNew(true);
+          }
+        } else if (list.length > 0) {
+          setSelectedResumeId(list[0].id);
         }
       }
     } catch (error: any) {
@@ -383,6 +400,19 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
     if (uploadNew && !newResumeFile) {
       showToast('Document Missing', 'Please select a resume file to upload.', 'info');
       return;
+    }
+
+    if (!uploadNew && job?.disallowAiCv) {
+      const selected = resumes.find((r) => r.id === selectedResumeId);
+      if (selected && selected.source === 'built') {
+        showToast(
+          'Manual PDF Required',
+          'This employer requires a manually uploaded PDF resume. Direct AI-generated resumes cannot be attached automatically. Please download your resume as PDF and upload the file.',
+          'danger'
+        );
+        setUploadNew(true);
+        return;
+      }
     }
 
     try {
@@ -441,6 +471,19 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Anti-AI CV Notice Banner */}
+          {job.disallowAiCv && (
+            <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-3.5 flex gap-2.5">
+              <ShieldCheck className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" size={16} />
+              <div className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">
+                <p className="font-bold">Verified PDF Upload Required</p>
+                <p className="text-[11px] mt-0.5 opacity-90">
+                  This employer requires a manually uploaded PDF document. Direct platform-generated resumes cannot be attached automatically. If you built a resume, please download it as a PDF and upload the document below.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
             <button
               onClick={() => setUploadNew(false)}
@@ -472,34 +515,47 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
                   <p className="text-[#86868b] text-xs font-medium">No saved resumes found in your profile</p>
                 </div>
               ) : (
-                resumes.map((resume) => (
-                  <label
-                    key={resume.id}
-                    className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                      selectedResumeId === resume.id
-                        ? 'border-[#0071e3] bg-[#0071e3]/5 shadow-xs'
-                        : 'border-black/[0.06] dark:border-white/[0.08] bg-[#f2f2f7]/30 dark:bg-[#2c2c2e]/30 hover:border-black/[0.12] dark:hover:border-white/[0.15]'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="resume"
-                      value={resume.id}
-                      checked={selectedResumeId === resume.id}
-                      onChange={() => setSelectedResumeId(resume.id)}
-                      className="accent-[#0071e3] w-4 h-4"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-xs truncate">{resume.name}</h4>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#86868b] font-medium">
-                        <span>{resume.source === 'uploaded' ? 'Uploaded PDF' : 'Generated Resume'}</span>
-                        {resume.atsScore && (
-                          <span className="text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full font-bold">Match: {resume.atsScore}%</span>
-                        )}
+                resumes.map((resume) => {
+                  const isBlockedAi = job.disallowAiCv && resume.source === 'built';
+                  return (
+                    <label
+                      key={resume.id}
+                      className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                        isBlockedAi
+                          ? 'opacity-60 bg-gray-50 border-gray-200 cursor-not-allowed'
+                          : selectedResumeId === resume.id
+                          ? 'border-[#0071e3] bg-[#0071e3]/5 shadow-xs'
+                          : 'border-black/[0.06] dark:border-white/[0.08] bg-[#f2f2f7]/30 dark:bg-[#2c2c2e]/30 hover:border-black/[0.12] dark:hover:border-white/[0.15]'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="resume"
+                        disabled={isBlockedAi}
+                        value={resume.id}
+                        checked={selectedResumeId === resume.id && !isBlockedAi}
+                        onChange={() => !isBlockedAi && setSelectedResumeId(resume.id)}
+                        className="accent-[#0071e3] w-4 h-4"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold text-xs truncate">{resume.name}</h4>
+                          {isBlockedAi && (
+                            <span className="text-[9px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full shrink-0">
+                              PDF Upload Required
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-[#86868b] font-medium">
+                          <span>{resume.source === 'uploaded' ? 'Uploaded PDF' : 'Generated Resume'}</span>
+                          {resume.atsScore && (
+                            <span className="text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full font-bold">Match: {resume.atsScore}%</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </label>
-                ))
+                    </label>
+                  );
+                })
               )}
             </div>
           )}

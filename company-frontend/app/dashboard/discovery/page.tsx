@@ -60,14 +60,20 @@ const POPULAR_SKILLS = [
   'Figma',
 ];
 
+import { useAuth } from '@/app/contexts/AuthContext';
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
+
 export default function SeekerDiscoveryPage() {
   const { showToast } = useGlassToast();
+  const { company } = useAuth();
 
   const [seekers, setSeekers] = useState<Seeker[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+
+  const hasDiscoveryAccess = company?.subscription?.features?.seekerDiscovery ?? false;
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,6 +86,16 @@ export default function SeekerDiscoveryPage() {
   // Selected candidate profile modal
   const [selectedSeeker, setSelectedSeeker] = useState<any | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+
+  if (!hasDiscoveryAccess) {
+    return (
+      <LockedFeaturePaywall
+        featureKey="seekerDiscovery"
+        featureTitle="Job Seeker Direct Discovery Database"
+        featureDescription="Directly search, filter, and scout verified candidates across our global job seeker talent network."
+      />
+    );
+  }
 
   useEffect(() => {
     fetchSeekers();

@@ -15,6 +15,7 @@ import {
   updateVideoSettings, updateGeneralSettings, updateQueueSettings
 } from '../controllers/adminSettings.controller.ts';
 import { triggerBatchRecalculation, getBatchJobs } from '../controllers/adminAts.controller.ts';
+import { listAllFeatureRequests, updateFeatureRequestStatus } from '../controllers/featureRequest.controller.ts';
 
 const router = Router();
 
@@ -42,6 +43,10 @@ router.get('/subscriptions', adminAuth, listPlans);
 router.post('/subscriptions', adminAuth, createPlan);
 router.put('/subscriptions/:id', adminAuth, updatePlan);
 router.delete('/subscriptions/:id', adminAuth, deactivatePlan);
+
+// ─── COMPANY FEATURE REQUESTS ─────────────────────────────────────────────────
+router.get('/feature-requests', adminAuth, listAllFeatureRequests);
+router.put('/feature-requests/:id/status', adminAuth, updateFeatureRequestStatus);
 
 // ─── SETTINGS ─────────────────────────────────────────────────────────────────
 router.get('/settings', adminAuth, getSettings);

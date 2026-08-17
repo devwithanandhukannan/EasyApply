@@ -5,7 +5,6 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import CompanySidebar from '@/app/components/CompanySidebar';
 import { Menu, Building2 } from 'lucide-react';
 import { ToastProvider } from '../components/GlassToastContainer';
-import { ThemeProvider } from '@/app/lib/theme';
 
 export default function CompanyDashboardLayout({ children }: { children: React.ReactNode }) {
   const { isLoading, company } = useAuth();
@@ -14,16 +13,17 @@ export default function CompanyDashboardLayout({ children }: { children: React.R
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-black">
+      <div className="flex h-screen items-center justify-center bg-[#f5f4fc]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-5 w-5 animate-spin rounded-full border border-zinc-900 border-t-zinc-400"></div>
-          <p className="text-[11px] text-zinc-500 tracking-wider uppercase font-medium">Synchronizing Workspace Core...</p>
+          <div className="h-5 w-5 animate-spin rounded-full border border-gray-300 border-t-blue-600"></div>
+          <p className="text-[11px] text-gray-500 tracking-wider uppercase font-medium">Synchronizing Workspace Core...</p>
         </div>
       </div>
     );
   }
 
   const companyData = {
+    ...company,
     name: company?.name || 'Company Workspace',
     email: company?.email || '',
     logoUrl: company?.logoUrl || null,
@@ -48,16 +48,16 @@ export default function CompanyDashboardLayout({ children }: { children: React.R
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           
           {/* Dynamic Mobile Top Header Bar */}
-          <header className="flex md:hidden items-center justify-between px-5 h-14 bg-zinc-950 border-b border-zinc-900 shrink-0 z-20">
+          <header className="flex md:hidden items-center justify-between px-5 h-14 bg-white border-b border-gray-200 shrink-0 z-20">
             <div className="flex items-center gap-2.5">
-              <Building2 className="w-4 h-4 text-zinc-400" />
-              <span className="text-xs font-semibold tracking-wide text-zinc-200 truncate max-w-[140px] uppercase">
+              <Building2 className="w-4 h-4 text-gray-500" />
+              <span className="text-xs font-semibold tracking-wide text-gray-900 truncate max-w-[140px] uppercase">
                 {companyData.name}
               </span>
             </div>
             <button
               onClick={() => setIsMobileOpen(true)}
-              className="p-2 -mr-2 rounded-xl border border-zinc-800 bg-zinc-900/30 text-zinc-400 active:bg-zinc-900"
+              className="p-2 -mr-2 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 active:bg-gray-100"
             >
               <Menu className="w-4 h-4" />
             </button>

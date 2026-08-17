@@ -24,6 +24,17 @@ interface CompanyDetails {
   email: string;
   logoUrl?: string | null;
   industry?: string | null;
+  subscription?: {
+    id?: string;
+    isActive?: boolean;
+    features?: Record<string, boolean>;
+    plan?: {
+      id?: string;
+      name?: string;
+      features?: Record<string, boolean>;
+    };
+  } | null;
+  [key: string]: any;
 }
 
 interface UserProfile {

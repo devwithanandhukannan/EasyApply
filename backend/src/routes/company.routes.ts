@@ -127,5 +127,10 @@ router.post('/spot-jobs', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_
 router.get('/spot-jobs/company-dashboard', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), SpotJobController.getCompanySpotDashboard);
 router.get('/spot-jobs/:id/bookings', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), SpotJobController.getSpotJobBookings);
 router.patch('/spot-jobs/:id/status', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), SpotJobController.updateSpotStatusByCompany);
- 
+
+// ─── 8. BUSINESS FEATURE REQUESTS ────────────────────────────────────────
+import { createCompanyFeatureRequest, getMyCompanyFeatureRequests } from '../controllers/featureRequest.controller.ts';
+router.post('/feature-requests', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), createCompanyFeatureRequest);
+router.get('/feature-requests', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getMyCompanyFeatureRequests);
+
 export default router;

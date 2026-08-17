@@ -186,9 +186,13 @@ const KANBAN_COLUMNS: {
   },
 ];
 
+import { useAuth } from '@/app/contexts/AuthContext';
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
+
 export default function CompanyWalkInKanbanPage() {
   const router = useRouter();
   const { showToast } = useGlassToast();
+  const { company } = useAuth();
 
   const [rooms, setRooms] = useState<WalkInRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<WalkInRoom | null>(null);
@@ -207,6 +211,18 @@ export default function CompanyWalkInKanbanPage() {
   // Batch Multi-Select
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
   const [batchUpdating, setBatchUpdating] = useState(false);
+
+  const hasWalkInAccess = company?.subscription?.features?.walkinInterview ?? false;
+
+  if (!hasWalkInAccess) {
+    return (
+      <LockedFeaturePaywall
+        featureKey="walkinInterview"
+        featureTitle="Walk-In Instant Interview Rooms"
+        featureDescription="Host real-time live queues, conduct instant candidate assessments, and accelerate your recruitment pipeline with live telemetry."
+      />
+    );
+  }
 
   // Modals & Drawers
   const [createModalOpen, setCreateModalOpen] = useState(false);

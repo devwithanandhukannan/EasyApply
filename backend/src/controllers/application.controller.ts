@@ -131,6 +131,16 @@ export const applyToJob = async (req: Request, res: Response) => {
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         return res.status(404).json({ success: false, message: 'Selected resume not found' });
       }
+
+      // Check if job disallows direct AI built CVs and requires manual upload
+      if (jobPosting.disallowAiCv && existingResume.source === 'built') {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          code: 'MANUAL_PDF_REQUIRED',
+          message: 'This employer requires a manually uploaded PDF resume. Direct AI-generated resumes cannot be attached automatically. Please download your resume as a PDF and upload the file to apply.'
+        });
+      }
       const contentData = (existingResume.content as any) ?? {};
       let rawText = contentData.rawText;
 

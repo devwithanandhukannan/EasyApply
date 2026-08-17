@@ -35,6 +35,8 @@ router.get('/:jobId', optionalAuth, getPublicJobDetails);
 // User session check
 router.get('/auth/me', optionalAuth, getCurrentUser);
 
-
+// Public subscription plans for landing & pricing pages
+import { listPublicPlans } from '../controllers/adminSubscription.controller.ts';
+router.get('/plans', listPublicPlans);
 
 export default router;

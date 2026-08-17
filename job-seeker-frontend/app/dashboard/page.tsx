@@ -58,6 +58,7 @@ export default function DashboardPage() {
   const [insightsData, setInsightsData]   = useState<any>(null);
   const [walkInQueues, setWalkInQueues]   = useState<any[]>([]);
   const [activeRoomsCount, setActiveRoomsCount] = useState<number>(0);
+  const [walkInStats, setWalkInStats]     = useState<{ openRooms: number; pausedRooms: number; availableToJoin: number } | null>(null);
   const [activeView, setActiveView]       = useState<'overview' | 'insights'>('overview');
   const [isLoading, setIsLoading]         = useState(true);
 
@@ -73,7 +74,17 @@ export default function DashboardPage() {
         if (dashRes?.data?.success)    setDashboardData(dashRes.data.data);
         if (insightRes?.data?.success) setInsightsData(insightRes.data.data);
         if (walkInRes?.data?.success)  setWalkInQueues(walkInRes.data.queues || []);
-        if (roomsRes?.data?.success)   setActiveRoomsCount(roomsRes.data.rooms?.length || 0);
+        if (roomsRes?.data?.success) {
+          const stats = roomsRes.data.stats;
+          const rooms = roomsRes.data.rooms || [];
+          if (stats) {
+            setWalkInStats(stats);
+            setActiveRoomsCount(stats.availableToJoin ?? stats.openRooms ?? 0);
+          } else {
+            const avail = rooms.filter((r: any) => r.status === 'OPEN' && !r.hasApplied).length;
+            setActiveRoomsCount(avail);
+          }
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -161,25 +172,45 @@ export default function DashboardPage() {
                 </Link>
               </div>
             </div>
-          ) : activeRoomsCount > 0 ? (
-            <div className="rounded-2xl border p-5 bg-zinc-950 border-zinc-800/80 hover:border-indigo-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          ) : (activeRoomsCount > 0 || (walkInStats?.pausedRooms || 0) > 0) ? (
+            <div className="rounded-2xl border p-5 bg-white border-gray-200 hover:border-blue-500/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
               <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-indigo-400">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0 text-blue-600">
                   <Video className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                    <span className="text-xs font-bold text-white">{activeRoomsCount} Live Walk-In {activeRoomsCount === 1 ? 'Room' : 'Rooms'} Open</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {activeRoomsCount > 0 ? (
+                      <>
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        <span className="text-xs font-bold text-gray-900">
+                          {activeRoomsCount} Live Walk-In {activeRoomsCount === 1 ? 'Room' : 'Rooms'} Open
+                        </span>
+                        {(walkInStats?.pausedRooms || 0) > 0 && (
+                          <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                            {walkInStats?.pausedRooms} Paused
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>
+                        <span className="text-xs font-bold text-gray-900">
+                          {walkInStats?.pausedRooms} Walk-In {walkInStats?.pausedRooms === 1 ? 'Room' : 'Rooms'} Currently Paused
+                        </span>
+                      </>
+                    )}
                   </div>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Companies are actively hosting instant walk-in interviews. Queue up directly with your skills.
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {activeRoomsCount > 0
+                      ? 'Companies are actively hosting instant walk-in interviews. Queue up directly with your skills.'
+                      : 'Active walk-in sessions are paused by recruiters and will reopen shortly.'}
                   </p>
                 </div>
               </div>
               <Link
                 href="/dashboard/walkin"
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 hover:text-white rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 shrink-0"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 shrink-0 shadow-sm"
               >
                 <span>Browse Walk-In Rooms</span>
                 <ArrowRight className="w-3.5 h-3.5" />

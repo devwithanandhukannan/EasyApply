@@ -8,7 +8,7 @@ export const createJob = async (req: Request, res: Response) => {
   try {
     const { 
       title, department, jobType, locationType, location, 
-      experienceRequired, skills, description, salaryRange, deadline, openings, status 
+      experienceRequired, skills, description, salaryRange, deadline, openings, status, disallowAiCv 
     } = req.body;
 
     // BUG FIX: Pull from req.company, not req.user
@@ -34,6 +34,7 @@ export const createJob = async (req: Request, res: Response) => {
         deadline: deadline ? new Date(deadline) : null,
         openings: parseInt(openings, 10) || 1,
         status: databaseStatus,
+        disallowAiCv: Boolean(disallowAiCv),
       }
     });
 

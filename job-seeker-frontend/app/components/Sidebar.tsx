@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   FileText, 
   Briefcase, 
@@ -14,7 +14,6 @@ import {
   Settings,
   Home,
   ChevronLeft,
-  Compass,
   Video,
   Zap,
   Rocket,
@@ -68,13 +67,13 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
             key={item.href}
             href={item.href}
             onClick={onClickItem}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 group relative ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 group relative ${
               isActive
-                ? 'bg-zinc-900 border border-zinc-800 text-white shadow-md shadow-black/40'
-                : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900/30 border border-transparent'
+                ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-transparent'
             }`}
           >
-            <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+            <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-700'}`} />
             <span className={`transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
               {item.label}
             </span>
@@ -87,11 +86,11 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
   return (
     <>
       {/* ─── MOBILE CONTAINER HEADER ───────────────────────── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 bg-zinc-950 border-b border-zinc-900/80 px-5 flex items-center justify-between z-40 h-14">
+      <div className="md:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 px-5 flex items-center justify-between z-40 h-14">
         <EasyApplyLogo size="sm" />
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="p-2 rounded-xl border border-zinc-800 bg-zinc-900/30 text-zinc-400"
+          className="p-2 rounded-xl border border-gray-200 bg-gray-50 text-gray-700"
         >
           {isMobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
         </button>
@@ -99,16 +98,16 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
 
       {/* ─── DESKTOP SIDEBAR ────────────────────────────────── */}
       <aside
-        className={`hidden md:flex flex-col h-screen bg-zinc-950 border-r border-zinc-900/80 transition-all duration-300 shrink-0 select-none ${
+        className={`hidden md:flex flex-col h-screen bg-white border-r border-gray-200 transition-all duration-300 shrink-0 select-none ${
           isCollapsed ? 'w-[70px]' : 'w-64'
         }`}
       >
         {/* Core Brand Header */}
-        <div className="p-4 border-b border-zinc-900/80 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-zinc-900/10">
+        <div className="p-4 border-b border-gray-200 h-[73px] flex items-center justify-between gap-3 overflow-hidden bg-gray-50/50">
           <div className="flex items-center gap-2.5 overflow-hidden">
             {isCollapsed ? (
-              <div className="p-2 text-[#0071e3] flex items-center justify-center">
-                <Rocket size={20} className="text-[#0071e3] fill-[#0071e3] transform -rotate-12" />
+              <div className="p-2 text-blue-600 flex items-center justify-center">
+                <Rocket size={20} className="text-blue-600 fill-blue-600 transform -rotate-12" />
               </div>
             ) : (
               <EasyApplyLogo size="md" />
@@ -119,21 +118,21 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
         {/* Action Toggle Pin */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="absolute top-5 -right-3 p-1.5 rounded-full border border-zinc-800 bg-zinc-950 text-zinc-400 hover:text-white hover:border-zinc-700 transition-colors shadow-xl"
+          className="absolute top-5 -right-3 p-1.5 rounded-full border border-gray-200 bg-white text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-colors shadow-sm"
         >
           <ChevronLeft className={`w-3 h-3 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
         </button>
 
         {/* User Workspace Profile Component */}
-        <div className="p-3 border-b border-zinc-900/60 bg-zinc-900/5">
+        <div className="p-3 border-b border-gray-200 bg-gray-50/30">
           <div className="relative">
             <button
               onClick={() => !isCollapsed && setShowUserMenu(!showUserMenu)}
-              className={`w-full flex items-center gap-3 p-2 hover:bg-zinc-900/40 border border-transparent hover:border-zinc-900 rounded-xl transition-all ${
+              className={`w-full flex items-center gap-3 p-2 hover:bg-gray-100 border border-transparent hover:border-gray-200 rounded-xl transition-all ${
                 isCollapsed ? 'justify-center' : ''
               }`}
             >
-              <div className="w-8 h-8 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+              <div className="w-8 h-8 rounded-full border border-gray-200 bg-gray-100 flex items-center justify-center shrink-0 overflow-hidden">
                 {user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl ? (
                   <img 
                     src={user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl} 
@@ -141,46 +140,46 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
                     className="w-full h-full object-cover" 
                   />
                 ) : (
-                  <User className="w-3.5 h-3.5 text-zinc-400" />
+                  <User className="w-3.5 h-3.5 text-gray-500" />
                 )}
               </div>
               {!isCollapsed && (
                 <>
                   <div className="flex-1 text-left min-w-0">
-                    <p className="text-zinc-200 text-xs font-semibold truncate tracking-tight">
+                    <p className="text-gray-900 text-xs font-semibold truncate tracking-tight">
                       {user?.fullName || user?.jobSeekerProfile?.fullName || user?.name || 'User Profile'}
                     </p>
-                    <p className="text-zinc-500 text-[10px] truncate mt-0.5">
-                      {user?.email || user?.jobSeekerProfile?.email || 'unconfigured@identity.net'}
+                    <p className="text-gray-500 text-[10px] truncate mt-0.5">
+                      {user?.email || user?.jobSeekerProfile?.email || 'user@easyapply.io'}
                     </p>
                   </div>
-                  <ChevronDown className={`w-3 h-3 text-zinc-500 transition-transform duration-200 ${showUserMenu ? 'rotate-180 text-zinc-200' : ''}`} />
+                  <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${showUserMenu ? 'rotate-180 text-gray-700' : ''}`} />
                 </>
               )}
             </button>
 
             {/* User Dropdown Menu Card */}
             {showUserMenu && !isCollapsed && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl z-50 p-1 space-y-0.5 animate-fade-in">
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-lg z-50 p-1 space-y-0.5 animate-fade-in">
                 <Link
                   href="/dashboard/profile"
                   onClick={() => setShowUserMenu(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-medium"
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700 hover:text-gray-900 transition-colors text-xs font-medium"
                 >
-                  <User className="w-3.5 h-3.5" />
+                  <User className="w-3.5 h-3.5 text-gray-500" />
                   <span>View Profile</span>
                 </Link>
                 <Link
                   href="/dashboard/settings"
                   onClick={() => setShowUserMenu(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-medium"
+                  className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700 hover:text-gray-900 transition-colors text-xs font-medium"
                 >
-                  <Settings className="w-3.5 h-3.5" />
+                  <Settings className="w-3.5 h-3.5 text-gray-500" />
                   <span>Settings</span>
                 </Link>
                 <button 
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-red-950/20 text-zinc-500 hover:text-red-400 border-t border-zinc-900/60 mt-1 pt-2 text-xs font-medium"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-red-50 text-red-600 border-t border-gray-100 mt-1 pt-2 text-xs font-medium"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Logout</span>
@@ -199,35 +198,35 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
       {/* ─── MOBILE DRAWER SHEET ───────────────────────────── */}
       {isMobileOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm md:hidden"
           onClick={() => setIsMobileOpen(false)}
         />
       )}
       
       <aside 
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-zinc-950 border-r border-zinc-900 flex flex-col transform transition-transform duration-300 md:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 flex flex-col transform transition-transform duration-300 md:hidden ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="p-4 border-b border-zinc-900 flex items-center justify-between bg-zinc-900/10">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/50">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-7 h-7 rounded-full border border-zinc-800 bg-zinc-900 flex items-center justify-center overflow-hidden">
+            <div className="w-7 h-7 rounded-full border border-gray-200 bg-gray-100 flex items-center justify-center overflow-hidden">
               {user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl ? (
                 <img src={user?.profilePhotoUrl || user?.jobSeekerProfile?.profilePhotoUrl} alt="User" className="w-full h-full object-cover" />
               ) : (
-                <User className="w-3.5 h-3.5 text-zinc-400" />
+                <User className="w-3.5 h-3.5 text-gray-500" />
               )}
             </div>
             <div className="min-w-0">
-              <h2 className="font-semibold text-xs text-zinc-200 truncate">{user?.fullName || user?.jobSeekerProfile?.fullName || 'Candidate'}</h2>
-              <p className="text-[10px] text-zinc-500 truncate">{user?.email || user?.jobSeekerProfile?.email || 'unconfigured@identity.net'}</p>
+              <h2 className="font-semibold text-xs text-gray-900 truncate">{user?.fullName || user?.jobSeekerProfile?.fullName || 'Candidate'}</h2>
+              <p className="text-[10px] text-gray-500 truncate">{user?.email || user?.jobSeekerProfile?.email || 'user@easyapply.io'}</p>
             </div>
           </div>
           <button 
             onClick={() => setIsMobileOpen(false)}
-            className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400"
+            className="p-1.5 rounded-lg border border-gray-200 text-gray-500"
           >
-            <div className="w-4 h-4" />
+            <X className="w-4 h-4" />
           </button>
         </div>
         
@@ -236,18 +235,18 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
         </nav>
 
         {/* Mobile Actions Drawer Footer */}
-        <div className="p-3 border-t border-zinc-900 bg-zinc-950/60 grid grid-cols-2 gap-1.5">
+        <div className="p-3 border-t border-gray-200 bg-gray-50 grid grid-cols-2 gap-1.5">
           <Link
             href="/dashboard/settings"
             onClick={() => setIsMobileOpen(false)}
-            className="flex items-center justify-center gap-2 p-2 rounded-xl border border-zinc-900 text-zinc-400 hover:text-white bg-zinc-900/20 text-xs font-medium"
+            className="flex items-center justify-center gap-2 p-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-100 text-xs font-medium"
           >
             <Settings className="w-3.5 h-3.5" />
             <span>Settings</span>
           </Link>
           <button 
             onClick={handleLogout}
-            className="flex items-center justify-center gap-2 p-2 rounded-xl border border-red-950/30 bg-red-950/5 text-red-400 text-xs font-medium"
+            className="flex items-center justify-center gap-2 p-2 rounded-xl border border-red-200 bg-red-50 text-red-600 text-xs font-medium"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Logout</span>
