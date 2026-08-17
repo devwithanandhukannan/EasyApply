@@ -65,7 +65,7 @@ import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
 
 export default function SeekerDiscoveryPage() {
   const { showToast } = useGlassToast();
-  const { company } = useAuth();
+  const { hasFeature } = useAuth();
 
   const [seekers, setSeekers] = useState<Seeker[]>([]);
   const [total, setTotal] = useState(0);
@@ -73,7 +73,7 @@ export default function SeekerDiscoveryPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
 
-  const hasDiscoveryAccess = company?.subscription?.features?.seekerDiscovery ?? false;
+  const hasDiscoveryAccess = hasFeature('seekerDiscovery');
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState('');

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import api, { setAccessToken } from '@/app/lib/axios';
 
@@ -32,6 +32,8 @@ interface CompanyDetails {
       id?: string;
       name?: string;
       features?: Record<string, boolean>;
+      maxJobPostings?: number;
+      maxTeamMembers?: number;
     };
   } | null;
   [key: string]: any;
@@ -58,6 +60,8 @@ interface AuthContextType {
   isHR: boolean;
   isInterviewer: boolean;
   isViewer: boolean;
+  features: Record<string, boolean>;
+  hasFeature: (key: string) => boolean;
   login: (payload: any) => void;
   logout: () => void;
 }
@@ -78,6 +82,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isHR = (rolesMask & ROLES.COMPANY_HR) === ROLES.COMPANY_HR;
   const isInterviewer = (rolesMask & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER;
   const isViewer = !isAdmin && !isHR && !isInterviewer;
+
+  const features = useMemo(() => {
+    const raw = company?.subscription?.features || company?.subscription?.plan?.features;
+    if (raw && typeof raw === 'object') {
+      return {
+        jobPostings: raw.jobPostings ?? true,
+        kanban: raw.kanban ?? true,
+        atsScoring: raw.atsScoring ?? false,
+        aiResumeScan: raw.aiResumeScan ?? false,
+        aiResumeBuilder: raw.aiResumeBuilder ?? false,
+        walkinInterview: raw.walkinInterview ?? false,
+        seekerDiscovery: raw.seekerDiscovery ?? false,
+        crmTalentPool: raw.crmTalentPool ?? false,
+        spotJobs: raw.spotJobs ?? false,
+        offerLetters: raw.offerLetters ?? false,
+        interviewScheduling: raw.interviewScheduling ?? false,
+        teamWorkspace: raw.teamWorkspace ?? ((company?.subscription?.plan?.maxTeamMembers ?? 1) > 1),
+      };
+    }
+    return {
+      jobPostings: true,
+      kanban: true,
+      atsScoring: false,
+      aiResumeScan: false,
+      aiResumeBuilder: false,
+      walkinInterview: false,
+      seekerDiscovery: false,
+      crmTalentPool: false,
+      spotJobs: false,
+      offerLetters: false,
+      interviewScheduling: false,
+      teamWorkspace: false,
+    };
+  }, [company]);
+
+  const hasFeature = (key: string): boolean => {
+    return Boolean((features as Record<string, boolean>)[key]);
+  };
 
   // Session initialization - runs once on mount
   useEffect(() => {
@@ -181,6 +223,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isHR,
       isInterviewer,
       isViewer,
+      features,
+      hasFeature,
       login,
       logout
     }}>

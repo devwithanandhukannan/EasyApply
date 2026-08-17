@@ -25,8 +25,12 @@ interface OfferTemplate {
   createdAt: string;
 }
 
+import { useAuth } from '@/app/contexts/AuthContext';
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
+
 export default function OfferTemplatesPage() {
   const { showToast } = useGlassToast();
+  const { hasFeature } = useAuth();
   const [templates, setTemplates] = useState<OfferTemplate[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,6 +39,8 @@ export default function OfferTemplatesPage() {
   const [generatedPreview, setGeneratedPreview] = useState<any>(null);
   const [showRawJson, setShowRawJson] = useState(false);
 
+  const hasAccess = hasFeature('offerLetters');
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -42,6 +48,16 @@ export default function OfferTemplatesPage() {
     isDefault: false,
     useAI: true
   });
+
+  if (!hasAccess) {
+    return (
+      <LockedFeaturePaywall
+        featureKey="offerLetters"
+        featureTitle="Digital Offer Templates & Contract Generator"
+        featureDescription="Design reusable legal offer letter templates, insert smart candidate merge tags, and automate formal letter dispatches."
+      />
+    );
+  }
 
   useEffect(() => {
     fetchTemplates();

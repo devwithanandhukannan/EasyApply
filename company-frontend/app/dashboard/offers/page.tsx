@@ -53,8 +53,10 @@ interface OfferLetter {
   };
 }
 
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
+
 export default function OffersPage() {
-  const { isAdmin, isHR } = useAuth();
+  const { isAdmin, isHR, hasFeature } = useAuth();
   const [offers, setOffers] = useState<OfferLetter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -65,6 +67,18 @@ export default function OffersPage() {
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  const hasAccess = hasFeature('offerLetters');
+
+  if (!hasAccess) {
+    return (
+      <LockedFeaturePaywall
+        featureKey="offerLetters"
+        featureTitle="Digital Offer Letters & Signature Workflows"
+        featureDescription="Generate company-branded digital offer letters, manage legal templates, and track candidate signature responses in real-time."
+      />
+    );
+  }
 
 
   const fetchOffers = async () => {

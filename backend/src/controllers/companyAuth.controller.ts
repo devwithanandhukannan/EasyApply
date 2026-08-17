@@ -301,7 +301,27 @@ export const checkCompanySession = async (req: Request, res: Response) => {
           where: { status: 'active' },
           include: { 
             company: { 
-              select: { id: true, name: true, email: true, isVerified: true, logoUrl: true } 
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                isVerified: true,
+                logoUrl: true,
+                createdAt: true,
+                subscription: {
+                  include: {
+                    plan: {
+                      select: {
+                        id: true,
+                        name: true,
+                        features: true,
+                        maxJobPostings: true,
+                        maxTeamMembers: true,
+                      }
+                    }
+                  }
+                }
+              } 
             } 
           },
         },
@@ -329,6 +349,38 @@ export const checkCompanySession = async (req: Request, res: Response) => {
       companyRoles: m.roles
     }));
 
+    // Fallback subscription if company has none, and resolve features from plan if null
+    let activeSub = activeMembership.company.subscription;
+    if (activeSub) {
+      activeSub = {
+        ...activeSub,
+        features: (activeSub.features || activeSub.plan?.features || {}) as any,
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: 'Free' } });
+      if (freePlan) {
+        activeSub = {
+          id: 'default-free',
+          companyId: activeMembership.company.id,
+          planId: freePlan.id,
+          features: freePlan.features as any,
+          startsAt: activeMembership.company.createdAt,
+          expiresAt: null,
+          isActive: true,
+          notes: null,
+          createdAt: activeMembership.company.createdAt,
+          updatedAt: activeMembership.company.createdAt,
+          plan: {
+            id: freePlan.id,
+            name: freePlan.name,
+            features: freePlan.features as any,
+            maxJobPostings: freePlan.maxJobPostings,
+            maxTeamMembers: freePlan.maxTeamMembers,
+          }
+        } as any;
+      }
+    }
+
     return res.status(200).json({
       success: true,
       isAuthenticated: true,
@@ -344,7 +396,8 @@ export const checkCompanySession = async (req: Request, res: Response) => {
         id: activeMembership.company.id, 
         name: activeMembership.company.name, 
         email: activeMembership.company.email,
-        logoUrl: activeMembership.company.logoUrl || null
+        logoUrl: activeMembership.company.logoUrl || null,
+        subscription: activeSub,
       },
     });
   } catch (error) {
@@ -427,6 +480,19 @@ export const getMyCompanyProfile = async (req: Request, res: Response) => {
               }
             }
           }
+        },
+        subscription: {
+          include: {
+            plan: {
+              select: {
+                id: true,
+                name: true,
+                features: true,
+                maxJobPostings: true,
+                maxTeamMembers: true,
+              }
+            }
+          }
         }
       }
     });
@@ -438,10 +504,43 @@ export const getMyCompanyProfile = async (req: Request, res: Response) => {
       });
     }
 
+    // Fallback to Free plan if no subscription record exists, and resolve features from plan if null
+    let activeSubscription = company.subscription;
+    if (activeSubscription) {
+      activeSubscription = {
+        ...activeSubscription,
+        features: (activeSubscription.features || activeSubscription.plan?.features || {}) as any,
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: 'Free' } });
+      if (freePlan) {
+        activeSubscription = {
+          id: 'default-free',
+          companyId: company.id,
+          planId: freePlan.id,
+          features: freePlan.features as any,
+          startsAt: company.createdAt,
+          expiresAt: null,
+          isActive: true,
+          notes: null,
+          createdAt: company.createdAt,
+          updatedAt: company.createdAt,
+          plan: {
+            id: freePlan.id,
+            name: freePlan.name,
+            features: freePlan.features as any,
+            maxJobPostings: freePlan.maxJobPostings,
+            maxTeamMembers: freePlan.maxTeamMembers,
+          }
+        } as any;
+      }
+    }
+
     const mobileNumber = company.teamMembers.find(m => m.userId === userId)?.user?.mobileNumber || null;
 
     const sanitizedCompany = {
       ...company,
+      subscription: activeSubscription,
       mobileNumber, // Include mobile from User
       services: company.services || [],
       seoKeywords: company.seoKeywords || [],

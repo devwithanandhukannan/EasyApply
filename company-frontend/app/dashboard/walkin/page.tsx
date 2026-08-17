@@ -192,7 +192,7 @@ import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
 export default function CompanyWalkInKanbanPage() {
   const router = useRouter();
   const { showToast } = useGlassToast();
-  const { company } = useAuth();
+  const { hasFeature } = useAuth();
 
   const [rooms, setRooms] = useState<WalkInRoom[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<WalkInRoom | null>(null);
@@ -212,7 +212,7 @@ export default function CompanyWalkInKanbanPage() {
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
   const [batchUpdating, setBatchUpdating] = useState(false);
 
-  const hasWalkInAccess = company?.subscription?.features?.walkinInterview ?? false;
+  const hasWalkInAccess = hasFeature('walkinInterview');
 
   if (!hasWalkInAccess) {
     return (

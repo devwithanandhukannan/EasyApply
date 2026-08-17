@@ -49,11 +49,17 @@ interface SpotJob {
   bookings: Booking[];
 }
 
+import { useAuth } from '@/app/contexts/AuthContext';
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
+
 export default function SpotJobsDashboard() {
   const { showToast } = useGlassToast();
+  const { hasFeature } = useAuth();
   const [spotJobs, setSpotJobs] = useState<SpotJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const hasAccess = hasFeature('spotJobs');
   
   // Modal Creation Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -72,6 +78,16 @@ export default function SpotJobsDashboard() {
 
   // Tracking details drawer state
   const [selectedJob, setSelectedJob] = useState<SpotJob | null>(null);
+
+  if (!hasAccess) {
+    return (
+      <LockedFeaturePaywall
+        featureKey="spotJobs"
+        featureTitle="Spot Jobs On-Demand Dispatch"
+        featureDescription="Publish instant gigs, claim verified freelance specialists on-demand, and dispatch short-term shifts in real-time."
+      />
+    );
+  }
 
   useEffect(() => {
     fetchSpotDashboard();

@@ -72,13 +72,17 @@ const PRIORITY_CONFIG: Record<number, { label: string; color: string }> = {
 
 const STATUS_OPTIONS = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'];
 
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
+
 export default function CompanyInterviewsPage() {
-  const { isAdmin, isHR, isViewer } = useAuth();
+  const { isAdmin, isHR, isViewer, hasFeature } = useAuth();
   const router = useRouter();
   const [interviews, setInterviews] = useState<InterviewRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+
+  const hasAccess = hasFeature('interviewScheduling');
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -93,6 +97,16 @@ export default function CompanyInterviewsPage() {
 
   // Modal states
   const [selectedInterviewId, setSelectedInterviewId] = useState<string | null>(null);
+
+  if (!hasAccess) {
+    return (
+      <LockedFeaturePaywall
+        featureKey="interviewScheduling"
+        featureTitle="Live Technical Interviews & Video Scheduling"
+        featureDescription="Conduct live multi-language video interviews with built-in code editors, real-time rubric scorecards, and scheduling workflows."
+      />
+    );
+  }
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackRecord | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 

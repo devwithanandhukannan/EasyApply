@@ -230,16 +230,23 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
   );
 };
 
+import CustomBusinessRequestModal from '@/app/components/CustomBusinessRequestModal';
+import { Lock, Sparkles } from 'lucide-react';
+
 // ─── MAIN TEAM PAGE CONFIGURATION ────────────────────────────────────────────
 export default function TeamPage() {
   const { showToast } = useGlassToast();
-  const { user } = useAuth();
+  const { user, company } = useAuth();
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('hr');
   const [submitting, setSubmitting] = useState(false);
+
+  const maxTeamMembers = company?.subscription?.plan?.maxTeamMembers ?? 1;
+  const isTeamLocked = members.length >= maxTeamMembers;
 
   const fetchTeam = async () => {
     try {
@@ -255,6 +262,15 @@ export default function TeamPage() {
   useEffect(() => {
     fetchTeam();
   }, []);
+
+  const handleOpenInvite = () => {
+    if (isTeamLocked) {
+      showToast('Team Limit Reached', `Your current plan allows up to ${maxTeamMembers} team member(s). Request a custom plan to add more.`, 'info');
+      setRequestModalOpen(true);
+      return;
+    }
+    setInviteOpen(true);
+  };
 
   const handleInvite = async () => {
     if (!inviteEmail) {
@@ -355,13 +371,20 @@ export default function TeamPage() {
           <p className="text-sm text-[#86868b] mt-1 font-medium">Provision corporate user access controls, manage department roles, and track invitation links.</p>
         </div>
         
-        <CustomButton 
-          onClick={() => setInviteOpen(true)}
-          className="flex items-center gap-2 self-start sm:self-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          Invite Member
-        </CustomButton>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-xs font-semibold text-[#86868b]">
+            <Lock className="w-3.5 h-3.5 text-amber-600" />
+            <span>Seats: {members.length} / {maxTeamMembers} {maxTeamMembers <= 1 ? '(Free Tier)' : ''}</span>
+          </div>
+
+          <CustomButton 
+            onClick={handleOpenInvite}
+            className="flex items-center gap-2 self-start sm:self-auto"
+          >
+            <UserPlus className="w-4 h-4" />
+            Invite Member
+          </CustomButton>
+        </div>
       </div>
 
       {/* Corporate Table Architecture */}
@@ -462,6 +485,12 @@ export default function TeamPage() {
           </div>
         </div>
       )}
+
+      {/* Custom Business Plan Request Modal */}
+      <CustomBusinessRequestModal
+        isOpen={requestModalOpen}
+        onClose={() => setRequestModalOpen(false)}
+      />
     </div>
   );
 }

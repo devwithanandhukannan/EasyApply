@@ -33,14 +33,15 @@ interface SidebarProps {
 }
 
 export default function CompanySidebar({ 
-  company, 
+  company: propCompany, 
   isCollapsed, 
   setIsCollapsed, 
   isMobileOpen, 
   setIsMobileOpen 
 }: SidebarProps) {
   const pathname = usePathname();
-  const { user, isAdmin, isHR, isInterviewer, isViewer, isLoading, logout } = useAuth();
+  const { user, company: authCompany, isAdmin, isHR, isInterviewer, isViewer, isLoading, logout, features } = useAuth();
+  const company = propCompany || authCompany;
   const [isMounted, setIsMounted] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
 
@@ -55,22 +56,6 @@ export default function CompanySidebar({
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
-  const features = useMemo(() => {
-    return company?.subscription?.features || company?.subscription?.plan?.features || {
-      jobPostings: true,
-      kanban: true,
-      atsScoring: false,
-      aiResumeScan: false,
-      aiResumeBuilder: false,
-      walkinInterview: false,
-      seekerDiscovery: false,
-      crmTalentPool: false,
-      spotJobs: false,
-      offerLetters: false,
-      interviewScheduling: false,
-    };
-  }, [company]);
 
   const filteredNav = useMemo(() => {
     const hasAccess = isMounted && !isLoading;
@@ -144,7 +129,7 @@ export default function CompanySidebar({
         href: '/dashboard/team', 
         icon: Users, 
         visible: hasAccess && (isAdmin),
-        isLocked: false,
+        isLocked: !features.teamWorkspace && (company?.subscription?.plan?.maxTeamMembers ?? 1) <= 1,
       },
       { 
         name: 'Company Profile', 
@@ -154,7 +139,7 @@ export default function CompanySidebar({
         isLocked: false,
       }
     ].filter(item => item.visible);
-  }, [isMounted, isLoading, isAdmin, isHR, isInterviewer, isViewer, features]);
+  }, [isMounted, isLoading, isAdmin, isHR, isInterviewer, isViewer, features, company]);
 
   const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
     <>
@@ -168,26 +153,30 @@ export default function CompanySidebar({
             key={item.name}
             href={item.href}
             onClick={onClickItem}
-            className={`flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all group duration-200 ${
+            className={`flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all group duration-200 relative ${
               isActive 
                 ? 'bg-black/[0.07] dark:bg-white/[0.12] text-[#1d1d1f] dark:text-white' 
                 : item.isLocked
-                ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+                ? 'text-[#8e8e93] dark:text-[#636366] opacity-50 hover:opacity-85 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]'
                 : 'text-[#6e6e73] dark:text-[#aeaeb2] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] hover:bg-black/[0.03] dark:hover:bg-white/[0.05] border border-transparent'
             }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               <item.icon className={`h-4 w-4 shrink-0 transition-colors ${
-                isActive ? 'text-[#1d1d1f] dark:text-white' : item.isLocked ? 'text-gray-400' : 'text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white'
+                isActive 
+                  ? 'text-[#1d1d1f] dark:text-white' 
+                  : item.isLocked 
+                  ? 'text-[#aeaeb2] dark:text-[#636366]' 
+                  : 'text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white'
               }`} />
               <span className={`truncate transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
                 {item.name}
               </span>
             </div>
             
-            {item.isLocked && !isCollapsed && (
-              <span title="Locked Feature - Plan Upgrade Required">
-                <Lock className="w-3 h-3 text-gray-400 group-hover:text-amber-600 shrink-0" />
+            {item.isLocked && (
+              <span className={`shrink-0 flex items-center justify-center ${isCollapsed ? 'absolute top-1.5 right-1.5 md:block hidden' : ''}`}>
+                <Lock className="w-3 h-3 text-[#aeaeb2] dark:text-[#636366]" />
               </span>
             )}
           </Link>

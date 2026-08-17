@@ -17,9 +17,13 @@ interface Pool {
   _count: { members: number };
 }
 
+import { useAuth } from '@/app/contexts/AuthContext';
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
+
 export default function TalentPoolPage() {
   const router = useRouter();
   const { showToast } = useGlassToast();
+  const { hasFeature } = useAuth();
   const [pools, setPools] = useState<Pool[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -27,7 +31,10 @@ export default function TalentPoolPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  const hasAccess = hasFeature('crmTalentPool');
+
   const fetchPools = useCallback(async () => {
+    if (!hasAccess) return;
     setLoading(true);
     try {
       const res = await getTalentPools();
@@ -37,9 +44,23 @@ export default function TalentPoolPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [hasAccess]);
 
-  useEffect(() => { fetchPools(); }, [fetchPools]);
+  useEffect(() => { 
+    if (hasAccess) {
+      fetchPools();
+    }
+  }, [fetchPools, hasAccess]);
+
+  if (!hasAccess) {
+    return (
+      <LockedFeaturePaywall
+        featureKey="crmTalentPool"
+        featureTitle="Company Talent Pool & Candidate CRM"
+        featureDescription="Segment and organize qualified candidate profiles into private talent pools for active and future recruitment pipelines."
+      />
+    );
+  }
 
   const handleDelete = async (pool: Pool) => {
     if (!confirm(`Delete pool "${pool.name}"? This cannot be undone.`)) return;
