@@ -8,8 +8,7 @@ export const createJob = async (req: Request, res: Response) => {
   try {
     const { 
       title, department, jobType, locationType, location, 
-      experienceRequired, skills, description, salaryRange, deadline, openings, status,
-      allowAiResume, requireFreshUpload
+      experienceRequired, skills, description, salaryRange, deadline, openings, status 
     } = req.body;
 
     // BUG FIX: Pull from req.company, not req.user
@@ -19,9 +18,6 @@ export const createJob = async (req: Request, res: Response) => {
     }
 
     const databaseStatus = status === 'draft' ? 'paused' : 'active';
-
-    const isAllowAiResume = allowAiResume !== undefined ? Boolean(allowAiResume) : (requireFreshUpload !== undefined ? !Boolean(requireFreshUpload) : true);
-    const isRequireFreshUpload = requireFreshUpload !== undefined ? Boolean(requireFreshUpload) : !isAllowAiResume;
 
     const newJob = await prisma.jobPosting.create({
       data: {
@@ -38,10 +34,6 @@ export const createJob = async (req: Request, res: Response) => {
         deadline: deadline ? new Date(deadline) : null,
         openings: parseInt(openings, 10) || 1,
         status: databaseStatus,
-        metadata: {
-          allowAiResume: isAllowAiResume,
-          requireFreshUpload: isRequireFreshUpload,
-        },
       }
     });
 
@@ -148,7 +140,7 @@ export const updateJob = async (req: Request, res: Response) => {
     const { id } = req.params;
     
     // Extract properties we explicitly format, isolating the rest into 'restOfUpdates'
-    const { status, deadline, openings, skills, allowAiResume, requireFreshUpload, ...restOfUpdates } = req.body;
+    const { status, deadline, openings, skills, ...restOfUpdates } = req.body;
 
     // Build a safe data object for Prisma
     const dataToUpdate: any = {
@@ -170,19 +162,6 @@ export const updateJob = async (req: Request, res: Response) => {
 
     if (skills) {
       dataToUpdate.requiredSkills = skills;
-    }
-
-    if (allowAiResume !== undefined || requireFreshUpload !== undefined) {
-      const existingJob = await prisma.jobPosting.findUnique({ where: { id }, select: { metadata: true } });
-      const currentMeta = (existingJob?.metadata as any) || {};
-      const isAllowAiResume = allowAiResume !== undefined ? Boolean(allowAiResume) : (requireFreshUpload !== undefined ? !Boolean(requireFreshUpload) : (currentMeta.allowAiResume ?? true));
-      const isRequireFreshUpload = requireFreshUpload !== undefined ? Boolean(requireFreshUpload) : !isAllowAiResume;
-
-      dataToUpdate.metadata = {
-        ...currentMeta,
-        allowAiResume: isAllowAiResume,
-        requireFreshUpload: isRequireFreshUpload,
-      };
     }
 
     const updatedJob = await prisma.jobPosting.update({

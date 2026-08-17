@@ -13,8 +13,6 @@ import {
   AlertCircle,
   Globe,
   ShieldCheck,
-  UploadCloud,
-  ShieldAlert,
   Upload,
   FileText,
   X
@@ -64,8 +62,6 @@ export default function JobDetailsPage() {
       console.error('Error tracking configuration states:', error);
     }
   };
-
-  const isFreshUploadRequired = job?.metadata?.requireFreshUpload === true || job?.metadata?.allowAiResume === false;
 
   const calculateDaysAgo = (date: string) => {
     if (!date) return '';
@@ -182,14 +178,6 @@ export default function JobDetailsPage() {
               <span className="text-[#0071e3] font-semibold">{job.company?.name}</span>
               <span>•</span>
               <span className="uppercase tracking-wider text-[10px] font-bold">{job.company?.industry || 'Technology'}</span>
-              {isFreshUploadRequired && (
-                <>
-                  <span>•</span>
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#0071e3] bg-[#0071e3]/10 px-2 py-0.5 rounded-full border border-[#0071e3]/20">
-                    <UploadCloud size={11} /> Fresh Upload Required
-                  </span>
-                </>
-              )}
             </div>
           </div>
         </div>
@@ -206,14 +194,7 @@ export default function JobDetailsPage() {
               onClick={() => setShowApplyModal(true)}
               className="w-full md:w-auto px-6 py-3 bg-[#0071e3] hover:bg-[#0077ed] text-white font-bold rounded-2xl text-xs transition-all shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer flex items-center justify-center gap-2"
             >
-              {isFreshUploadRequired ? (
-                <>
-                  <Upload size={14} />
-                  <span>Upload Resume to Apply</span>
-                </>
-              ) : (
-                <span>Apply for Position</span>
-              )}
+              <span>Apply for Position</span>
             </button>
           )}
         </div>
@@ -347,23 +328,16 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
   const { showToast } = useGlassToast();
   const router = useRouter();
 
-  const isFreshUploadRequired = job?.metadata?.requireFreshUpload === true || job?.metadata?.allowAiResume === false;
-
   const [resumes, setResumes] = useState<any[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState('');
-  const [uploadNew, setUploadNew] = useState(isFreshUploadRequired);
+  const [uploadNew, setUploadNew] = useState(false);
   const [newResumeFile, setNewResumeFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(!isFreshUploadRequired);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (isFreshUploadRequired) {
-      setUploadNew(true);
-      setIsLoading(false);
-    } else {
-      fetchResumes();
-    }
-  }, [isFreshUploadRequired]);
+    fetchResumes();
+  }, []);
 
   const fetchResumes = async () => {
     try {
@@ -467,41 +441,26 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Policy Banner when Saved/AI resumes are disabled */}
-          {isFreshUploadRequired && (
-            <div className="p-3.5 bg-[#0071e3]/10 border border-[#0071e3]/20 rounded-2xl flex items-start gap-2.5 text-xs text-[#0071e3]">
-              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="space-y-0.5">
-                <p className="font-bold">Fresh Resume Required</p>
-                <p className="text-[11px] text-[#0071e3]/80 leading-relaxed">
-                  The employer requires a fresh resume upload from your local device for this vacancy. Saved and AI-generated profile resumes are not accepted.
-                </p>
-              </div>
-            </div>
-          )}
+          <div className="flex p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
+            <button
+              onClick={() => setUploadNew(false)}
+              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                !uploadNew ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs font-bold' : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+              }`}
+            >
+              Saved Resumes
+            </button>
+            <button
+              onClick={() => setUploadNew(true)}
+              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                uploadNew ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs font-bold' : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+              }`}
+            >
+              Upload Document
+            </button>
+          </div>
 
-          {!isFreshUploadRequired && (
-            <div className="flex p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
-              <button
-                onClick={() => setUploadNew(false)}
-                className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
-                  !uploadNew ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs font-bold' : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
-                }`}
-              >
-                Saved Resumes
-              </button>
-              <button
-                onClick={() => setUploadNew(true)}
-                className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
-                  uploadNew ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs font-bold' : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
-                }`}
-              >
-                Upload Document
-              </button>
-            </div>
-          )}
-
-          {!uploadNew && !isFreshUploadRequired && (
+          {!uploadNew && (
             <div className="space-y-2">
               {isLoading ? (
                 <div className="text-center py-6">

@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Sparkles, Plus, Wand2, ShieldAlert, UploadCloud, FileText } from 'lucide-react';
+import { X, Sparkles, Plus, Wand2 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { useGlassToast } from './GlassToastContainer';
 
@@ -31,17 +31,11 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
     deadline: '',
     openings: 1,
     status: 'active',
-    allowAiResume: true,
-    requireFreshUpload: false,
   });
 
   // Load edit data when editJob changes
   useEffect(() => {
     if (editJob) {
-      const meta = editJob.metadata || {};
-      const allowAi = meta.allowAiResume !== undefined ? Boolean(meta.allowAiResume) : (meta.requireFreshUpload !== undefined ? !Boolean(meta.requireFreshUpload) : true);
-      const freshUpload = meta.requireFreshUpload !== undefined ? Boolean(meta.requireFreshUpload) : !allowAi;
-
       setFormData({
         title: editJob.title || '',
         department: editJob.department || '',
@@ -55,8 +49,6 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
         deadline: editJob.deadline ? new Date(editJob.deadline).toISOString().split('T')[0] : '',
         openings: editJob.openings || 1,
         status: editJob.status || 'active',
-        allowAiResume: allowAi,
-        requireFreshUpload: freshUpload,
       });
     } else {
       // Reset form for new job
@@ -73,8 +65,6 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
         deadline: '',
         openings: 1,
         status: 'active',
-        allowAiResume: true,
-        requireFreshUpload: false,
       });
     }
   }, [editJob, isOpen]);
@@ -82,24 +72,8 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
   if (!isOpen) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    if (type === 'checkbox') {
-      const checked = (e.target as HTMLInputElement).checked;
-      setFormData(prev => ({ ...prev, [name]: checked }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const handleToggleAiPolicy = () => {
-    setFormData(prev => {
-      const newAllowAi = !prev.allowAiResume;
-      return {
-        ...prev,
-        allowAiResume: newAllowAi,
-        requireFreshUpload: !newAllowAi,
-      };
-    });
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleAddSkill = () => {
@@ -163,18 +137,10 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
     try {
       setIsLoading(true);
       
-      const payload = {
-        ...formData,
-        metadata: {
-          allowAiResume: formData.allowAiResume,
-          requireFreshUpload: formData.requireFreshUpload
-        }
-      };
-      
       if (editJob) {
-        await api.put(`/company/jobs/${editJob.id}`, payload);
+        await api.put(`/company/jobs/${editJob.id}`, formData);
       } else {
-        await api.post('/company/jobs', payload);
+        await api.post('/company/jobs', formData);
       }
       
       onSuccess();
@@ -201,8 +167,6 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
       deadline: '',
       openings: 1,
       status: 'active',
-      allowAiResume: true,
-      requireFreshUpload: false,
     });
     onClose();
   };
@@ -400,48 +364,6 @@ export default function JobPostingModal({ isOpen, onClose, onSuccess, editJob = 
               className="w-full px-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-[#1d1d1f] dark:text-[#f5f5f7] placeholder:text-[#86868b] text-sm focus:outline-none focus:border-[#0071e3] resize-none font-mono"
               required
             />
-          </div>
-
-          {/* ─── AI / SAVED RESUME POLICY TOGGLE ─────────────────────── */}
-          <div className="p-5 rounded-3xl bg-[#f2f2f7]/70 dark:bg-[#2c2c2e]/70 border border-black/[0.06] dark:border-white/[0.08] space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <UploadCloud className="w-4 h-4 text-[#0071e3]" />
-                  <span className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
-                    Disable AI & Saved Resumes (Require Fresh Local Upload)
-                  </span>
-                </div>
-                <p className="text-xs text-[#86868b] leading-relaxed">
-                  When turned <strong className="text-[#1d1d1f] dark:text-white">ON</strong>, job seekers cannot apply using pre-saved or AI-generated resumes. They will be forced to upload a fresh PDF/DOCX file directly from their local device.
-                </p>
-              </div>
-
-              {/* iOS Style Switch */}
-              <button
-                type="button"
-                onClick={handleToggleAiPolicy}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  !formData.allowAiResume ? 'bg-[#0071e3]' : 'bg-[#d1d1d6] dark:bg-[#3a3a3c]'
-                }`}
-                role="switch"
-                aria-checked={!formData.allowAiResume}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                    !formData.allowAiResume ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {!formData.allowAiResume && (
-              <div className="flex items-center gap-2 text-[11px] font-semibold text-[#0071e3] bg-[#0071e3]/10 border border-[#0071e3]/20 px-3 py-1.5 rounded-xl">
-                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                <span>Enforced: Applicants must select and upload a local file upon applying.</span>
-              </div>
-            )}
           </div>
 
           {/* Salary Range and Openings */}

@@ -2488,15 +2488,6 @@ var applyToJob = async (req, res) => {
         applicationId: existingApplication.id
       });
     }
-    const jobMeta = jobPosting.metadata || {};
-    const isFreshUploadRequired = jobMeta.requireFreshUpload === true || jobMeta.allowAiResume === false;
-    if (isFreshUploadRequired && (applyWithNew !== "true" || !req.file)) {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
-      return res.status(400).json({
-        success: false,
-        message: "This position requires a fresh resume upload from your local device. Saved and AI-generated profile resumes are not permitted for this role."
-      });
-    }
     let finalResumeId = resumeId;
     if (applyWithNew === "true" && req.file) {
       try {
@@ -7484,17 +7475,13 @@ var createJob = async (req, res) => {
       salaryRange,
       deadline,
       openings,
-      status,
-      allowAiResume,
-      requireFreshUpload
+      status
     } = req.body;
     const companyId = req.company?.companyId;
     if (!companyId) {
       return res.status(401).json({ success: false, message: "Unauthorized: Company profile context missing." });
     }
     const databaseStatus = status === "draft" ? "paused" : "active";
-    const isAllowAiResume = allowAiResume !== void 0 ? Boolean(allowAiResume) : requireFreshUpload !== void 0 ? !Boolean(requireFreshUpload) : true;
-    const isRequireFreshUpload = requireFreshUpload !== void 0 ? Boolean(requireFreshUpload) : !isAllowAiResume;
     const newJob = await prisma.jobPosting.create({
       data: {
         companyId,
@@ -7509,11 +7496,7 @@ var createJob = async (req, res) => {
         salaryRange: salaryRange || null,
         deadline: deadline ? new Date(deadline) : null,
         openings: parseInt(openings, 10) || 1,
-        status: databaseStatus,
-        metadata: {
-          allowAiResume: isAllowAiResume,
-          requireFreshUpload: isRequireFreshUpload
-        }
+        status: databaseStatus
       }
     });
     return res.status(201).json({
@@ -7605,7 +7588,7 @@ var getJobDetails = async (req, res) => {
 var updateJob = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, deadline, openings, skills, allowAiResume, requireFreshUpload, ...restOfUpdates } = req.body;
+    const { status, deadline, openings, skills, ...restOfUpdates } = req.body;
     const dataToUpdate = {
       ...restOfUpdates
     };
@@ -7620,17 +7603,6 @@ var updateJob = async (req, res) => {
     }
     if (skills) {
       dataToUpdate.requiredSkills = skills;
-    }
-    if (allowAiResume !== void 0 || requireFreshUpload !== void 0) {
-      const existingJob = await prisma.jobPosting.findUnique({ where: { id }, select: { metadata: true } });
-      const currentMeta = existingJob?.metadata || {};
-      const isAllowAiResume = allowAiResume !== void 0 ? Boolean(allowAiResume) : requireFreshUpload !== void 0 ? !Boolean(requireFreshUpload) : currentMeta.allowAiResume ?? true;
-      const isRequireFreshUpload = requireFreshUpload !== void 0 ? Boolean(requireFreshUpload) : !isAllowAiResume;
-      dataToUpdate.metadata = {
-        ...currentMeta,
-        allowAiResume: isAllowAiResume,
-        requireFreshUpload: isRequireFreshUpload
-      };
     }
     const updatedJob = await prisma.jobPosting.update({
       where: { id },

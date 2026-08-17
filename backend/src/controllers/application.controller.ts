@@ -72,17 +72,6 @@ export const applyToJob = async (req: Request, res: Response) => {
       });
     }
 
-    const jobMeta = (jobPosting.metadata as any) || {};
-    const isFreshUploadRequired = jobMeta.requireFreshUpload === true || jobMeta.allowAiResume === false;
-
-    if (isFreshUploadRequired && (applyWithNew !== 'true' || !req.file)) {
-      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-      return res.status(400).json({
-        success: false,
-        message: 'This position requires a fresh resume upload from your local device. Saved and AI-generated profile resumes are not permitted for this role.'
-      });
-    }
-
     let finalResumeId = resumeId;
 
     if (applyWithNew === 'true' && req.file) {
