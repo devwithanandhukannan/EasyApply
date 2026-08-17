@@ -30,46 +30,50 @@ export default function CompanyDashboardLayout({ children }: { children: React.R
   };
 
   return (
-    <ThemeProvider>
-      <ToastProvider>
-        <div className="flex h-screen bg-black overflow-hidden font-sans text-zinc-200 antialiased">
-      {/* Structural Sidebar Drawer */}
-      <CompanySidebar 
-        company={companyData}
-        isCollapsed={isCollapsed}
-        setIsCollapsed={setIsCollapsed}
-        isMobileOpen={isMobileOpen}
-        setIsMobileOpen={setIsMobileOpen}
-      />
+    <ToastProvider>
+      <div
+        className="flex h-screen overflow-hidden font-sans antialiased transition-colors duration-200"
+        style={{ backgroundColor: 'var(--bg-base)', color: 'var(--foreground)' }}
+      >
+        {/* Structural Sidebar Drawer */}
+        <CompanySidebar 
+          company={companyData}
+          isCollapsed={isCollapsed}
+          setIsCollapsed={setIsCollapsed}
+          isMobileOpen={isMobileOpen}
+          setIsMobileOpen={setIsMobileOpen}
+        />
 
-      {/* Main Stream Shell */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        
-        {/* Dynamic Mobile Top Header Bar */}
-        <header className="flex md:hidden items-center justify-between px-5 h-14 bg-zinc-950 border-b border-zinc-900 shrink-0 z-20">
-          <div className="flex items-center gap-2.5">
-            <Building2 className="w-4 h-4 text-zinc-400" />
-            <span className="text-xs font-semibold tracking-wide text-zinc-200 truncate max-w-[140px] uppercase">
-              {companyData.name}
-            </span>
-          </div>
-          <button
-            onClick={() => setIsMobileOpen(true)}
-            className="p-2 -mr-2 rounded-xl border border-zinc-800 bg-zinc-900/30 text-zinc-400 active:bg-zinc-900"
+        {/* Main Stream Shell */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          
+          {/* Dynamic Mobile Top Header Bar */}
+          <header className="flex md:hidden items-center justify-between px-5 h-14 bg-zinc-950 border-b border-zinc-900 shrink-0 z-20">
+            <div className="flex items-center gap-2.5">
+              <Building2 className="w-4 h-4 text-zinc-400" />
+              <span className="text-xs font-semibold tracking-wide text-zinc-200 truncate max-w-[140px] uppercase">
+                {companyData.name}
+              </span>
+            </div>
+            <button
+              onClick={() => setIsMobileOpen(true)}
+              className="p-2 -mr-2 rounded-xl border border-zinc-800 bg-zinc-900/30 text-zinc-400 active:bg-zinc-900"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          </header>
+
+          {/* Dynamic Content View Container */}
+          <main
+            className="flex-1 overflow-y-auto custom-scrollbar"
+            style={{ backgroundColor: 'var(--bg-base)' }}
           >
-            <Menu className="w-4 h-4" />
-          </button>
-        </header>
-
-        {/* Dynamic Content View Container */}
-        <main className="flex-1 overflow-y-auto bg-black custom-scrollbar">
-          <div className="p-5 sm:p-8 max-w-7xl mx-auto w-full transition-all duration-300">
-            {children}
-          </div>
-        </main>
+            <div className="p-5 sm:p-8 max-w-7xl mx-auto w-full transition-all duration-300">
+              {children}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
     </ToastProvider>
-    </ThemeProvider>
   );
 }

@@ -2,6 +2,7 @@ import "./globals.css";
 import { AuthProvider } from '@/app/contexts/AuthContext';
 import { PublicAuthProvider } from '@/app/contexts/PublicAuthContext';
 import { ToastProvider } from '@/app/components/GlassToastContainer'; 
+import { ThemeProvider } from '@/app/lib/theme';
 
 export const metadata = {
   title: 'EasyApply — Find Your Next Role Faster',
@@ -10,20 +11,35 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var m = localStorage.getItem('easyapply_theme_mode') || 'dark';
+                var d = document.documentElement;
+                d.classList.remove('light', 'dark');
+                d.classList.add(m);
+                d.setAttribute('data-theme', m);
+              } catch (e) {}
+            `,
+          }}
+        />
       </head>
-      <body className="bg-[#020409] text-white antialiased">
-        <AuthProvider>
-          <PublicAuthProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
-          </PublicAuthProvider>
-        </AuthProvider>
+      <body className="antialiased" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--foreground)' }} suppressHydrationWarning>
+        <ThemeProvider>
+          <AuthProvider>
+            <PublicAuthProvider>
+              <ToastProvider>
+                {children}
+              </ToastProvider>
+            </PublicAuthProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

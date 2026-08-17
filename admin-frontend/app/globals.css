@@ -87,6 +87,48 @@ body {
   background: var(--color-primary-glow);
 }
 
+/* ─── LIGHT MODE GLOBAL CSS OVERRIDES ────────────────────────── */
+html.light,
+[data-theme="light"],
+[data-theme="light"] body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .sidebar,
+[data-theme="light"] .glass,
+[data-theme="light"] .card,
+[data-theme="light"] header,
+[data-theme="light"] .main-content {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .sidebar-item {
+  color: #64748b !important;
+}
+
+[data-theme="light"] .sidebar-item.active,
+[data-theme="light"] .sidebar-item:hover {
+  background-color: #f1f5f9 !important;
+  color: #4f46e5 !important;
+}
+
+[data-theme="light"] .input,
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] .btn-ghost {
+  background-color: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #e2e8f0 !important;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--surface); }

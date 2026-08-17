@@ -97,6 +97,76 @@ body {
   background: var(--color-primary-glow);
 }
 
+/* ─── LIGHT MODE GLOBAL CSS OVERRIDES ────────────────────────── */
+html.light,
+[data-theme="light"],
+[data-theme="light"] body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .bg-black,
+[data-theme="light"] aside,
+[data-theme="light"] header {
+  background-color: #ffffff !important;
+}
+
+[data-theme="light"] .bg-zinc-950,
+[data-theme="light"] .bg-zinc-950\/40,
+[data-theme="light"] .bg-zinc-950\/30,
+[data-theme="light"] .bg-zinc-950\/20,
+[data-theme="light"] .bg-zinc-900,
+[data-theme="light"] .bg-zinc-900\/50,
+[data-theme="light"] .bg-zinc-900\/80,
+[data-theme="light"] .bg-zinc-900\/40,
+[data-theme="light"] .bg-zinc-900\/60,
+[data-theme="light"] .bg-zinc-900\/30,
+[data-theme="light"] .bg-zinc-900\/10,
+[data-theme="light"] .bg-zinc-900\/20 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .border-zinc-950,
+[data-theme="light"] .border-zinc-900,
+[data-theme="light"] .border-zinc-900\/80,
+[data-theme="light"] .border-zinc-900\/60,
+[data-theme="light"] .border-zinc-800,
+[data-theme="light"] .border-zinc-800\/80,
+[data-theme="light"] .border-zinc-800\/40,
+[data-theme="light"] .border-zinc-700 {
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] .text-white,
+[data-theme="light"] .text-zinc-100,
+[data-theme="light"] .text-zinc-200 {
+  color: #0f172a !important;
+}
+
+[data-theme="light"] .text-zinc-300,
+[data-theme="light"] .text-zinc-400 {
+  color: #334155 !important;
+}
+
+[data-theme="light"] .text-zinc-500,
+[data-theme="light"] .text-zinc-600 {
+  color: #64748b !important;
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
 /* ── GRADIENT TEXT ──────────────────────────────── */
 .gradient-text {
   background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.65) 100%);
