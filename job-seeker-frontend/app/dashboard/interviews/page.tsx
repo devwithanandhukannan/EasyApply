@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Calendar, Clock, CheckCircle2, RefreshCw, AlertCircle, Video, X } from 'lucide-react';
+import Link from 'next/link';
 import api from '@/app/lib/axios';
 
 interface Interview {
@@ -98,34 +99,36 @@ export default function JobSeekerInterviewsPage() {
 
   const getStatusClasses = (status: Interview['status']) => {
     const map = {
-      scheduled: 'bg-blue-950/40 border-blue-900 text-blue-400',
-      confirmed: 'bg-emerald-950/40 border-emerald-900 text-emerald-400',
-      reschedule_requested: 'bg-amber-950/40 border-amber-900 text-amber-400',
-      in_progress: 'bg-purple-950/40 border-purple-900 text-purple-400 animate-pulse',
-      completed: 'bg-zinc-900 border-zinc-800 text-zinc-500',
-      cancelled: 'bg-red-950/40 border-red-900 text-red-400',
+      scheduled: 'bg-[#0071e3]/10 border-[#0071e3]/20 text-[#0071e3]',
+      confirmed: 'bg-[#34c759]/10 border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158]',
+      reschedule_requested: 'bg-[#ff9500]/10 border-[#ff9500]/20 text-[#ff9500]',
+      in_progress: 'bg-[#af52de]/10 border-[#af52de]/20 text-[#af52de] animate-pulse',
+      completed: 'bg-[#f2f2f7] dark:bg-[#2c2c2e] border-black/[0.04] dark:border-white/[0.06] text-[#86868b]',
+      cancelled: 'bg-[#ff3b30]/10 border-[#ff3b30]/20 text-[#ff3b30]',
     };
-    return map[status] || 'bg-zinc-900 border-zinc-800 text-zinc-400';
+    return map[status] || 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b]';
   };
 
   if (isLoading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center bg-black">
-        <div className="h-5 w-5 animate-spin rounded-full border border-zinc-800 border-t-white"></div>
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0071e3] border-t-transparent"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 w-full max-w-full text-white">
-      <div>
-        <h1 className="text-lg font-semibold uppercase tracking-tight">Interview Hub</h1>
-        <p className="text-xs text-zinc-500 mt-1">Review validation parameters and access scheduled audio/video channels.</p>
+    <div className="space-y-6 w-full max-w-7xl mx-auto text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased p-1">
+      <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">Interview Hub</h1>
+        <p className="text-xs sm:text-sm text-[#86868b] mt-0.5 font-medium">Review interview times and access scheduled video channels.</p>
       </div>
 
       {interviews.length === 0 ? (
-        <div className="border border-dashed border-zinc-900 bg-zinc-950/30 p-12 rounded-xl text-center text-xs text-zinc-500">
-          No allocated interview configurations identified on your active profile.
+        <div className="border border-dashed border-black/[0.1] dark:border-white/[0.1] bg-white dark:bg-[#1c1c1e] p-12 rounded-3xl text-center text-xs text-[#86868b] shadow-xs max-w-md mx-auto">
+          <Calendar className="mx-auto mb-3 text-[#86868b]" size={36} />
+          <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white mb-1">No Interviews Scheduled</h3>
+          <p className="text-xs text-[#86868b]">No active interview sessions scheduled on your profile.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -134,41 +137,40 @@ export default function JobSeekerInterviewsPage() {
             const isInactive = ['completed', 'cancelled'].includes(interview.status);
 
             return (
-              <div key={interview.id} className="border border-zinc-900 bg-zinc-950 p-5 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div key={interview.id} className="border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md transition-all">
                 <div className="space-y-2">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h3 className="text-xs font-semibold uppercase text-zinc-200">
+                    <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white">
                       {interview.application?.jobPosting?.title || "Technical Session"}
                     </h3>
-                    <span className="text-[10px] text-zinc-500">•</span>
-                    <span className="text-[11px] text-zinc-400">
+                    <span className="text-xs text-[#86868b] font-medium">
                       {interview.application?.jobPosting?.company?.name}
                     </span>
-                    <span className={`text-[10px] px-2 py-0.5 border rounded-md uppercase font-semibold ${getStatusClasses(interview.status)}`}>
+                    <span className={`text-[10px] px-2.5 py-0.5 border rounded-full uppercase font-bold ${getStatusClasses(interview.status)}`}>
                       {getStatusLabel(interview.status)}
                     </span>
                   </div>
 
-                  <div className="flex flex-col gap-1 text-[11px] text-zinc-500">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-zinc-600" />
-                      <span>Time: {new Date(interview.scheduledTime).toLocaleString()}</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-xs text-[#86868b] font-medium">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-[#0071e3]" />
+                      <span>{new Date(interview.scheduledTime).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-zinc-600" />
-                      <span>Duration: {interview.durationMinutes} Minutes ({interview.format})</span>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-[#86868b]" />
+                      <span>{interview.durationMinutes} Minutes ({interview.format})</span>
                     </div>
                   </div>
 
                   {/* Pending Proposal Info Banner */}
                   {hasPendingReschedule && interview.rescheduleRequests?.[0] && (
-                    <div className="mt-2 bg-amber-950/20 border border-amber-900/40 p-2.5 rounded-lg text-[11px] text-amber-500/90 flex items-start gap-2 max-w-xl">
-                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div className="mt-2 bg-[#ff9500]/10 border border-[#ff9500]/20 p-3 rounded-2xl text-xs text-[#b25e00] dark:text-[#ff9f0a] flex items-start gap-2 max-w-xl">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-[#ff9500]" />
                       <div>
-                        <span className="font-semibold block text-amber-400">Proposed New Window:</span>
+                        <span className="font-bold block">Proposed New Window:</span>
                         {new Date(interview.rescheduleRequests[0].proposedTime).toLocaleString()}
                         {interview.rescheduleRequests[0].candidateNote && (
-                          <p className="text-zinc-500 mt-1 italic">Note: "{interview.rescheduleRequests[0].candidateNote}"</p>
+                          <p className="text-[#86868b] mt-1 italic">&ldquo;{interview.rescheduleRequests[0].candidateNote}&rdquo;</p>
                         )}
                       </div>
                     </div>
@@ -181,7 +183,7 @@ export default function JobSeekerInterviewsPage() {
                     <button
                       onClick={() => handleConfirmAttendance(interview.id)}
                       disabled={submittingId !== null}
-                      className="px-3 py-1.5 border border-zinc-800 hover:border-emerald-900 hover:bg-emerald-950/20 text-zinc-400 hover:text-emerald-400 text-xs rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-5"
+                      className="px-4 py-2 bg-[#34c759]/10 hover:bg-[#34c759]/20 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158] text-xs font-bold rounded-2xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       Confirm
@@ -192,23 +194,21 @@ export default function JobSeekerInterviewsPage() {
                     <button
                       onClick={() => setActiveRescheduleId(interview.id)}
                       disabled={submittingId !== null}
-                      className="px-3 py-1.5 border border-zinc-800 hover:border-amber-900 hover:bg-amber-950/20 text-zinc-400 hover:text-amber-400 text-xs rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-5"
+                      className="px-4 py-2 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-white text-xs font-semibold rounded-2xl transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-40"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <RefreshCw className="w-3.5 h-3.5 text-[#ff9500]" />
                       Reschedule
                     </button>
                   )}
 
                   {!isInactive && (
-                    <a
+                    <Link
                       href={`/meet/${interview.id}?role=candidate`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-white hover:bg-zinc-200 text-black text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5"
+                      className="px-5 py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold rounded-2xl shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition-all flex items-center gap-1.5"
                     >
                       <Video className="w-3.5 h-3.5" />
-                      Join
-                    </a>
+                      Join Room
+                    </Link>
                   )}
                 </div>
               </div>
@@ -217,71 +217,65 @@ export default function JobSeekerInterviewsPage() {
         </div>
       )}
 
-      {/* ─── RESCHEDULE MODAL DRAWER ─── */}
+      {/* Reschedule Modal */}
       {activeRescheduleId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-xl max-w-md w-full p-6 space-y-4 relative shadow-2xl">
-            <button 
-              onClick={() => setActiveRescheduleId(null)}
-              className="absolute top-4 right-4 p-1 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-200">Request Schedule Modification</h2>
-              <p className="text-[11px] text-zinc-500 mt-1">Propose a fresh timeline window. The operations desk will analyze availability.</p>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08]">
+              <h3 className="font-bold text-sm text-[#1d1d1f] dark:text-white">Request Reschedule</h3>
+              <button onClick={() => setActiveRescheduleId(null)} className="text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white cursor-pointer">
+                <X size={16} />
+              </button>
             </div>
 
             <form onSubmit={(e) => handleRescheduleSubmit(e, activeRescheduleId)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase text-zinc-500 tracking-wider">Target Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={proposedDate}
-                    onChange={(e) => setProposedDate(e.target.value)}
-                    className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 focus:outline-none focus:border-zinc-700 font-mono"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase text-zinc-500 tracking-wider">Target Time Slot</label>
-                  <input
-                    type="time"
-                    required
-                    value={proposedTime}
-                    onChange={(e) => setProposedTime(e.target.value)}
-                    className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 focus:outline-none focus:border-zinc-700 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase text-zinc-500 tracking-wider">Justification Note (Optional)</label>
-                <textarea
-                  placeholder="Provide context regarding changes..."
-                  value={candidateNote}
-                  onChange={(e) => setCandidateNote(e.target.value)}
-                  rows={3}
-                  className="w-full text-xs bg-zinc-900 border border-zinc-800 rounded-lg p-2.5 text-zinc-300 focus:outline-none focus:border-zinc-700 placeholder-zinc-600 font-mono resize-none"
+              <div>
+                <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Proposed Date</label>
+                <input
+                  type="date"
+                  required
+                  value={proposedDate}
+                  onChange={(e) => setProposedDate(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Proposed Time</label>
+                <input
+                  type="time"
+                  required
+                  value={proposedTime}
+                  onChange={(e) => setProposedTime(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-2">Reason / Note for Recruiter</label>
+                <textarea
+                  value={candidateNote}
+                  onChange={(e) => setCandidateNote(e.target.value)}
+                  placeholder="Explain why you need to reschedule..."
+                  rows={3}
+                  className="w-full px-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3] resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setActiveRescheduleId(null)}
-                  className="px-4 py-2 border border-zinc-900 hover:bg-zinc-900 text-zinc-400 text-xs rounded-lg transition-colors"
+                  className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white rounded-2xl text-xs font-semibold hover:bg-[#e5e5ea] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingId !== null}
-                  className="px-4 py-2 bg-white hover:bg-zinc-200 text-black text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                  className="px-5 py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition-all cursor-pointer disabled:opacity-40"
                 >
-                  {submittingId ? 'Dispatching...' : 'Submit Request'}
+                  {submittingId ? 'Submitting...' : 'Send Request'}
                 </button>
               </div>
             </form>

@@ -50,7 +50,6 @@ export default function JobsPage() {
   // Fetch data when user stops writing or clears the search query input box
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
-      // Reset to page 1 whenever search keyword updates to prevent pagination overflow
       if (page !== 1) {
         setPage(1);
       } else {
@@ -67,8 +66,8 @@ export default function JobsPage() {
       
       const params = new URLSearchParams({
         page: page.toString(),
-        limit: '12', // Sets limit parameter to match 12 per page
-        ...(searchQuery.trim() && { search: searchQuery.trim() }), // Matches backend req.query.search
+        limit: '12',
+        ...(searchQuery.trim() && { search: searchQuery.trim() }),
         ...(filters.jobType !== 'all' && { jobType: filters.jobType }),
         ...(filters.locationType !== 'all' && { locationType: filters.locationType }),
         ...(filters.location.trim() && { location: filters.location.trim() }),
@@ -83,7 +82,6 @@ export default function JobsPage() {
       }
     } catch (error: any) {
       console.error('Error fetching positions:', error);
-      // Optional authentication middleware allows requests, but intercept 401/500 faults gracefully
       if (error.response?.status === 401) {
         setIsAuthenticated(false);
         showToast('Authentication Required', 'Please sign in to view jobs', 'info');
@@ -127,14 +125,14 @@ export default function JobsPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-        <div className="text-center">
-          <Lock className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Authentication Required</h2>
-          <p className="text-zinc-500 mb-6">Please sign in to view and apply for jobs</p>
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-center bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] p-8 rounded-3xl shadow-sm max-w-sm">
+          <Lock className="w-10 h-10 text-[#86868b] mx-auto mb-4" />
+          <h2 className="text-lg font-bold text-[#1d1d1f] dark:text-white mb-1">Authentication Required</h2>
+          <p className="text-xs text-[#86868b] mb-6">Please sign in to view and apply for jobs</p>
           <button
             onClick={() => router.push('/login?redirect=/dashboard/jobs')}
-            className="px-6 py-3 bg-white text-black rounded-lg font-semibold hover:bg-zinc-200 transition"
+            className="w-full py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl font-bold text-xs shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition"
           >
             Sign In
           </button>
@@ -144,33 +142,33 @@ export default function JobsPage() {
   }
 
   return (
-    <div className="space-y-6 text-zinc-300 max-w-7xl mx-auto p-2 md:p-0 font-sans antialiased">
-      <div className="border-b border-zinc-900 pb-5">
-        <h1 className="text-xl font-bold text-white tracking-tight sm:text-2xl">Explore Vacancies</h1>
-        <p className="text-zinc-500 text-xs sm:text-sm mt-0.5 font-medium">
+    <div className="space-y-6 max-w-7xl mx-auto p-1 text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased">
+      <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">Explore Vacancies</h1>
+        <p className="text-xs sm:text-sm text-[#86868b] mt-0.5 font-medium">
           Find matching positions across various roles and tech stacks
         </p>
       </div>
 
       {/* Search and Filters panel */}
-      <div className="bg-zinc-950 border border-zinc-900/80 rounded-xl p-4 shadow-xl shadow-black/20">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
         <div className="space-y-3">
           <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" size={15} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={15} />
             <input
               type="text"
               placeholder="Search by title, description or roles..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700 transition-colors"
+              className="w-full pl-10 pr-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] transition-colors font-medium"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <select
               value={filters.jobType}
               onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
-              className="px-3 py-2 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-400 focus:outline-none focus:border-zinc-800"
+              className="px-3.5 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium focus:outline-none focus:border-[#0071e3] cursor-pointer"
             >
               <option value="all">All Employment Types</option>
               <option value="Full-time">Full-time</option>
@@ -182,7 +180,7 @@ export default function JobsPage() {
             <select
               value={filters.locationType}
               onChange={(e) => setFilters({ ...filters, locationType: e.target.value })}
-              className="px-3 py-2 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-400 focus:outline-none focus:border-zinc-800"
+              className="px-3.5 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium focus:outline-none focus:border-[#0071e3] cursor-pointer"
             >
               <option value="all">All Environments</option>
               <option value="Remote">Remote</option>
@@ -191,13 +189,13 @@ export default function JobsPage() {
             </select>
 
             <div className="relative">
-              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={14} />
               <input
                 type="text"
                 placeholder="Preferred location..."
                 value={filters.location}
                 onChange={(e) => setFilters({ ...filters, location: e.target.value })}
-                className="w-full pl-9 pr-4 py-2 bg-zinc-900/40 border border-zinc-900 rounded-xl text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-800"
+                className="w-full pl-9 pr-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] font-medium focus:outline-none focus:border-[#0071e3]"
               />
             </div>
           </div>
@@ -207,21 +205,21 @@ export default function JobsPage() {
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
           <div className="flex flex-col items-center gap-2">
-            <div className="w-5 h-5 border border-zinc-900 border-t-zinc-400 rounded-full animate-spin"></div>
-            <p className="text-zinc-500 text-[11px] tracking-wide font-medium">Loading records...</p>
+            <div className="w-6 h-6 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-[#86868b] text-xs tracking-wide font-medium">Loading records...</p>
           </div>
         </div>
       ) : jobs.length === 0 ? (
-        <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-12 text-center max-w-md mx-auto">
-          <Briefcase className="mx-auto mb-3 text-zinc-700" size={24} />
-          <h3 className="text-sm font-semibold text-white mb-1">No vacancies found</h3>
-          <p className="text-zinc-500 text-xs mb-4">No current listings match your specific filtration criteria.</p>
+        <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-12 text-center max-w-md mx-auto shadow-xs">
+          <Briefcase className="mx-auto mb-3 text-[#86868b]" size={28} />
+          <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white mb-1">No vacancies found</h3>
+          <p className="text-[#86868b] text-xs mb-4">No current listings match your specific search criteria.</p>
           <button
             onClick={() => {
               setSearchQuery('');
               setFilters({ jobType: 'all', locationType: 'all', location: '' });
             }}
-            className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white rounded-xl text-xs font-medium transition-colors"
+            className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white hover:bg-[#e5e5ea] rounded-2xl text-xs font-semibold transition-colors cursor-pointer"
           >
             Reset Filters
           </button>
@@ -236,7 +234,7 @@ export default function JobsPage() {
                 <Link
                   key={job.id}
                   href={`/dashboard/jobs/${job.id}`}
-                  className="bg-zinc-950 border border-zinc-900/80 rounded-2xl p-5 hover:border-zinc-800 transition-all flex flex-col group relative"
+                  className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-5 hover:border-[#0071e3]/40 transition-all flex flex-col group relative shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-md"
                 >
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3 min-w-0">
@@ -244,61 +242,61 @@ export default function JobsPage() {
                         <img
                           src={job.company.logoUrl}
                           alt={job.company.name}
-                          className="w-9 h-9 rounded-xl border border-zinc-900 object-cover shrink-0 shadow-inner"
+                          className="w-10 h-10 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] object-cover shrink-0 shadow-xs"
                         />
                       ) : (
-                        <div className="w-9 h-9 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center shrink-0">
-                          <Building2 size={15} className="text-zinc-500" />
+                        <div className="w-10 h-10 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl flex items-center justify-center shrink-0">
+                          <Building2 size={16} className="text-[#0071e3]" />
                         </div>
                       )}
                       <div className="min-w-0">
-                        <h3 className="text-zinc-200 text-xs font-bold truncate group-hover:text-white transition-colors">{job.company.name}</h3>
-                        <p className="text-[10px] text-zinc-500 truncate mt-0.5 uppercase tracking-wide font-medium">{job.company.industry || 'Technology'}</p>
+                        <h3 className="text-[#1d1d1f] dark:text-white text-xs font-bold truncate group-hover:text-[#0071e3] transition-colors">{job.company.name}</h3>
+                        <p className="text-[10px] text-[#86868b] truncate mt-0.5 uppercase tracking-wide font-semibold">{job.company.industry || 'Technology'}</p>
                       </div>
                     </div>
                     {job.company.verificationBadge === 'verified' && (
-                      <span className="shrink-0 text-[9px] font-semibold text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                      <span className="shrink-0 text-[9px] font-bold text-[#34c759] bg-[#34c759]/10 border border-[#34c759]/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                         Verified
                       </span>
                     )}
                   </div>
 
                   <div className="mb-1">
-                    <h4 className="text-sm font-bold text-zinc-100 tracking-tight group-hover:text-white truncate">
+                    <h4 className="text-sm font-bold text-[#1d1d1f] dark:text-white tracking-tight group-hover:text-[#0071e3] truncate">
                       {job.title}
                     </h4>
                     {job.department && (
-                      <p className="text-[10px] text-zinc-500 font-medium tracking-wide uppercase mt-0.5">{job.department}</p>
+                      <p className="text-[10px] text-[#86868b] font-medium tracking-wide uppercase mt-0.5">{job.department}</p>
                     )}
                   </div>
 
-                  <div className="space-y-2 text-xs my-4 flex-1 text-zinc-400">
+                  <div className="space-y-2 text-xs my-4 flex-1 text-[#86868b]">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[10px] font-bold px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white rounded-lg">
                         {job.jobType}
                       </span>
-                      <span className="text-[11px] text-zinc-500 font-medium inline-flex items-center gap-1">
-                        <Globe className="w-3 h-3 text-zinc-600" />
+                      <span className="text-[11px] text-[#86868b] font-medium inline-flex items-center gap-1">
+                        <Globe className="w-3 h-3 text-[#86868b]" />
                         {job.locationType}
                       </span>
                     </div>
 
-                    <div className="space-y-1 text-[11px] text-zinc-500">
+                    <div className="space-y-1 text-[11px] text-[#86868b] font-medium">
                       {job.location && (
                         <div className="flex items-center gap-1.5 truncate">
-                          <MapPin size={12} className="text-zinc-700" />
+                          <MapPin size={12} className="text-[#86868b]" />
                           <span className="truncate">{job.location}</span>
                         </div>
                       )}
                       {job.salaryRange && (
-                        <div className="flex items-center gap-1.5">
-                          <DollarSign size={12} className="text-zinc-700" />
+                        <div className="flex items-center gap-1.5 text-[#34c759] font-bold">
+                          <DollarSign size={12} className="text-[#34c759]" />
                           <span>{job.salaryRange}</span>
                         </div>
                       )}
                       {job.experienceRequired && (
                         <div className="flex items-center gap-1.5">
-                          <Briefcase size={12} className="text-zinc-700" />
+                          <Briefcase size={12} className="text-[#86868b]" />
                           <span>{job.experienceRequired} experience</span>
                         </div>
                       )}
@@ -310,26 +308,26 @@ export default function JobsPage() {
                       {job.requiredSkills.slice(0, 2).map((skill: string, idx: number) => (
                         <span
                           key={idx}
-                          className="px-2 py-0.5 bg-zinc-900/40 text-zinc-400 text-[10px] rounded-md border border-zinc-900/60 font-medium"
+                          className="px-2 py-0.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] text-[10px] rounded-lg border border-black/[0.04] dark:border-white/[0.06] font-medium"
                         >
                           {skill}
                         </span>
                       ))}
                       {job.requiredSkills.length > 2 && (
-                        <span className="px-1.5 py-0.5 bg-zinc-900/20 text-zinc-600 text-[10px] font-bold">
+                        <span className="px-1.5 py-0.5 text-[#86868b] text-[10px] font-bold">
                           +{job.requiredSkills.length - 2}
                         </span>
                       )}
                     </div>
                   )}
 
-                  <div className="pt-3 border-t border-zinc-900/80 space-y-2.5">
-                    <div className="flex items-center justify-between text-[11px] text-zinc-500 font-medium">
+                  <div className="pt-3 border-t border-black/[0.06] dark:border-white/[0.08] space-y-2.5">
+                    <div className="flex items-center justify-between text-[11px] text-[#86868b] font-medium">
                       <div className="flex items-center gap-1">
-                        <Clock size={11} className="text-zinc-700" />
+                        <Clock size={11} className="text-[#86868b]" />
                         <span>{calculateDaysAgo(job.createdAt)}</span>
                       </div>
-                      <div className="flex items-center gap-0.5 text-zinc-400 group-hover:text-white transition-colors font-medium">
+                      <div className="flex items-center gap-0.5 text-[#0071e3] group-hover:underline font-semibold">
                         <span>View position</span>
                         <ChevronRight size={13} className="transform group-hover:translate-x-0.5 transition-transform" />
                       </div>
@@ -339,15 +337,15 @@ export default function JobsPage() {
                       <button
                         disabled
                         onClick={(e) => e.preventDefault()}
-                        className="w-full py-2 bg-zinc-900 border border-zinc-800 text-zinc-500 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed shadow-inner"
+                        className="w-full py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#86868b] rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed shadow-xs"
                       >
-                        <CheckCircle2 size={13} className="text-zinc-600" />
+                        <CheckCircle2 size={13} className="text-[#34c759]" />
                         <span>{formatStatusLabel(job.applicationStatus)}</span>
                       </button>
                     ) : (
                       <button
                         onClick={(e) => handleApplyClick(job, e)}
-                        className="w-full py-2 bg-white text-black rounded-xl text-xs font-bold hover:bg-zinc-200 transition-colors shadow-lg shadow-white/5"
+                        className="w-full py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold transition-all shadow-[0_4px_14px_rgba(0,113,227,0.25)] cursor-pointer"
                       >
                         Apply Now
                       </button>
@@ -364,17 +362,17 @@ export default function JobsPage() {
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded-xl text-xs font-medium text-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed hover:border-zinc-800 transition-colors"
+                className="px-3.5 py-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition-colors cursor-pointer shadow-xs"
               >
                 Previous
               </button>
-              <span className="text-zinc-600 text-xs font-medium tracking-wide">
+              <span className="text-[#86868b] text-xs font-semibold tracking-wide">
                 Page {page} of {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1.5 bg-zinc-950 border border-zinc-900 rounded-xl text-xs font-medium text-zinc-400 disabled:opacity-20 disabled:cursor-not-allowed hover:border-zinc-800 transition-colors"
+                className="px-3.5 py-1.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition-colors cursor-pointer shadow-xs"
               >
                 Next
               </button>

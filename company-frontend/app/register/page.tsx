@@ -13,11 +13,14 @@ import {
   Briefcase,
   Users,
   MessageCircle,
-  Shield
+  Shield,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { AxiosError } from 'axios';
-import { useRouter } from 'next/navigation'; // Added for clean postwar routing
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import api from '../lib/axios';
 import { useGlassToast } from '../components/GlassToastContainer';
 import EasyApplyLogo from '../components/EasyApplyLogo';
@@ -64,7 +67,7 @@ function RegisterPageComponent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
-  // Stores the temporary flow state to maintain auth sanity between Step 3 & Step 4
+  // Stores temporary flow token between verification and final submission
   const [preRegistrationToken, setPreRegistrationToken] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<CompanyData>({
@@ -81,7 +84,7 @@ function RegisterPageComponent() {
 
   const updateFormData = (field: keyof CompanyData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    if (errorMessage) setErrorMessage(null); // Clear errors dynamically
+    if (errorMessage) setErrorMessage(null);
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -98,29 +101,42 @@ function RegisterPageComponent() {
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
       if (file.size > 5 * 1024 * 1024) {
-        showToast('failed', 'File size exceeds the permitted corporate 5MB limit.', 'danger');
+        setErrorMessage('Logo size must not exceed 5MB');
         return;
       }
       updateFormData('logo', file);
     }
   };
 
-  // ─── STEP 1 SUBMIT: Local transition to Contact Details ─────────────────
   const handleCompanySubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.companyName.trim() || !formData.industry || !formData.companySize) {
+      setErrorMessage('Please fill in all company information fields.');
+      return;
+    }
+    setErrorMessage(null);
     setStep('contact');
   };
 
-  // ─── STEP 2 SUBMIT: Send WhatsApp OTP & Validate Uniqueness ────────────
   const handleContactSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
+    if (!formData.email.trim() || !formData.password || !formData.mobileNumber.trim()) {
+      setErrorMessage('Please complete all contact & security details.');
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      setErrorMessage('Password must be at least 8 characters long.');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
-      setErrorMessage('Passwords do not match');
+      setErrorMessage('Passwords do not match.');
       return;
     }
 
@@ -133,69 +149,62 @@ function RegisterPageComponent() {
       });
 
       if (response.data.success) {
+        showToast('success', 'Verification code dispatched.', 'success');
         setStep('verify');
       }
     } catch (error) {
-      console.log(error);
-      // Fallback: If WhatsApp OTP is not configured/fails, proceed to verification and show toast
-      setStep('verify');
-      showToast('success', 'WhatsApp OTP not configured. Use default OTP: 000000', 'success');
+      const err = error as AxiosError<{ message?: string }>;
+      setErrorMessage(err.response?.data?.message || 'Failed to dispatch verification code.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ─── STEP 3 SUBMIT: Verify WhatsApp Code & Receive Pre-Reg Token ─────────
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMessage(null);
-    const combinedOtp = otp.join('');
-
-    if (combinedOtp.length !== 6) {
-      setErrorMessage('Please input a valid 6-digit verification code.');
+    const enteredOtp = otp.join('');
+    
+    if (enteredOtp.length !== 6) {
+      setErrorMessage('Please enter the complete 6-digit OTP.');
       return;
     }
 
     setIsSubmitting(true);
+    setErrorMessage(null);
     try {
       const response = await api.post('/company/auth/verify-otp', {
         mobileNumber: formData.mobileNumber,
-        otp: combinedOtp
+        email: formData.email,
+        otp: enteredOtp
       });
 
-      if (response.data.success && response.data.preRegistrationToken) {
+      if (response.data.success) {
         setPreRegistrationToken(response.data.preRegistrationToken);
+        showToast('success', 'Mobile verification successful!', 'success');
         setStep('additional');
       }
     } catch (error) {
       const err = error as AxiosError<{ message?: string }>;
-      setErrorMessage(err.response?.data?.message || 'Invalid verification token entered.');
+      setErrorMessage(err.response?.data?.message || 'Invalid or expired verification code.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ─── STEP 4 SUBMIT: Upload Multipart Payload (JSON + Binary File) ───────
   const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     setErrorMessage(null);
 
-    if (!preRegistrationToken) {
-      setErrorMessage('Session context lost. Please return to Step 1.');
-      return;
-    }
-
-    setIsSubmitting(true);
     try {
       const multipartPayload = new FormData();
       
-      // Separate file properties cleanly from structural string properties
       const analyticalPayload = {
         companyName: formData.companyName,
         industry: formData.industry,
         companySize: formData.companySize,
         email: formData.email,
-        password: formData.password, // This flows directly into your backend JSON parser
+        password: formData.password,
         gstNumber: formData.gstNumber,
         mobileNumber: formData.mobileNumber
       };
@@ -218,7 +227,7 @@ function RegisterPageComponent() {
       }
     } catch (error) {
       const err = error as AxiosError<{ message?: string }>;
-      setErrorMessage(err.response?.data?.message || 'Failed to capture corporate profile parameters.');
+      setErrorMessage(err.response?.data?.message || 'Failed to complete registration.');
     } finally {
       setIsSubmitting(false);
     }
@@ -236,7 +245,7 @@ function RegisterPageComponent() {
 
       if (response.data.success) {
         setOtp(['', '', '', '', '', '']);
-        showToast('success', 'A replacement security token was logged via WhatsApp.', 'success');
+        showToast('success', 'Verification code resent.', 'success');
       }
     } catch (error) {
       const err = error as AxiosError<{ message?: string }>;
@@ -246,111 +255,125 @@ function RegisterPageComponent() {
     }
   };
 
-  const renderProgressBar = () => {
-    const steps = ['company', 'contact', 'verify', 'additional'];
-    const currentIndex = steps.indexOf(step as any);
-    
-    if (step === 'success') return null;
+  const STEPS = [
+    { key: 'company', label: 'Company' },
+    { key: 'contact', label: 'Contact' },
+    { key: 'verify', label: 'Verify' },
+    { key: 'additional', label: 'Profile' },
+  ];
 
-    return (
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          {steps.map((s, index) => (
-            <div key={s} className="flex items-center flex-1">
-              <div className="flex flex-col items-center w-full">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-colors ${
-                  index <= currentIndex 
-                    ? 'bg-white border-white text-black' 
-                    : 'bg-transparent border-[#2c2c2e] text-gray-600'
-                }`}>
-                  {index < currentIndex ? (
-                    <Check size={16} />
-                  ) : (
-                    <span className="text-xs font-medium">{index + 1}</span>
-                  )}
-                </div>
-                {index < steps.length - 1 && (
-                  <div className={`h-0.5 w-full mt-4 ${
-                    index < currentIndex ? 'bg-white' : 'bg-[#2c2c2e]'
-                  }`} />
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
+  const currentStepIdx = STEPS.findIndex(s => s.key === step);
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Logo Section */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
+    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-[#f5f5f7] dark:bg-[#000000] text-[#1d1d1f] dark:text-[#f5f5f7] transition-colors duration-200 font-sans">
+      <div className="w-full max-w-xl">
+        
+        {/* Header & Logo */}
+        <div className="text-center mb-6">
+          <div className="flex justify-center mb-3">
             <EasyApplyLogo size="xl" badge="Business" />
           </div>
-          <h1 className="text-2xl font-semibold text-white mb-2">Company Registration</h1>
-          <p className="text-gray-500 text-sm">Join our hiring platform in minutes</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] mb-1">
+            Company Registration
+          </h1>
+          <p className="text-[#86868b] text-xs sm:text-sm font-medium">
+            Join our hiring platform and start recruiting in minutes
+          </p>
         </div>
 
-        {/* Progress Bar */}
-        {renderProgressBar()}
+        {/* Apple Stepper */}
+        {step !== 'success' && (
+          <div className="mb-6 bg-white dark:bg-[#1c1c1e] p-2 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+            <div className="flex items-center justify-between">
+              {STEPS.map((s, idx) => {
+                const isCompleted = idx < currentStepIdx;
+                const isCurrent = idx === currentStepIdx;
 
-        {/* Error Notification Context Block */}
+                return (
+                  <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-bold transition-all ${
+                        isCurrent
+                          ? 'bg-[#0071e3] text-white shadow-xs'
+                          : isCompleted
+                          ? 'bg-[#34c759] text-white'
+                          : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b]'
+                      }`}>
+                        {isCompleted ? <Check size={13} strokeWidth={3} /> : idx + 1}
+                      </div>
+                      <span className={`text-xs font-semibold hidden sm:inline ${
+                        isCurrent ? 'text-[#1d1d1f] dark:text-white' : 'text-[#86868b]'
+                      }`}>
+                        {s.label}
+                      </span>
+                    </div>
+                    {idx < STEPS.length - 1 && (
+                      <div className={`h-[2px] flex-1 mx-2 sm:mx-3 rounded-full ${
+                        idx < currentStepIdx ? 'bg-[#34c759]' : 'bg-black/[0.06] dark:bg-white/[0.08]'
+                      }`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Error Notification */}
         {errorMessage && step !== 'success' && (
-          <div className="mb-6 bg-red-950/40 border border-red-900 rounded-xl p-4 text-sm text-red-400 text-center font-medium">
-            {errorMessage}
+          <div className="mb-5 bg-[#ff3b30]/10 border border-[#ff3b30]/25 rounded-2xl p-4 text-xs sm:text-sm text-[#d70015] dark:text-[#ff453a] flex items-center gap-3 font-semibold">
+            <AlertCircle className="w-5 h-5 shrink-0 text-[#ff3b30]" />
+            <span>{errorMessage}</span>
           </div>
         )}
 
         {/* Main Card */}
-        <div className="bg-[#1c1c1e] rounded-2xl p-8 border border-[#2c2c2e]">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-6 sm:p-8 border border-black/[0.06] dark:border-white/[0.08] shadow-[0_8px_30px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)]">
           
           {/* Step 1: Company Information */}
           {step === 'company' && (
             <form onSubmit={handleCompanySubmit} className="space-y-5">
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-white mb-1">Company Information</h2>
-                <p className="text-xs text-gray-500">Tell us about your organization</p>
+              <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-4">
+                <h2 className="text-base sm:text-lg font-bold text-[#1d1d1f] dark:text-white">Company Information</h2>
+                <p className="text-xs text-[#86868b] font-medium mt-0.5">Tell us about your organization and industry</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
                   Company Name *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
                     <Building2 size={18} />
                   </div>
                   <input
                     type="text"
                     value={formData.companyName}
                     onChange={(e) => updateFormData('companyName', e.target.value)}
-                    placeholder="Enter company name"
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
+                    placeholder="e.g. Acme Corporation"
+                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
                   Industry *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
                     <Briefcase size={18} />
                   </div>
                   <select
                     value={formData.industry}
                     onChange={(e) => updateFormData('industry', e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm appearance-none cursor-pointer"
+                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] text-sm cursor-pointer font-medium appearance-none"
                     required
                   >
-                    <option value="" className="bg-[#1c1c1e]">Select industry</option>
+                    <option value="">Select industry</option>
                     {industries.map((ind) => (
-                      <option key={ind} value={ind} className="bg-[#1c1c1e]">
+                      <option key={ind} value={ind}>
                         {ind}
                       </option>
                     ))}
@@ -359,22 +382,22 @@ function RegisterPageComponent() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
                   Company Size *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
                     <Users size={18} />
                   </div>
                   <select
                     value={formData.companySize}
                     onChange={(e) => updateFormData('companySize', e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white text-sm appearance-none cursor-pointer"
+                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] text-sm cursor-pointer font-medium appearance-none"
                     required
                   >
-                    <option value="" className="bg-[#1c1c1e]">Select company size</option>
+                    <option value="">Select company size</option>
                     {companySizes.map((size) => (
-                      <option key={size} value={size} className="bg-[#1c1c1e]">
+                      <option key={size} value={size}>
                         {size}
                       </option>
                     ))}
@@ -382,118 +405,122 @@ function RegisterPageComponent() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className="w-full bg-white text-black py-3.5 rounded-xl font-medium hover:bg-gray-100 transition-colors flex items-center justify-center space-x-2 text-sm"
-              >
-                <span>Continue</span>
-                <ArrowRight size={18} />
-              </button>
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full bg-[#0071e3] hover:bg-[#0077ed] text-white py-3.5 rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer"
+                >
+                  <span>Continue</span>
+                  <ArrowRight size={18} />
+                </button>
+              </div>
             </form>
           )}
 
           {/* Step 2: Contact Details */}
           {step === 'contact' && (
             <form onSubmit={handleContactSubmit} className="space-y-5">
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-white mb-1">Contact Details</h2>
-                <p className="text-xs text-gray-500">Secure your account and verify contact</p>
+              <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-4">
+                <h2 className="text-base sm:text-lg font-bold text-[#1d1d1f] dark:text-white">Contact & Security</h2>
+                <p className="text-xs text-[#86868b] font-medium mt-0.5">Secure your corporate credentials and contact details</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Official Email *
+                <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
+                  Official Email Address *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
                     <Mail size={18} />
                   </div>
                   <input
                     type="email"
                     value={formData.email}
                     onChange={(e) => updateFormData('email', e.target.value)}
-                    placeholder="company@example.com"
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
+                    placeholder="admin@company.com"
+                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
                     required
                   />
                 </div>
-                <p className="text-xs text-gray-600 mt-2">We&apos;ll send a verification link to this email</p>
+                <p className="text-[11px] text-[#86868b] mt-1.5 font-medium">We will send an activation verification link to this email.</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Password *
-                </label>
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
-                    <Lock size={18} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
+                    Password *
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type="password"
+                      value={formData.password}
+                      onChange={(e) => updateFormData('password', e.target.value)}
+                      placeholder="Min 8 characters"
+                      className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
+                      required
+                      minLength={8}
+                    />
                   </div>
-                  <input
-                    type="password"
-                    value={formData.password}
-                    onChange={(e) => updateFormData('password', e.target.value)}
-                    placeholder="Create a strong password"
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
-                    required
-                    minLength={8}
-                  />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Confirm Password *
-                </label>
-                <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
-                    <Lock size={18} />
+                <div>
+                  <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
+                    Confirm Password *
+                  </label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
+                      <Lock size={18} />
+                    </div>
+                    <input
+                      type="password"
+                      value={formData.confirmPassword}
+                      onChange={(e) => updateFormData('confirmPassword', e.target.value)}
+                      placeholder="Re-enter password"
+                      className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
+                      required
+                      minLength={8}
+                    />
                   </div>
-                  <input
-                    type="password"
-                    value={formData.confirmPassword}
-                    onChange={(e) => updateFormData('confirmPassword', e.target.value)}
-                    placeholder="Re-enter password"
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
-                    required
-                    minLength={8}
-                  />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
                   WhatsApp / Mobile Number *
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
                     <Smartphone size={18} />
                   </div>
                   <input
                     type="tel"
                     value={formData.mobileNumber}
                     onChange={(e) => updateFormData('mobileNumber', e.target.value)}
-                    placeholder="Enter number (e.g. +91 9999999999)"
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
+                    placeholder="+91 9999999999"
+                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
                     required
                   />
                 </div>
               </div>
 
-              <div className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4 flex items-start space-x-3">
-                <MessageCircle className="text-green-500 flex-shrink-0 mt-0.5" size={18} />
+              <div className="bg-[#34c759]/10 border border-[#34c759]/25 rounded-2xl p-4 flex items-start space-x-3">
+                <MessageCircle className="text-[#34c759] shrink-0 mt-0.5" size={18} />
                 <div>
-                  <p className="text-sm font-medium text-white">WhatsApp Verification (Default OTP: 000000)</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    WhatsApp service is pending. Use default code <strong>000000</strong> to verify.
+                  <p className="text-xs font-bold text-[#248a3d] dark:text-[#30d158]">WhatsApp Verification (Default OTP: 000000)</p>
+                  <p className="text-[11px] text-[#86868b] mt-0.5">
+                    WhatsApp gateway is in test mode. Use default code <strong>000000</strong> to verify.
                   </p>
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setStep('company')}
-                  className="flex-1 bg-[#000000] text-white py-3.5 rounded-xl font-medium border border-[#2c2c2e] hover:border-white transition-colors flex items-center justify-center space-x-2 text-sm"
+                  className="flex-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-[#f5f5f7] py-3.5 rounded-2xl font-bold border border-black/[0.04] dark:border-white/[0.06] transition-colors flex items-center justify-center space-x-2 text-sm cursor-pointer"
                 >
                   <ArrowLeft size={18} />
                   <span>Back</span>
@@ -501,9 +528,9 @@ function RegisterPageComponent() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 bg-white text-black py-3.5 rounded-xl font-medium hover:bg-gray-100 disabled:bg-[#2c2c2e] disabled:text-gray-600 transition-colors flex items-center justify-center space-x-2 text-sm"
+                  className="flex-1 bg-[#0071e3] hover:bg-[#0077ed] text-white py-3.5 rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer disabled:opacity-60"
                 >
-                  <span>{isSubmitting ? 'Sending OTP...' : 'Send OTP'}</span>
+                  <span>{isSubmitting ? 'Sending Code...' : 'Send Code'}</span>
                   {!isSubmitting && <ArrowRight size={18} />}
                 </button>
               </div>
@@ -513,17 +540,15 @@ function RegisterPageComponent() {
           {/* Step 3: Verify Mobile */}
           {step === 'verify' && (
             <form onSubmit={handleOtpSubmit} className="space-y-5">
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-white mb-1">Verify Mobile Number</h2>
-                <p className="text-xs text-gray-500">Enter the OTP sent to {formData.mobileNumber}</p>
+              <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-4 text-center">
+                <h2 className="text-base sm:text-lg font-bold text-[#1d1d1f] dark:text-white">Verify Phone Number</h2>
+                <p className="text-xs text-[#86868b] font-medium mt-0.5">
+                  Enter the 6-digit code sent to <strong className="text-[#1d1d1f] dark:text-white">{formData.mobileNumber}</strong>
+                </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-3">
-                  Enter OTP
-                </label>
-
-                <div className="flex justify-between gap-2 mb-5">
+                <div className="flex justify-between gap-2 sm:gap-3 my-4">
                   {otp.map((digit, index) => (
                     <input
                       key={index}
@@ -539,31 +564,33 @@ function RegisterPageComponent() {
                           prevInput?.focus();
                         }
                       }}
-                      className="w-full h-14 text-center text-lg font-medium bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white"
+                      className="w-full h-14 text-center text-xl font-bold bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-white"
                     />
                   ))}
                 </div>
 
-                <div className="flex items-center justify-center space-x-1.5 text-xs mb-5">
-                  <Shield size={14} className="text-gray-600" />
-                  <span className="text-gray-500">Valid for 5 minutes</span>
+                <div className="flex items-center justify-center space-x-1.5 text-xs text-[#86868b] font-medium">
+                  <Shield size={14} className="text-[#86868b]" />
+                  <span>Code is valid for 5 minutes</span>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={handleResendOtp}
-                disabled={isSubmitting}
-                className="w-full text-sm text-gray-500 hover:text-white font-medium disabled:text-gray-700 transition-colors mb-3"
-              >
-                Didn&apos;t receive OTP? Resend
-              </button>
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={isSubmitting}
+                  className="text-xs text-[#0071e3] hover:underline font-semibold transition-colors cursor-pointer"
+                >
+                  Didn&apos;t receive code? Resend Code
+                </button>
+              </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setStep('contact')}
-                  className="flex-1 bg-[#000000] text-white py-3.5 rounded-xl font-medium border border-[#2c2c2e] hover:border-white transition-colors flex items-center justify-center space-x-2 text-sm"
+                  className="flex-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-[#f5f5f7] py-3.5 rounded-2xl font-bold border border-black/[0.04] dark:border-white/[0.06] transition-colors flex items-center justify-center space-x-2 text-sm cursor-pointer"
                 >
                   <ArrowLeft size={18} />
                   <span>Back</span>
@@ -571,9 +598,9 @@ function RegisterPageComponent() {
                 <button
                   type="submit"
                   disabled={isSubmitting || otp.some((d) => !d)}
-                  className="flex-1 bg-white text-black py-3.5 rounded-xl font-medium hover:bg-gray-100 disabled:bg-[#2c2c2e] disabled:text-gray-600 transition-colors flex items-center justify-center space-x-2 text-sm"
+                  className="flex-1 bg-[#0071e3] hover:bg-[#0077ed] text-white py-3.5 rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer disabled:opacity-60"
                 >
-                  <span>{isSubmitting ? 'Verifying...' : 'Verify'}</span>
+                  <span>{isSubmitting ? 'Verifying...' : 'Verify Code'}</span>
                   {!isSubmitting && <ArrowRight size={18} />}
                 </button>
               </div>
@@ -583,13 +610,13 @@ function RegisterPageComponent() {
           {/* Step 4: Additional Details */}
           {step === 'additional' && (
             <form onSubmit={handleFinalSubmit} className="space-y-5">
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold text-white mb-1">Additional Details</h2>
-                <p className="text-xs text-gray-500">Optional information to enhance your profile</p>
+              <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-4">
+                <h2 className="text-base sm:text-lg font-bold text-[#1d1d1f] dark:text-white">Additional Profile Information</h2>
+                <p className="text-xs text-[#86868b] font-medium mt-0.5">Optional company branding & business verification</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
+                <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
                   Company Logo
                 </label>
                 <div className="relative">
@@ -602,58 +629,56 @@ function RegisterPageComponent() {
                   />
                   <label
                     htmlFor="logo-upload"
-                    className="w-full flex items-center justify-center px-4 py-8 bg-[#000000] border border-[#2c2c2e] border-dashed rounded-xl cursor-pointer hover:border-white transition-colors"
+                    className="w-full flex items-center justify-center px-4 py-8 bg-[#f2f2f7] dark:bg-[#2c2c2e] border-2 border-dashed border-black/[0.1] dark:border-white/[0.12] rounded-2xl cursor-pointer hover:border-[#0071e3] transition-colors"
                   >
                     <div className="text-center">
-                      <Upload className="mx-auto text-gray-600 mb-2" size={24} />
-                      <p className="text-sm text-white mb-1">
-                        {formData.logo ? formData.logo.name : 'Upload company logo'}
+                      <Upload className="mx-auto text-[#0071e3] mb-2" size={24} />
+                      <p className="text-xs sm:text-sm font-bold text-[#1d1d1f] dark:text-white mb-0.5">
+                        {formData.logo ? formData.logo.name : 'Click or drop logo image here'}
                       </p>
-                      <p className="text-xs text-gray-600">PNG, JPG up to 5MB</p>
+                      <p className="text-[11px] text-[#86868b]">PNG, JPG, or SVG up to 5MB</p>
                     </div>
                   </label>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  GST / Business Registration Number
+                <label className="block text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider mb-2">
+                  GST / Business Registration ID (Optional)
                 </label>
                 <div className="relative">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#86868b]">
                     <FileText size={18} />
                   </div>
                   <input
                     type="text"
                     value={formData.gstNumber}
                     onChange={(e) => updateFormData('gstNumber', e.target.value)}
-                    placeholder="Enter GST or registration number"
-                    className="w-full pl-12 pr-4 py-3 bg-[#000000] border border-[#2c2c2e] rounded-xl focus:outline-none focus:border-white transition-colors text-white placeholder-gray-600 text-sm"
+                    placeholder="e.g. 22AAAAA0000A1Z5"
+                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
                   />
                 </div>
-                <p className="text-xs text-gray-600 mt-2 flex items-center gap-1">
-                  <Check size={12} className="text-green-500" />
-                  Adding this earns you a &quot;Verified Company&quot; badge
+                <p className="text-[11px] text-[#248a3d] dark:text-[#30d158] mt-1.5 flex items-center gap-1 font-semibold">
+                  <CheckCircle2 size={13} />
+                  Adding a valid registration ID earns your company a &quot;Verified Employer&quot; badge.
                 </p>
               </div>
 
-              <div className="bg-[#000000] border border-[#2c2c2e] rounded-xl p-4">
-                <div className="flex items-start space-x-3">
-                  <Mail className="text-blue-500 flex-shrink-0 mt-0.5" size={18} />
-                  <div>
-                    <p className="text-sm font-medium text-white">Email Verification Required</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      After registration, check your inbox at <span className="text-white">{formData.email}</span> for a verification link
-                    </p>
-                  </div>
+              <div className="bg-[#0071e3]/8 border border-[#0071e3]/20 rounded-2xl p-4 flex items-start space-x-3">
+                <Mail className="text-[#0071e3] shrink-0 mt-0.5" size={18} />
+                <div>
+                  <p className="text-xs font-bold text-[#0071e3]">Email Activation Link</p>
+                  <p className="text-[11px] text-[#86868b] mt-0.5">
+                    After registration, check your inbox at <strong className="text-[#1d1d1f] dark:text-white">{formData.email}</strong> to activate your workspace.
+                  </p>
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setStep('verify')}
-                  className="flex-1 bg-[#000000] text-white py-3.5 rounded-xl font-medium border border-[#2c2c2e] hover:border-white transition-colors flex items-center justify-center space-x-2 text-sm"
+                  className="flex-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-[#f5f5f7] py-3.5 rounded-2xl font-bold border border-black/[0.04] dark:border-white/[0.06] transition-colors flex items-center justify-center space-x-2 text-sm cursor-pointer"
                 >
                   <ArrowLeft size={18} />
                   <span>Back</span>
@@ -661,9 +686,9 @@ function RegisterPageComponent() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 bg-white text-black py-3.5 rounded-xl font-medium hover:bg-gray-100 disabled:bg-[#2c2c2e] disabled:text-gray-600 transition-colors flex items-center justify-center space-x-2 text-sm"
+                  className="flex-1 bg-[#0071e3] hover:bg-[#0077ed] text-white py-3.5 rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer disabled:opacity-60"
                 >
-                  <span>{isSubmitting ? 'Creating Account...' : 'Complete Registration'}</span>
+                  <span>{isSubmitting ? 'Registering...' : 'Complete Registration'}</span>
                   {!isSubmitting && <Check size={18} />}
                 </button>
               </div>
@@ -672,19 +697,19 @@ function RegisterPageComponent() {
 
           {/* Success Step */}
           {step === 'success' && (
-            <div className="text-center py-8 space-y-5">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-green-950/50 border border-green-500/30 rounded-full text-green-400 mb-2 animate-pulse">
-                <Check size={32} />
+            <div className="text-center py-6 space-y-4">
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#34c759]/10 border border-[#34c759]/25 rounded-full text-[#34c759] mb-1">
+                <CheckCircle2 size={36} />
               </div>
-              <h2 className="text-xl font-semibold text-white">Verification Link Dispatched!</h2>
-              <p className="text-sm text-gray-400 max-w-md mx-auto leading-relaxed">
-                We have sent an activation link to <span className="text-white font-medium">{formData.email}</span>. 
-                Please verify your corporate email to complete registration and unlock your hiring dashboard workspace.
+              <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white">Activation Link Sent!</h2>
+              <p className="text-xs sm:text-sm text-[#86868b] max-w-md mx-auto leading-relaxed font-medium">
+                We have sent an activation link to <strong className="text-[#1d1d1f] dark:text-white">{formData.email}</strong>. 
+                Please verify your corporate email to unlock your company workspace.
               </p>
               <div className="pt-4">
                 <button
                   onClick={() => router.push('/login')}
-                  className="w-full sm:w-auto px-8 py-3 bg-white text-black rounded-xl font-medium hover:bg-gray-100 transition-colors text-sm shadow-lg shadow-white/5"
+                  className="w-full sm:w-auto px-8 py-3.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all text-xs cursor-pointer"
                 >
                   Proceed to Sign In
                 </button>
@@ -695,15 +720,15 @@ function RegisterPageComponent() {
 
         {/* Footer */}
         {step !== 'success' && (
-          <div className="mt-6 text-center">
-            <p className="text-xs text-gray-600 mb-3">
-              By continuing, you agree to our Terms &amp; Privacy Policy
+          <div className="mt-6 text-center space-y-2">
+            <p className="text-xs text-[#86868b] font-medium">
+              By continuing, you agree to our Terms of Service &amp; Privacy Policy
             </p>
-            <p className="text-sm text-gray-500">
+            <p className="text-xs sm:text-sm text-[#86868b]">
               Already have an account?{' '}
-              <a href="/login" className="text-white hover:underline font-medium">
+              <Link href="/login" className="text-[#0071e3] hover:underline font-bold">
                 Sign in
-              </a>
+              </Link>
             </p>
           </div>
         )}

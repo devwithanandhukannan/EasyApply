@@ -93,7 +93,6 @@ export default function SettingsPage() {
 
       if (res.data?.success) {
         showToast('Success', 'Password updated successfully.', 'success');
-        // Clear form fields
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
@@ -113,48 +112,48 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-xl">
+    <div className="space-y-6 max-w-2xl text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased p-1">
       {/* Header Info */}
-      <div className="border-b border-zinc-900 pb-5">
-        <h1 className="text-xl font-bold text-zinc-100 tracking-tight">Account & Visibility Settings</h1>
-        <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
+      <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">Account &amp; Visibility Settings</h1>
+        <p className="text-xs sm:text-sm text-[#86868b] mt-0.5 font-medium leading-relaxed">
           Manage your account credentials, interface theme (Dark / Light mode), and recruiter discovery preferences.
         </p>
       </div>
 
       {/* ─── APPEARANCE & THEME TOGGLE CARD ──────────────────────────── */}
-      <div className="bg-zinc-950/40 border border-zinc-800 rounded-xl p-6 space-y-4 backdrop-blur-md">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-6 space-y-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-indigo-400">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 bg-[#0071e3]/10 border border-[#0071e3]/20 rounded-2xl text-[#0071e3]">
               {mounted && mode === 'light' ? (
-                <Sun className="w-5 h-5 text-amber-400" />
+                <Sun className="w-5 h-5 text-[#ff9500]" />
               ) : (
-                <Moon className="w-5 h-5 text-indigo-400" />
+                <Moon className="w-5 h-5 text-[#0071e3]" />
               )}
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
+              <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white tracking-tight">
                 Interface Appearance
               </h3>
-              <p className="text-xs text-zinc-400 mt-0.5">
+              <p className="text-xs text-[#86868b] font-medium mt-0.5">
                 Toggle between dark mode and clean light mode.
               </p>
             </div>
           </div>
 
           {/* Dark / Light Mode Toggle Pill */}
-          <div className="inline-flex p-1 bg-zinc-900 border border-zinc-800 rounded-xl shrink-0">
+          <div className="inline-flex p-1 bg-[#e5e5ea] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl shrink-0">
             <button
               type="button"
               onClick={() => {
                 setMode('dark');
                 showToast('Theme Updated', 'Dark mode activated', 'info');
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 mounted && mode === 'dark'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
               }`}
             >
               <Moon className="w-3.5 h-3.5" />
@@ -167,13 +166,13 @@ export default function SettingsPage() {
                 setMode('light');
                 showToast('Theme Updated', 'Light mode activated', 'info');
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 mounted && mode === 'light'
-                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/30'
-                  : 'text-zinc-400 hover:text-zinc-200'
+                  ? 'bg-white text-[#1d1d1f] shadow-xs'
+                  : 'text-[#86868b] hover:text-[#1d1d1f]'
               }`}
             >
-              <Sun className="w-3.5 h-3.5" />
+              <Sun className="w-3.5 h-3.5 text-[#ff9500]" />
               <span>Light</span>
             </button>
           </div>
@@ -181,22 +180,22 @@ export default function SettingsPage() {
       </div>
 
       {/* Recruiter Discovery Opt-In Card */}
-      <div className="bg-gradient-to-br from-indigo-950/20 via-zinc-950/30 to-zinc-950/20 border border-indigo-500/20 rounded-xl p-6 space-y-4 backdrop-blur-md">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-6 space-y-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
         <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-indigo-400">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 bg-[#0071e3]/10 border border-[#0071e3]/20 rounded-2xl text-[#0071e3]">
               <Search className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
+                <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white tracking-tight">
                   Recruiter Discovery Database
                 </h3>
-                <span className="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full">
+                <span className="px-2.5 py-0.5 text-[10px] font-bold bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158] rounded-full uppercase tracking-wider">
                   100% Free
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+              <p className="text-xs text-[#86868b] font-medium mt-1 leading-relaxed">
                 Allow all verified companies on EasyApply to browse your profile, match your skills, and invite you to interviews directly.
               </p>
             </div>
@@ -210,30 +209,30 @@ export default function SettingsPage() {
               disabled={!mounted || loadingDiscovery}
               className="sr-only peer"
             />
-            <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            <div className="w-11 h-6 bg-[#e5e5ea] dark:bg-[#2c2c2e] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-xs peer-checked:bg-[#34c759]"></div>
           </label>
         </div>
 
-        <div className="pt-2 border-t border-indigo-500/10 flex items-center justify-between text-[11px] text-zinc-500">
-          <div className="flex items-center gap-1.5 text-zinc-400">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Status: <strong className={mounted && discoverable ? 'text-emerald-400' : 'text-zinc-500'}>{mounted && discoverable ? 'Visible to all employers' : 'Hidden from searches'}</strong></span>
+        <div className="pt-3 border-t border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between text-xs text-[#86868b] font-medium">
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-[#0071e3]" />
+            <span>Status: <strong className={mounted && discoverable ? 'text-[#248a3d] dark:text-[#30d158] font-bold' : 'text-[#86868b] font-semibold'}>{mounted && discoverable ? 'Visible to all employers' : 'Hidden from searches'}</strong></span>
           </div>
-          {loadingDiscovery && <span className="text-indigo-400 animate-pulse">Updating...</span>}
+          {loadingDiscovery && <span className="text-[#0071e3] font-semibold animate-pulse">Updating...</span>}
         </div>
       </div>
 
       {/* Change Password Card */}
-      <div className="bg-zinc-950/20 border border-zinc-800 rounded-xl p-6 space-y-5 backdrop-blur-md">
-        <div className="flex items-center gap-2.5 border-b border-zinc-900 pb-4">
-          <div className="p-1.5 bg-zinc-900/50 border border-zinc-800 rounded-lg text-zinc-300">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-6 sm:p-7 space-y-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+        <div className="flex items-center gap-3 border-b border-black/[0.06] dark:border-white/[0.08] pb-4">
+          <div className="p-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl text-[#0071e3]">
             <ShieldCheck className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+            <h3 className="text-xs font-bold text-[#1d1d1f] dark:text-white uppercase tracking-wider">
               Security Credentials
             </h3>
-            <p className="text-[10px] text-zinc-500 mt-0.5">
+            <p className="text-[11px] text-[#86868b] font-medium mt-0.5">
               Update your account password. If you logged in using OTP and have not set a password yet, you can leave the current password field blank.
             </p>
           </div>
@@ -242,7 +241,7 @@ export default function SettingsPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Current Password */}
           <div className="space-y-1.5">
-            <label className="block text-zinc-400 text-[11px] font-medium">
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider">
               Current Password
             </label>
             <div className="relative">
@@ -251,21 +250,21 @@ export default function SettingsPage() {
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password (if set)"
-                className="w-full px-3 py-1.5 pr-10 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700"
+                className="w-full px-4 py-2.5 pr-10 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] text-xs font-medium placeholder-[#86868b]"
               />
               <button
                 type="button"
                 onClick={() => setShowCurrent(!showCurrent)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300 transition-colors"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-colors cursor-pointer"
               >
-                {showCurrent ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
           {/* New Password */}
           <div className="space-y-1.5">
-            <label className="block text-zinc-400 text-[11px] font-medium">
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider">
               New Password *
             </label>
             <div className="relative">
@@ -274,22 +273,22 @@ export default function SettingsPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="At least 6 characters"
-                className="w-full px-3 py-1.5 pr-10 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700"
+                className="w-full px-4 py-2.5 pr-10 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] text-xs font-medium placeholder-[#86868b]"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowNew(!showNew)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300 transition-colors"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-colors cursor-pointer"
               >
-                {showNew ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
           {/* Confirm Password */}
           <div className="space-y-1.5">
-            <label className="block text-zinc-400 text-[11px] font-medium">
+            <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider">
               Confirm New Password *
             </label>
             <div className="relative">
@@ -298,15 +297,15 @@ export default function SettingsPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter new password"
-                className="w-full px-3 py-1.5 pr-10 bg-zinc-950/50 border border-zinc-800 rounded-lg focus:outline-none focus:border-zinc-500 transition-colors text-zinc-200 text-xs placeholder-zinc-700"
+                className="w-full px-4 py-2.5 pr-10 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] text-xs font-medium placeholder-[#86868b]"
                 required
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-zinc-300 transition-colors"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-colors cursor-pointer"
               >
-                {showConfirm ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
@@ -316,7 +315,7 @@ export default function SettingsPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 px-4 py-2 border border-zinc-800 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold transition-all shadow-[0_4px_14px_rgba(0,113,227,0.25)] cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
@@ -325,7 +324,7 @@ export default function SettingsPage() {
                 </>
               ) : (
                 <>
-                  <Lock className="w-3.5 h-3.5 text-zinc-400" />
+                  <Lock className="w-3.5 h-3.5" />
                   <span>Update Password</span>
                 </>
               )}

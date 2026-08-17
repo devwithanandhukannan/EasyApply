@@ -149,8 +149,9 @@ export default function ApplicationsPage() {
           setEditingNotes(currentSelection.candidateNotes || '');
         }
       }
-    } catch (error) {
-      console.error('Error fetching applications tracker:', error);
+    } catch (error: any) {
+      console.error('Error loading applications:', error);
+      showToast('Error', 'Failed to retrieve application tracking timeline.', 'danger');
     } finally {
       setIsLoading(false);
     }
@@ -159,19 +160,35 @@ export default function ApplicationsPage() {
   const handleSearchAndFilter = () => {
     let result = [...applications];
 
-    if (statusFilter !== 'all') {
-      result = result.filter(app => app.liveStatusBadge.toLowerCase() === statusFilter.toLowerCase());
-    }
-
     if (searchQuery.trim()) {
-      const targetQuery = searchQuery.toLowerCase();
-      result = result.filter(app =>
-        app.jobDetails.title.toLowerCase().includes(targetQuery) ||
-        app.companyDetails.name.toLowerCase().includes(targetQuery)
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (app) =>
+          app.jobDetails.title.toLowerCase().includes(q) ||
+          app.companyDetails.name.toLowerCase().includes(q) ||
+          app.jobDetails.location.toLowerCase().includes(q)
       );
     }
 
+    if (statusFilter !== 'all') {
+      result = result.filter((app) => {
+        if (statusFilter === 'applied') return app.currentStage.toLowerCase() === 'applied' && !app.isWithdrawn;
+        if (statusFilter === 'screened') return app.currentStage.toLowerCase() === 'screened' && !app.isWithdrawn;
+        if (statusFilter === 'technical_round') return app.currentStage.toLowerCase() === 'technical_round' && !app.isWithdrawn;
+        if (statusFilter === 'hr_round') return app.currentStage.toLowerCase() === 'hr_round' && !app.isWithdrawn;
+        if (statusFilter === 'offer_sent') return app.currentStage.toLowerCase() === 'offer_sent';
+        if (statusFilter === 'hired') return app.currentStage.toLowerCase() === 'hired';
+        if (statusFilter === 'rejected') return app.currentStage.toLowerCase() === 'rejected';
+        if (statusFilter === 'withdrawn') return app.isWithdrawn;
+        return true;
+      });
+    }
+
     setFilteredApplications(result);
+    if (result.length > 0 && !result.some((a) => a.applicationId === selectedApp?.applicationId)) {
+      setSelectedApp(result[0]);
+      setEditingNotes(result[0].candidateNotes || '');
+    }
   };
 
   const handleSelectApplication = (app: ApplicationTrackItem) => {
@@ -180,42 +197,24 @@ export default function ApplicationsPage() {
     setActionMenuOpen(null);
   };
 
-  const handleUpdateNotes = async () => {
-    if (!selectedApp) return;
-    try {
-      setSavingNotes(true);
-      const response = await api.patch(`/jobseeker/applications/${selectedApp.applicationId}/notes`, {
-        notes: editingNotes
-      });
-      if (response.data.success) {
-        setApplications(prev => prev.map(item =>
-          item.applicationId === selectedApp.applicationId
-            ? { ...item, candidateNotes: editingNotes }
-            : item
-        ));
-        setSelectedApp(prev => prev ? { ...prev, candidateNotes: editingNotes } : null);
-      }
-    } catch (err) {
-      showToast('failed', 'Failed to save notes', 'danger');
-    } finally {
-      setSavingNotes(false);
+  const handleWithdraw = async (applicationId: string) => {
+    if (!confirm('Are you sure you want to withdraw this application? This action cannot be reversed.')) {
+      return;
     }
-  };
-
-  const handleWithdraw = async (id: string) => {
-    if (!confirm('Are you sure you want to withdraw this application? This action cannot be undone.')) return;
 
     try {
-      setProcessingWithdrawal(id);
-      const response = await api.post(`/jobseeker/applications/${id}/withdraw`);
+      setProcessingWithdrawal(applicationId);
+      const response = await api.put(`/jobseeker/applications/${applicationId}/withdraw`);
       if (response.data.success) {
-        showToast('withdrawn', 'Application withdrawn successfully', 'success');
-        await fetchApplications();
+        showToast('Application Withdrawn', 'Application has been withdrawn successfully.', 'info');
+        fetchApplications();
       }
     } catch (error: any) {
-      showToast('failed', error.response?.data?.error || 'Failed to withdraw application', 'danger');
+      console.error('Withdraw error:', error);
+      showToast('Error', error.response?.data?.message || 'Failed to withdraw application.', 'danger');
     } finally {
       setProcessingWithdrawal(null);
+      setActionMenuOpen(null);
     }
   };
 
@@ -240,7 +239,6 @@ export default function ApplicationsPage() {
   const handleDownloadOffer = async (offerId: string, companyName: string, roleName: string) => {
     try {
       setDownloadingOffer(true);
-      // Fetches direct file buffer using internal dynamic endpoints
       const response = await api.get(`/jobseeker/offers/${offerId}/download`, {
         responseType: 'blob'
       });
@@ -282,15 +280,15 @@ export default function ApplicationsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case 'applied': return 'bg-blue-500/10 text-blue-400 border-blue-500/30';
-      case 'screened': return 'bg-purple-500/10 text-purple-400 border-purple-500/30';
-      case 'technical_round': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30';
-      case 'hr_round': return 'bg-orange-500/10 text-orange-400 border-orange-500/30';
-      case 'offer_sent': return 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30';
-      case 'hired': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
-      case 'rejected': return 'bg-red-500/10 text-red-400 border-red-500/30';
-      case 'withdrawn': return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30';
-      default: return 'bg-gray-500/10 text-gray-400 border-gray-500/30';
+      case 'applied': return 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/20';
+      case 'screened': return 'bg-[#af52de]/10 text-[#af52de] border-[#af52de]/20';
+      case 'technical_round': return 'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20';
+      case 'hr_round': return 'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20';
+      case 'offer_sent': return 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border-[#34c759]/30';
+      case 'hired': return 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border-[#34c759]/30';
+      case 'rejected': return 'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20';
+      case 'withdrawn': return 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] border-black/[0.04] dark:border-white/[0.06]';
+      default: return 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] border-black/[0.04] dark:border-white/[0.06]';
     }
   };
 
@@ -298,15 +296,15 @@ export default function ApplicationsPage() {
     switch (status.toLowerCase()) {
       case 'hired':
       case 'offer_sent':
-        return <CheckCircle2 size={14} />;
+        return <CheckCircle2 size={13} />;
       case 'rejected':
       case 'withdrawn':
-        return <XCircle size={14} />;
+        return <XCircle size={13} />;
       case 'technical_round':
       case 'hr_round':
-        return <Video size={14} />;
+        return <Video size={13} />;
       default:
-        return <Clock size={14} />;
+        return <Clock size={13} />;
     }
   };
 
@@ -327,72 +325,72 @@ export default function ApplicationsPage() {
   };
 
   return (
-    <div className="space-y-6 w-full max-w-full text-zinc-300">
+    <div className="space-y-6 w-full max-w-full text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased p-1">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Applications</h1>
-          <p className="text-sm text-zinc-500 mt-1">Track and manage all your job applications in one place</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">Applications</h1>
+          <p className="text-xs sm:text-sm text-[#86868b] mt-0.5 font-medium">Track and manage all your job applications in one place</p>
         </div>
         <button
           onClick={fetchApplications}
-          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-zinc-300 bg-zinc-900 border border-zinc-800 rounded-lg shadow-sm hover:bg-zinc-800 focus:outline-none focus:ring-2 focus:ring-zinc-600"
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl transition-all shadow-xs cursor-pointer"
         >
-          <RefreshCw size={16} />
-          Refresh
+          <RefreshCw size={14} className="text-[#0071e3]" />
+          <span>Refresh</span>
         </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Total</p>
-            <Briefcase size={18} className="text-zinc-500" />
+            <p className="text-[10px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider">Total</p>
+            <Briefcase size={16} className="text-[#86868b]" />
           </div>
-          <p className="text-2xl font-bold text-white mt-2">{stats.total}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-[#1d1d1f] dark:text-white mt-1.5">{stats.total}</p>
         </div>
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Applied</p>
-            <CheckCircle size={18} className="text-blue-500" />
+            <p className="text-[10px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider">Applied</p>
+            <CheckCircle size={16} className="text-[#0071e3]" />
           </div>
-          <p className="text-2xl font-bold text-blue-400 mt-2">{stats.applied}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-[#0071e3] mt-1.5">{stats.applied}</p>
         </div>
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">In Progress</p>
-            <TrendingUp size={18} className="text-yellow-500" />
+            <p className="text-[10px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider">In Progress</p>
+            <TrendingUp size={16} className="text-[#ff9500]" />
           </div>
-          <p className="text-2xl font-bold text-yellow-400 mt-2">{stats.activeRounds}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-[#ff9500] mt-1.5">{stats.activeRounds}</p>
         </div>
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Offers / Hired</p>
-            <UserCheck size={18} className="text-emerald-500" />
+            <p className="text-[10px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider">Offers / Hired</p>
+            <UserCheck size={16} className="text-[#34c759]" />
           </div>
-          <p className="text-2xl font-bold text-emerald-400 mt-2">{stats.offers}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-[#34c759] mt-1.5">{stats.offers}</p>
         </div>
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide">Withdrawn / Rejected</p>
-            <XOctagon size={18} className="text-red-500" />
+            <p className="text-[10px] sm:text-xs font-semibold text-[#86868b] uppercase tracking-wider">Rejected</p>
+            <XOctagon size={16} className="text-[#ff3b30]" />
           </div>
-          <p className="text-2xl font-bold text-red-400 mt-2">{stats.rejected}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-[#ff3b30] mt-1.5">{stats.rejected}</p>
         </div>
       </div>
 
       {/* Search & Filter */}
-      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 shadow-sm">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={15} />
             <input
               type="text"
               placeholder="Search by job title or company..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 bg-black border border-zinc-800 rounded-lg text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-zinc-600 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] font-medium focus:outline-none focus:border-[#0071e3]"
             />
           </div>
 
@@ -400,7 +398,7 @@ export default function ApplicationsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="pl-9 pr-8 py-2 bg-black border border-zinc-800 rounded-lg text-sm text-zinc-200 appearance-none focus:outline-none focus:ring-2 focus:ring-zinc-600"
+              className="pl-9 pr-8 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] appearance-none focus:outline-none focus:border-[#0071e3] cursor-pointer"
             >
               <option value="all">All Statuses</option>
               <option value="applied">Applied</option>
@@ -412,22 +410,22 @@ export default function ApplicationsPage() {
               <option value="rejected">Rejected</option>
               <option value="withdrawn">Withdrawn</option>
             </select>
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={14} />
+            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-[#86868b]" size={14} />
           </div>
         </div>
       </div>
 
       {/* Main Content */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-16 bg-zinc-900 rounded-xl border border-zinc-800">
-          <div className="w-8 h-8 border-3 border-zinc-700 border-t-white rounded-full animate-spin mb-3"></div>
-          <p className="text-sm text-zinc-500">Loading your applications...</p>
+        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+          <div className="w-6 h-6 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="text-xs text-[#86868b] font-medium">Loading your applications...</p>
         </div>
       ) : filteredApplications.length === 0 ? (
-        <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-12 text-center">
-          <Briefcase className="mx-auto mb-3 text-zinc-700" size={48} />
-          <h3 className="text-lg font-medium text-white mb-1">No applications found</h3>
-          <p className="text-sm text-zinc-500 mb-5">
+        <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-12 text-center shadow-xs max-w-md mx-auto">
+          <Briefcase className="mx-auto mb-3 text-[#86868b]" size={36} />
+          <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white mb-1">No applications found</h3>
+          <p className="text-xs text-[#86868b] mb-5">
             {searchQuery || statusFilter !== 'all'
               ? 'Try adjusting your search or filter to see more results'
               : "You haven't applied to any jobs yet"}
@@ -435,45 +433,45 @@ export default function ApplicationsPage() {
           {!searchQuery && statusFilter === 'all' && (
             <Link
               href="/dashboard/jobs"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white text-black text-sm font-medium rounded-lg shadow-sm hover:bg-zinc-200 transition-colors"
+              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold rounded-2xl shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition"
             >
               Browse Jobs
             </Link>
           )}
         </div>
       ) : (
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Application List */}
           <div className="w-full lg:w-5/12 space-y-3 max-h-[calc(100vh-12rem)] overflow-y-auto pr-1">
             {filteredApplications.map((app) => (
               <div
                 key={app.applicationId}
                 onClick={() => handleSelectApplication(app)}
-                className={`bg-zinc-900 rounded-xl border p-4 cursor-pointer transition-all hover:shadow-md ${
+                className={`bg-white dark:bg-[#1c1c1e] rounded-3xl border p-5 cursor-pointer transition-all ${
                   selectedApp?.applicationId === app.applicationId
-                    ? 'border-zinc-500 ring-2 ring-zinc-700 shadow-md'
-                    : 'border-zinc-800 hover:border-zinc-700'
+                    ? 'border-[#0071e3] ring-2 ring-[#0071e3]/20 shadow-md'
+                    : 'border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] shadow-xs'
                 }`}
               >
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-start gap-2">
                   <div className="flex gap-3">
                     {app.companyDetails.logoUrl ? (
                       <img
                         src={app.companyDetails.logoUrl}
                         alt={app.companyDetails.name}
-                        className="w-10 h-10 rounded-lg object-cover bg-black border border-zinc-800 flex-shrink-0"
+                        className="w-10 h-10 rounded-2xl object-cover border border-black/[0.06] dark:border-white/[0.08] shrink-0"
                       />
                     ) : (
-                      <div className="w-10 h-10 bg-black border border-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                        <Building2 size={18} className="text-zinc-500" />
+                      <div className="w-10 h-10 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl flex items-center justify-center shrink-0">
+                        <Building2 size={16} className="text-[#0071e3]" />
                       </div>
                     )}
-                    <div>
-                      <h4 className="text-base font-semibold text-white">{app.jobDetails.title}</h4>
-                      <p className="text-sm text-zinc-400 mt-0.5">{app.companyDetails.name}</p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-[#1d1d1f] dark:text-white truncate">{app.jobDetails.title}</h4>
+                      <p className="text-xs text-[#86868b] font-medium mt-0.5 truncate">{app.companyDetails.name}</p>
+                      <div className="flex items-center gap-1 mt-1 text-[11px] text-[#86868b]">
                         <MapPin size={12} />
-                        <span>{app.jobDetails.location}</span>
+                        <span className="truncate">{app.jobDetails.location}</span>
                       </div>
                     </div>
                   </div>
@@ -483,21 +481,21 @@ export default function ApplicationsPage() {
                         e.stopPropagation();
                         setActionMenuOpen(actionMenuOpen === app.applicationId ? null : app.applicationId);
                       }}
-                      className="p-1.5 hover:bg-zinc-800 rounded-md transition-colors"
+                      className="p-1.5 hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-xl transition-colors cursor-pointer text-[#86868b]"
                     >
-                      <MoreVertical size={16} className="text-zinc-500" />
+                      <MoreVertical size={16} />
                     </button>
 
                     {actionMenuOpen === app.applicationId && (
-                      <div className="absolute right-0 mt-1 w-48 bg-black border border-zinc-800 rounded-lg shadow-lg z-10 py-1">
+                      <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-xl z-10 py-1">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDownloadResume(app.resumeUsed.id, app.resumeUsed.name);
                           }}
-                          className="w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900 flex items-center gap-2"
+                          className="w-full text-left px-4 py-2 text-xs font-semibold text-[#1d1d1f] dark:text-white hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] flex items-center gap-2 cursor-pointer"
                         >
-                          <Download size={14} />
+                          <Download size={13} className="text-[#0071e3]" />
                           Download Resume
                         </button>
                         {app.canWithdraw && (
@@ -506,9 +504,9 @@ export default function ApplicationsPage() {
                               e.stopPropagation();
                               handleWithdraw(app.applicationId);
                             }}
-                            className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-950/30 flex items-center gap-2"
+                            className="w-full text-left px-4 py-2 text-xs font-semibold text-[#ff3b30] hover:bg-[#ff3b30]/10 flex items-center gap-2 cursor-pointer"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                             Withdraw Application
                           </button>
                         )}
@@ -517,12 +515,12 @@ export default function ApplicationsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-zinc-800">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(app.liveStatusBadge)}`}>
+                <div className="flex items-center justify-between mt-4 pt-3 border-t border-black/[0.06] dark:border-white/[0.08]">
+                  <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[11px] font-bold border capitalize ${getStatusColor(app.liveStatusBadge)}`}>
                     {getStatusIcon(app.liveStatusBadge)}
                     <span>{app.liveStatusBadge.replace(/_/g, ' ')}</span>
                   </span>
-                  <div className="flex items-center gap-1 text-xs text-zinc-500">
+                  <div className="flex items-center gap-1 text-[11px] text-[#86868b] font-medium">
                     <Clock size={12} />
                     <span>{calculateDaysAgo(app.appliedAt)}</span>
                   </div>
@@ -532,37 +530,37 @@ export default function ApplicationsPage() {
           </div>
 
           {/* Details Panel */}
-          <div className="w-full lg:w-7/12 bg-zinc-900 rounded-xl border border-zinc-800 p-5 space-y-6 lg:sticky lg:top-6 shadow-sm">
+          <div className="w-full lg:w-7/12 bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-6 space-y-6 lg:sticky lg:top-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
             {selectedApp ? (
               <>
                 {/* Header */}
-                <div className="border-b border-zinc-800 pb-4 flex flex-wrap justify-between items-start gap-4">
+                <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-4 flex flex-wrap justify-between items-start gap-4">
                   <div>
-                    <span className="text-xs font-mono text-zinc-500 bg-black px-2 py-0.5 rounded border border-zinc-800">
+                    <span className="text-[10px] font-bold text-[#86868b] bg-[#f2f2f7] dark:bg-[#2c2c2e] px-2.5 py-1 rounded-lg uppercase tracking-wider">
                       ID: {selectedApp.applicationId.slice(0, 8)}
                     </span>
-                    <h2 className="text-xl font-bold text-white mt-2">
+                    <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white mt-2">
                       {selectedApp.jobDetails.title}
                     </h2>
-                    <p className="text-sm text-zinc-400 mt-0.5">
+                    <p className="text-xs font-semibold text-[#86868b] mt-0.5">
                       {selectedApp.companyDetails.name} • {selectedApp.jobDetails.location}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={handleSalaryBenchmarking}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-black border border-zinc-800 rounded-lg hover:bg-zinc-900 hover:border-emerald-900/50 transition-colors"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#34c759] bg-[#34c759]/10 border border-[#34c759]/20 rounded-2xl hover:bg-[#34c759]/20 transition-colors cursor-pointer"
                     >
-                      <TrendingUp size={14} />
+                      <TrendingUp size={13} />
                       Salary Benchmarking
                     </button>
 
                     <button
                       onClick={handleExportApplicationData}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-zinc-300 bg-black border border-zinc-800 rounded-lg hover:bg-zinc-900"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#1d1d1f] dark:text-white bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl hover:bg-[#e5e5ea] transition-colors cursor-pointer"
                     >
-                      <FileDown size={14} />
+                      <FileDown size={13} className="text-[#0071e3]" />
                       Export
                     </button>
 
@@ -570,9 +568,9 @@ export default function ApplicationsPage() {
                       <button
                         onClick={() => handleWithdraw(selectedApp.applicationId)}
                         disabled={processingWithdrawal !== null}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-400 bg-black border border-red-900/50 rounded-lg hover:bg-red-950/30 hover:border-red-800/50"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-[#ff3b30] bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-2xl hover:bg-[#ff3b30]/20 transition-colors cursor-pointer"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={13} />
                         {processingWithdrawal === selectedApp.applicationId ? 'Processing...' : 'Withdraw'}
                       </button>
                     )}
@@ -581,27 +579,27 @@ export default function ApplicationsPage() {
 
                 {/* Offer Response Section */}
                 {selectedApp.activeOffer && (
-                  <div className="p-4 border border-indigo-900/50 bg-indigo-950/20 rounded-xl space-y-3">
+                  <div className="p-4 border border-[#34c759]/30 bg-[#34c759]/5 rounded-2xl space-y-3">
                     <div className="flex items-center gap-2">
-                      <CheckCircle2 size={18} className="text-indigo-400" />
-                      <h5 className="font-semibold text-indigo-300">Offer Letter Received</h5>
+                      <CheckCircle2 size={16} className="text-[#34c759]" />
+                      <h5 className="font-bold text-xs text-[#248a3d] dark:text-[#30d158]">Offer Letter Received</h5>
                     </div>
-                    <p className="text-xs text-indigo-300/70">
+                    <p className="text-xs text-[#86868b]">
                       Sent: {new Date(selectedApp.activeOffer.sentAt).toLocaleDateString()} — Status: {selectedApp.activeOffer.status.toUpperCase()}
                     </p>
-                    <div className="flex gap-3">
+                    <div className="flex gap-2.5">
                       <button
                         onClick={() => handleDownloadOffer(selectedApp.activeOffer!.id, selectedApp.companyDetails.name, selectedApp.jobDetails.title)}
                         disabled={downloadingOffer}
-                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-black border border-indigo-800 text-indigo-300 text-sm font-medium rounded-lg hover:bg-indigo-950/40 disabled:opacity-50"
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-white text-xs font-bold rounded-2xl hover:bg-[#f2f2f7] disabled:opacity-50 shadow-xs cursor-pointer"
                       >
-                        <FileText size={14} />
+                        <FileText size={13} className="text-[#0071e3]" />
                         {downloadingOffer ? 'Downloading...' : 'Download Offer'}
                       </button>
                       {selectedApp.activeOffer.status === 'sent' && (
                         <button
                           onClick={() => setOfferModalOpen(true)}
-                          className="flex-1 inline-flex items-center justify-center px-3 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                          className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold rounded-2xl shadow-[0_4px_14px_rgba(0,113,227,0.25)] cursor-pointer"
                         >
                           Respond to Offer
                         </button>
@@ -610,25 +608,23 @@ export default function ApplicationsPage() {
                   </div>
                 )}
 
-                {/* Job & Salary Benchmarking Insights Meta Information Grid */}
+                {/* Insights Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="p-3 bg-black border border-zinc-800 rounded-lg">
-                    <p className="text-xs text-zinc-500 uppercase font-medium">Experience Level</p>
-                    <p className="text-sm font-semibold text-white mt-0.5">
+                  <div className="p-3.5 bg-[#f2f2f7]/60 dark:bg-[#2c2c2e]/60 border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
+                    <p className="text-[10px] text-[#86868b] uppercase font-bold tracking-wider">Experience</p>
+                    <p className="text-xs font-bold text-[#1d1d1f] dark:text-white mt-1">
                       {selectedApp.jobDetails.experienceRequired || 'Not specified'}
                     </p>
                   </div>
-                  <div className="p-3 bg-black border border-zinc-800 rounded-lg">
-                    <p className="text-xs text-zinc-500 uppercase font-medium">Work Setting</p>
-                    <p className="text-sm font-semibold text-white mt-0.5">
+                  <div className="p-3.5 bg-[#f2f2f7]/60 dark:bg-[#2c2c2e]/60 border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
+                    <p className="text-[10px] text-[#86868b] uppercase font-bold tracking-wider">Work Setting</p>
+                    <p className="text-xs font-bold text-[#1d1d1f] dark:text-white mt-1">
                       {selectedApp.jobDetails.locationType || 'On-site'}
                     </p>
                   </div>
-                  <div className="p-3 bg-black border border-zinc-800 rounded-lg border-emerald-900/30 bg-emerald-950/5">
-                    <p className="text-xs text-emerald-500 uppercase font-medium flex items-center gap-1">
-                      Compensation
-                    </p>
-                    <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                  <div className="p-3.5 bg-[#34c759]/10 border border-[#34c759]/20 rounded-2xl">
+                    <p className="text-[10px] text-[#34c759] uppercase font-bold tracking-wider">Compensation</p>
+                    <p className="text-xs font-bold text-[#248a3d] dark:text-[#30d158] mt-1">
                       {selectedApp.jobDetails.compensationContext || 'Disclosed later'}
                     </p>
                   </div>
@@ -638,48 +634,48 @@ export default function ApplicationsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
                     onClick={() => handleDownloadResume(selectedApp.resumeUsed.id, selectedApp.resumeUsed.name)}
-                    className="flex items-center gap-3 p-3 bg-black border border-zinc-800 rounded-lg hover:bg-zinc-900 transition-colors"
+                    className="flex items-center gap-3 p-3.5 bg-[#f2f2f7]/60 dark:bg-[#2c2c2e]/60 border border-black/[0.04] dark:border-white/[0.06] rounded-2xl hover:bg-[#f2f2f7] transition-colors cursor-pointer"
                   >
-                    <Download size={18} className="text-zinc-500" />
-                    <div className="text-left">
-                      <p className="text-xs text-zinc-500 uppercase font-medium">Resume Used</p>
-                      <p className="text-sm font-medium text-zinc-300 truncate">{selectedApp.resumeUsed.name}</p>
+                    <Download size={16} className="text-[#0071e3]" />
+                    <div className="text-left min-w-0">
+                      <p className="text-[10px] text-[#86868b] uppercase font-bold tracking-wider">Resume Used</p>
+                      <p className="text-xs font-bold text-[#1d1d1f] dark:text-white truncate">{selectedApp.resumeUsed.name}</p>
                     </div>
                   </button>
-                  <div className="flex items-center gap-3 p-3 bg-black border border-zinc-800 rounded-lg">
-                    <Clock size={18} className="text-zinc-500" />
+                  <div className="flex items-center gap-3 p-3.5 bg-[#f2f2f7]/60 dark:bg-[#2c2c2e]/60 border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
+                    <Clock size={16} className="text-[#86868b]" />
                     <div>
-                      <p className="text-xs text-zinc-500 uppercase font-medium">Last Updated</p>
-                      <p className="text-sm font-medium text-zinc-300">{new Date(selectedApp.updatedAt).toLocaleDateString()}</p>
+                      <p className="text-[10px] text-[#86868b] uppercase font-bold tracking-wider">Last Updated</p>
+                      <p className="text-xs font-bold text-[#1d1d1f] dark:text-white">{new Date(selectedApp.updatedAt).toLocaleDateString()}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Timeline */}
                 <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Layers size={16} className="text-zinc-500" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#1d1d1f] dark:text-white flex items-center gap-2">
+                    <Layers size={14} className="text-[#0071e3]" />
                     Application Timeline
                   </h3>
-                  <div className="border border-zinc-800 rounded-xl p-4 bg-black/40 space-y-4">
+                  <div className="border border-black/[0.06] dark:border-white/[0.08] rounded-2xl p-4 bg-[#f2f2f7]/30 dark:bg-[#2c2c2e]/30 space-y-4">
                     {selectedApp.timelineView.map((log, idx) => (
                       <div key={idx} className="flex gap-3">
                         <div className="relative flex flex-col items-center">
-                          <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2"></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#0071e3] mt-1.5"></div>
                           {idx !== selectedApp.timelineView.length - 1 && (
-                            <div className="w-px h-full bg-zinc-800 absolute top-4 bottom-0"></div>
+                            <div className="w-px h-full bg-black/[0.08] dark:bg-white/[0.1] absolute top-4 bottom-0"></div>
                           )}
                         </div>
-                        <div className="flex-1 pb-4">
+                        <div className="flex-1 pb-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="text-sm font-medium text-white">
+                            <span className="text-xs font-bold text-[#1d1d1f] dark:text-white capitalize">
                               {log.stage ? log.stage.replace(/_/g, ' ') : 'Pending'}
                             </span>
-                            <span className="text-xs text-zinc-500">
+                            <span className="text-[10px] text-[#86868b] font-medium">
                               {new Date(log.date).toLocaleDateString()}
                             </span>
                           </div>
-                          <p className="text-sm text-zinc-400 mt-1">{log.notes || 'No notes provided'}</p>
+                          <p className="text-xs text-[#86868b] mt-0.5 font-medium">{log.notes || 'No notes recorded'}</p>
                         </div>
                       </div>
                     ))}
@@ -689,17 +685,17 @@ export default function ApplicationsPage() {
                 {/* Interviews */}
                 {selectedApp.interviewHistory.length > 0 && (
                   <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                      <Video size={16} className="text-zinc-500" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#1d1d1f] dark:text-white flex items-center gap-2">
+                      <Video size={14} className="text-[#af52de]" />
                       Interview Schedule
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {selectedApp.interviewHistory.map((interview) => (
-                        <div key={interview.interviewId} className="border border-zinc-800 rounded-xl p-4 bg-black">
+                        <div key={interview.interviewId} className="border border-black/[0.06] dark:border-white/[0.08] rounded-2xl p-4 bg-[#f2f2f7]/40 dark:bg-[#2c2c2e]/40">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <p className="font-medium text-white">{interview.format.toUpperCase()}</p>
-                              <p className="text-sm text-zinc-400 mt-0.5">
+                              <p className="font-bold text-xs text-[#1d1d1f] dark:text-white">{interview.format.toUpperCase()}</p>
+                              <p className="text-xs text-[#86868b] mt-0.5 font-medium">
                                 {new Date(interview.scheduledTime).toLocaleString()} ({interview.durationMinutes} min)
                               </p>
                             </div>
@@ -711,21 +707,21 @@ export default function ApplicationsPage() {
                                     setSelectedInterviewTime(interview.scheduledTime);
                                     setRescheduleModalOpen(true);
                                   }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-zinc-300 bg-zinc-800 rounded-md hover:bg-zinc-700"
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-[#1d1d1f] dark:text-white bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl hover:bg-[#f2f2f7] cursor-pointer shadow-xs"
                                 >
-                                  <RefreshCw size={12} />
+                                  <RefreshCw size={12} className="text-[#ff9500]" />
                                   Reschedule
                                 </button>
                               )}
                               {interview.joinLink ? (
                                 <Link
                                   href={`/meet/${interview.interviewId}`}
-                                  className="inline-flex items-center px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-md hover:bg-indigo-700"
+                                  className="inline-flex items-center px-4 py-1.5 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold rounded-xl shadow-xs"
                                 >
                                   Join
                                 </Link>
                               ) : (
-                                <span className="inline-flex items-center px-2.5 py-1.5 text-xs font-medium text-zinc-400 bg-zinc-800 rounded-md">
+                                <span className="inline-flex items-center px-2.5 py-1 text-[10px] font-bold text-[#86868b] bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-lg uppercase">
                                   {interview.status.replace(/_/g, ' ')}
                                 </span>
                               )}
