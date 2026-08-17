@@ -1,6 +1,5 @@
 'use client';
 
-import { Rocket } from 'lucide-react';
 import Link from 'next/link';
 
 interface EasyApplyLogoProps {
@@ -19,20 +18,25 @@ export default function EasyApplyLogo({
   onClick,
 }: EasyApplyLogoProps) {
   const sizeMap = {
-    sm: { icon: 16, text: 'text-sm' },
-    md: { icon: 20, text: 'text-base' },
-    lg: { icon: 24, text: 'text-xl' },
-    xl: { icon: 28, text: 'text-2xl' },
+    sm: { icon: 'text-[22px]', text: 'text-base font-bold' },
+    md: { icon: 'text-[28px]', text: 'text-xl font-extrabold' },
+    lg: { icon: 'text-[32px]', text: 'text-2xl font-black' },
+    xl: { icon: 'text-[40px]', text: 'text-3xl font-black' },
   };
 
   const { icon, text } = sizeMap[size] || sizeMap.md;
 
   const content = (
-    <div className={`inline-flex items-center gap-2 font-bold tracking-tight select-none ${className}`}>
-      <div className="flex items-center justify-center text-[#0071e3]">
-        <Rocket size={icon} className="text-[#0071e3] fill-[#0071e3] transform -rotate-12" />
-      </div>
-      <span className={`${text} font-black tracking-tight text-[#0071e3]`}>
+    <div className={`flex items-center gap-2 select-none ${className}`}>
+      <span
+        className={`material-symbols-outlined text-[#0071e3] ${icon}`}
+        data-icon="rocket_launch"
+        data-weight="fill"
+        style={{ fontVariationSettings: "'FILL' 1" }}
+      >
+        rocket_launch
+      </span>
+      <span className={`${text} text-[#0071e3] tracking-tight`}>
         EasyApply
       </span>
       {badge && (
