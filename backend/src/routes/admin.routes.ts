@@ -3,7 +3,8 @@ import { adminLogin, getAdminProfile } from '../controllers/adminAuth.controller
 import { adminAuth } from '../middleware/adminAuth.middleware.ts';
 import {
   getPlatformStats, listCompanies, getCompanyDetail,
-  verifyCompany, updateCompanyFeatures, overrideWalkInRoomMaxQueue, listSeekers
+  verifyCompany, updateCompanyFeatures, overrideWalkInRoomMaxQueue, listSeekers,
+  toggleSeekerAiResumeBuilder
 } from '../controllers/admin.controller.ts';
 import {
   listPlans, createPlan, updatePlan, deactivatePlan,
@@ -37,6 +38,7 @@ router.put('/walkin/rooms/:roomId/max-queue', adminAuth, overrideWalkInRoomMaxQu
 
 // ─── SEEKERS ──────────────────────────────────────────────────────────────────
 router.get('/seekers', adminAuth, listSeekers);
+router.put('/seekers/:id/ai-resume-builder', adminAuth, toggleSeekerAiResumeBuilder);
 
 // ─── SUBSCRIPTION PLANS ───────────────────────────────────────────────────────
 router.get('/subscriptions', adminAuth, listPlans);

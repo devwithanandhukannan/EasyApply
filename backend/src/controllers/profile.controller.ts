@@ -65,8 +65,15 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     const completionScore = calculateCompletionScore(profile);
     const preferences = (profile.jobPreferences as any) || {};
 
+    const platformSettings = await prisma.platformSettings.findUnique({ where: { id: 'singleton' } });
+    const isGlobalAllowed = platformSettings?.allowSeekerAiResumeCreation ?? true;
+    const isCandidateAllowed = profile.aiResumeBuilderEnabled ?? true;
+    const aiResumeBuilderEnabled = isGlobalAllowed && isCandidateAllowed;
+
     const profileData = {
       completionScore,
+      aiResumeBuilderEnabled,
+      aiResumeBuilderLockedReason: !isGlobalAllowed ? 'disabled_platform_wide' : (!isCandidateAllowed ? 'locked_by_admin' : null),
       availabilityStatus: profile.availabilityStatus || 'available', // ✅ FIXED: Added this field
       fullName: profile.fullName || '',
       email: profile.email || '',

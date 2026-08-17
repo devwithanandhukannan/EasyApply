@@ -239,10 +239,37 @@ const compileResumeText = (data: any): string => {
   return text;
 };
 
+async function checkAiResumePermission(userId: string): Promise<{ allowed: boolean; message?: string }> {
+  try {
+    const settings = await prisma.platformSettings.findUnique({ where: { id: 'singleton' } });
+    if (settings && settings.allowSeekerAiResumeCreation === false) {
+      return { allowed: false, message: 'AI Resume creation is currently disabled platform-wide by the administrator.' };
+    }
+
+    const profile = await prisma.jobSeekerProfile.findUnique({
+      where: { userId },
+      select: { aiResumeBuilderEnabled: true }
+    });
+
+    if (profile && profile.aiResumeBuilderEnabled === false) {
+      return { allowed: false, message: 'AI Resume creation is locked for your account by the platform administrator.' };
+    }
+
+    return { allowed: true };
+  } catch {
+    return { allowed: true };
+  }
+}
+
 export const generateCV = async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { customPrompt, jobDescription } = req.body;
+
+    const permission = await checkAiResumePermission(userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
 
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
@@ -651,6 +678,11 @@ export const getInlineSuggestions = async (req: Request, res: Response) => {
     const contentData = readContent(resume);
     if (!contentData.htmlContent) return res.status(422).json({ success: false, message: 'Open in editor first' });
 
+    const permission = await checkAiResumePermission(userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
+
     const result = await generateInlineSuggestions(contentData.htmlContent);
     return res.json({ success: true, data: result });
   } catch (err) {
@@ -677,6 +709,11 @@ export const improveSelectedText = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Custom prompt required' });
     }
 
+    const permission = await checkAiResumePermission(req.user.userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
+
     const result = await processTextSelection(selectedText, action, customPrompt, context);
     
     return res.json({ success: true, data: result });
@@ -697,6 +734,11 @@ export const generateRegionalCV = async (req: Request, res: Response) => {
     const { country, style, jobDescription } = req.body;
 
     if (!country) return res.status(400).json({ success: false, message: 'Country required' });
+
+    const permission = await checkAiResumePermission(userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
 
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },

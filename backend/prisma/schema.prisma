@@ -192,8 +192,9 @@ model JobSeekerProfile {
   bio                String?
   availabilityStatus AvailabilityStatus @default(available)
   jobPreferences     Json?
-  discoverable       Boolean            @default(false)
-  createdAt          DateTime           @default(now())
+  discoverable           Boolean            @default(false)
+  aiResumeBuilderEnabled Boolean            @default(true)
+  createdAt              DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
   resumes               Resume[]
@@ -809,10 +810,11 @@ model PlatformSettings {
   platformLogoUrl       String?  @db.Text
   supportEmail          String?
   maintenanceMode       Boolean  @default(false)
-  allowNewCompanyReg    Boolean  @default(true)
-  allowNewSeekerReg     Boolean  @default(true)
+  allowNewCompanyReg          Boolean  @default(true)
+  allowNewSeekerReg           Boolean  @default(true)
+  allowSeekerAiResumeCreation Boolean  @default(true)
 
-  updatedAt             DateTime @updatedAt
+  updatedAt                   DateTime @updatedAt
 }
 
 // ─── SUBSCRIPTION SYSTEM ─────────────────────────────────────────

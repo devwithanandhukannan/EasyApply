@@ -99,6 +99,11 @@ export const verifyOtp = async (req: Request, res: Response) => {
     const hasEmail = !!profile?.email;
     const hasFullName = !!(profile?.fullName && profile.fullName !== 'Candidate');
 
+    const platformSettings = await prisma.platformSettings.findUnique({ where: { id: 'singleton' } });
+    const isGlobalAllowed = platformSettings?.allowSeekerAiResumeCreation ?? true;
+    const isCandidateAllowed = profile?.aiResumeBuilderEnabled ?? true;
+    const aiResumeBuilderEnabled = isGlobalAllowed && isCandidateAllowed;
+
     // Strip down heavy relations and return a lean payload with structural booleans
     return res.status(200).json({ 
       success: true, 
@@ -112,7 +117,8 @@ export const verifyOtp = async (req: Request, res: Response) => {
         hasFullName,
         email: profile?.email || '',
         fullName: profile?.fullName === 'Candidate' ? '' : (profile?.fullName || ''),
-        profilePhotoUrl: profile?.profilePhotoUrl || null
+        profilePhotoUrl: profile?.profilePhotoUrl || null,
+        aiResumeBuilderEnabled,
       }
     });
 
@@ -141,6 +147,11 @@ export const checkMe = async (req: Request, res: Response) => {
     const hasEmail = !!profile?.email;
     const hasFullName = !!(profile?.fullName && profile.fullName !== 'Candidate');
 
+    const platformSettings = await prisma.platformSettings.findUnique({ where: { id: 'singleton' } });
+    const isGlobalAllowed = platformSettings?.allowSeekerAiResumeCreation ?? true;
+    const isCandidateAllowed = profile?.aiResumeBuilderEnabled ?? true;
+    const aiResumeBuilderEnabled = isGlobalAllowed && isCandidateAllowed;
+
     return res.status(200).json({ 
       success: true,
       user: {
@@ -151,7 +162,8 @@ export const checkMe = async (req: Request, res: Response) => {
         hasFullName,
         email: profile?.email || '',
         fullName: profile?.fullName === 'Candidate' ? '' : (profile?.fullName || ''),
-        profilePhotoUrl: profile?.profilePhotoUrl || null
+        profilePhotoUrl: profile?.profilePhotoUrl || null,
+        aiResumeBuilderEnabled,
       }
     });
     

@@ -1,12 +1,12 @@
-// PATH: src/app/dashboard/resumes/page.tsx
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/app/contexts/AuthContext';
 import {
   FileText, Upload, Sparkles, X, AlertCircle, CheckCircle2,
   Target, Lightbulb, KeyRound, BarChart3, ArrowUpRight, Loader2,
   Trash2, TrendingUp, Edit3, Star, ChevronDown, Zap, Globe,
-  ChevronRight, Info
+  ChevronRight, Info, Lock
 } from 'lucide-react';
 import {
   getAllResumes, uploadResume, generateCV, deleteResume,
@@ -15,7 +15,7 @@ import {
 } from '@/app/lib/resumeApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────
-type ModalType = 'upload' | 'generate' | 'regional' | null;
+type ModalType = 'upload' | 'generate' | 'regional' | 'locked' | null;
 
 // ─── Score Ring ───────────────────────────────────────────────────────────
 function ScoreRing({ score, size = 120, label }: { score: number; size?: number; label?: string }) {
@@ -463,8 +463,37 @@ function ATSPanel({ resume, onEdit }: { resume: ResumeListItem; onEdit: () => vo
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────
+// ─── Locked Modal ────────────────────────────────────────────────────────
+function LockedModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl space-y-4 text-center">
+        <div className="w-12 h-12 bg-[#ff9500]/10 border border-[#ff9500]/20 rounded-2xl flex items-center justify-center mx-auto text-[#ff9500]">
+          <Lock size={22} />
+        </div>
+        <div>
+          <h2 className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold text-lg">AI Resume Builder Locked</h2>
+          <p className="text-[#86868b] text-xs mt-1.5 leading-relaxed">
+            AI Resume generation is currently locked for your account by the platform administrator. You can still upload, analyze, and manage standard PDF & DOCX resumes.
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 rounded-2xl bg-[#0071e3] text-white text-xs font-bold shadow-xs hover:bg-[#0077ed] transition cursor-pointer"
+        >
+          Understood
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Resumes Page ────────────────────────────────────────────────────
 export default function ResumesPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const isAiLocked = user?.aiResumeBuilderEnabled === false;
+
   const [resumes, setResumes] = useState<ResumeListItem[]>([]);
   const [selected, setSelected] = useState<ResumeListItem | null>(null);
   const [modal, setModal] = useState<ModalType>(null);
@@ -492,10 +521,13 @@ export default function ResumesPage() {
     setSelected(resume);
   };
 
-  const CREATE_OPTIONS = [
-    { key: 'upload' as ModalType, icon: Upload, label: 'Upload', desc: 'PDF or DOCX' },
-    { key: 'generate' as ModalType, icon: Sparkles, label: 'Generate', desc: 'From profile' },
-  ];
+  const handleOpenGenerate = () => {
+    if (isAiLocked) {
+      setModal('locked');
+    } else {
+      setModal('generate');
+    }
+  };
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-2rem)] -m-4 sm:-m-6 lg:-m-8 overflow-hidden text-[#1d1d1f] dark:text-[#f5f5f7]">
@@ -507,13 +539,25 @@ export default function ResumesPage() {
             <span className="text-[#86868b] text-[11px] font-bold bg-[#f2f2f7] dark:bg-[#2c2c2e] px-2.5 py-0.5 rounded-full">{resumes.length}</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {CREATE_OPTIONS.map(({ key, icon: Icon, label }) => (
-              <button key={String(key)} onClick={() => setModal(key)}
-                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.04] dark:border-white/[0.06] transition-all text-center cursor-pointer">
-                <Icon size={14} className="text-[#0071e3]" />
-                <span className="text-[#1d1d1f] dark:text-[#f5f5f7] text-xs font-semibold">{label}</span>
-              </button>
-            ))}
+            <button
+              onClick={() => setModal('upload')}
+              className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-2xl bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.04] dark:border-white/[0.06] transition-all text-center cursor-pointer"
+            >
+              <Upload size={14} className="text-[#0071e3]" />
+              <span className="text-[#1d1d1f] dark:text-[#f5f5f7] text-xs font-semibold">Upload</span>
+            </button>
+
+            <button
+              onClick={handleOpenGenerate}
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-2xl transition-all text-center cursor-pointer border border-black/[0.04] dark:border-white/[0.06] ${
+                isAiLocked
+                  ? 'bg-[#f2f2f7]/60 dark:bg-[#2c2c2e]/60 opacity-60'
+                  : 'bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c]'
+              }`}
+            >
+              {isAiLocked ? <Lock size={13} className="text-[#86868b]" /> : <Sparkles size={14} className="text-[#0071e3]" />}
+              <span className="text-[#1d1d1f] dark:text-[#f5f5f7] text-xs font-semibold">Generate</span>
+            </button>
           </div>
         </div>
 
@@ -552,25 +596,56 @@ export default function ResumesPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-              {[
-                { icon: Upload, label: 'Upload Resume', desc: 'Analyse an existing PDF or DOCX. Get instant ATS score and improvement suggestions.', modal: 'upload' as ModalType, badge: null },
-                { icon: Sparkles, label: 'Generate with AI', desc: 'Pull your profile data and build a polished, ATS-optimised CV in seconds.', modal: 'generate' as ModalType, badge: 'Popular' },
-              ].map(({ icon: Icon, label, desc, modal: m, badge }) => (
-                <button key={label} onClick={() => setModal(m)}
-                  className="group bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] rounded-3xl p-6 text-left transition-all relative overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-lg cursor-pointer">
-                  {badge && (
-                    <span className="absolute top-5 right-5 text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20">{badge}</span>
-                  )}
-                  <div className="w-11 h-11 bg-[#0071e3]/10 rounded-2xl flex items-center justify-center mb-4 text-[#0071e3] transition-colors">
-                    <Icon size={20} />
-                  </div>
-                  <h3 className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold text-base mb-1">{label}</h3>
-                  <p className="text-[#6e6e73] dark:text-[#aeaeb2] text-xs leading-relaxed">{desc}</p>
-                  <div className="mt-4 flex items-center gap-1 text-xs text-[#0071e3] font-semibold">
-                    Get started <ArrowUpRight size={13} />
-                  </div>
-                </button>
-              ))}
+              {/* Upload Card */}
+              <button
+                onClick={() => setModal('upload')}
+                className="group bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] rounded-3xl p-6 text-left transition-all relative overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-lg cursor-pointer"
+              >
+                <div className="w-11 h-11 bg-[#0071e3]/10 rounded-2xl flex items-center justify-center mb-4 text-[#0071e3] transition-colors">
+                  <Upload size={20} />
+                </div>
+                <h3 className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold text-base mb-1">Upload Resume</h3>
+                <p className="text-[#6e6e73] dark:text-[#aeaeb2] text-xs leading-relaxed">
+                  Analyse an existing PDF or DOCX. Get instant ATS score and improvement suggestions.
+                </p>
+                <div className="mt-4 flex items-center gap-1 text-xs text-[#0071e3] font-semibold">
+                  Get started <ArrowUpRight size={13} />
+                </div>
+              </button>
+
+              {/* Generate Card */}
+              <button
+                onClick={handleOpenGenerate}
+                className={`group bg-white dark:bg-[#1c1c1e] border rounded-3xl p-6 text-left transition-all relative overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-lg cursor-pointer ${
+                  isAiLocked
+                    ? 'opacity-70 border-black/[0.06] dark:border-white/[0.08]'
+                    : 'border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15]'
+                }`}
+              >
+                {isAiLocked ? (
+                  <span className="absolute top-5 right-5 text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-[#ff9500]/10 text-[#ff9500] border border-[#ff9500]/20 flex items-center gap-1">
+                    <Lock size={10} /> Locked
+                  </span>
+                ) : (
+                  <span className="absolute top-5 right-5 text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20">
+                    Popular
+                  </span>
+                )}
+                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center mb-4 transition-colors ${
+                  isAiLocked ? 'bg-black/[0.05] dark:bg-white/[0.05] text-[#86868b]' : 'bg-[#0071e3]/10 text-[#0071e3]'
+                }`}>
+                  {isAiLocked ? <Lock size={20} /> : <Sparkles size={20} />}
+                </div>
+                <h3 className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold text-base mb-1">Generate with AI</h3>
+                <p className="text-[#6e6e73] dark:text-[#aeaeb2] text-xs leading-relaxed">
+                  {isAiLocked
+                    ? 'AI Resume Builder is currently locked by admin. Click to view details.'
+                    : 'Pull your profile data and build a polished, ATS-optimised CV in seconds.'}
+                </p>
+                <div className={`mt-4 flex items-center gap-1 text-xs font-semibold ${isAiLocked ? 'text-[#86868b]' : 'text-[#0071e3]'}`}>
+                  {isAiLocked ? 'View Details' : 'Get started'} <ArrowUpRight size={13} />
+                </div>
+              </button>
             </div>
 
             <div className="flex items-center gap-8 pt-4">
@@ -594,6 +669,7 @@ export default function ResumesPage() {
 
       {modal === 'upload' && <UploadModal onClose={() => setModal(null)} onSuccess={handleSuccess} />}
       {modal === 'generate' && <GenerateModal onClose={() => setModal(null)} onSuccess={handleSuccess} />}
+      {modal === 'locked' && <LockedModal onClose={() => setModal(null)} />}
     </div>
   );
 }

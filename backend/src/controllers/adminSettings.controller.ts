@@ -49,6 +49,7 @@ export const getSettings = async (_req: Request, res: Response) => {
         maintenanceMode: s?.maintenanceMode ?? false,
         allowNewCompanyReg: s?.allowNewCompanyReg ?? true,
         allowNewSeekerReg: s?.allowNewSeekerReg ?? true,
+        allowSeekerAiResumeCreation: s?.allowSeekerAiResumeCreation ?? true,
       }
     });
   } catch { return res.status(500).json({ success: false, message: 'Server error' }); }
@@ -130,10 +131,11 @@ export const testEmailSettings = async (req: Request, res: Response) => {
 
 export const updateAiSettings = async (req: Request, res: Response) => {
   try {
-    const { groqApiKey, groqModel } = req.body;
+    const { groqApiKey, groqModel, allowSeekerAiResumeCreation } = req.body;
     const data: any = {};
     if (groqApiKey && !groqApiKey.includes('•')) data.groqApiKey = encrypt(groqApiKey);
     if (groqModel) data.groqModel = groqModel;
+    if (typeof allowSeekerAiResumeCreation === 'boolean') data.allowSeekerAiResumeCreation = allowSeekerAiResumeCreation;
     await upsertSettings(data);
     invalidateSettingsCache();
     return res.json({ success: true, message: 'AI settings updated' });
@@ -159,7 +161,7 @@ export const updateVideoSettings = async (req: Request, res: Response) => {
 
 export const updateGeneralSettings = async (req: Request, res: Response) => {
   try {
-    const { platformName, platformLogoUrl, supportEmail, maintenanceMode, allowNewCompanyReg, allowNewSeekerReg } = req.body;
+    const { platformName, platformLogoUrl, supportEmail, maintenanceMode, allowNewCompanyReg, allowNewSeekerReg, allowSeekerAiResumeCreation } = req.body;
     const data: any = {};
     if (platformName !== undefined) data.platformName = platformName;
     if (platformLogoUrl !== undefined) data.platformLogoUrl = platformLogoUrl;
@@ -167,6 +169,7 @@ export const updateGeneralSettings = async (req: Request, res: Response) => {
     if (typeof maintenanceMode === 'boolean') data.maintenanceMode = maintenanceMode;
     if (typeof allowNewCompanyReg === 'boolean') data.allowNewCompanyReg = allowNewCompanyReg;
     if (typeof allowNewSeekerReg === 'boolean') data.allowNewSeekerReg = allowNewSeekerReg;
+    if (typeof allowSeekerAiResumeCreation === 'boolean') data.allowSeekerAiResumeCreation = allowSeekerAiResumeCreation;
     await upsertSettings(data);
     invalidateSettingsCache();
     return res.json({ success: true, message: 'General settings updated' });

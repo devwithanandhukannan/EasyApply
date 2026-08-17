@@ -145,7 +145,7 @@ export const listSeekers = async (req: Request, res: Response) => {
         orderBy: { createdAt: 'desc' },
         select: {
           id: true, fullName: true, email: true, location: true,
-          availabilityStatus: true, discoverable: true, createdAt: true,
+          availabilityStatus: true, discoverable: true, aiResumeBuilderEnabled: true, createdAt: true,
           _count: { select: { applications: true, skills: true } }
         }
       }),
@@ -154,6 +154,28 @@ export const listSeekers = async (req: Request, res: Response) => {
 
     return res.json({ success: true, seekers, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+export const toggleSeekerAiResumeBuilder = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { aiResumeBuilderEnabled } = req.body;
+
+    if (typeof aiResumeBuilderEnabled !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'aiResumeBuilderEnabled boolean is required' });
+    }
+
+    const updated = await prisma.jobSeekerProfile.update({
+      where: { id },
+      data: { aiResumeBuilderEnabled },
+      select: { id: true, fullName: true, email: true, aiResumeBuilderEnabled: true }
+    });
+
+    return res.json({ success: true, seeker: updated });
+  } catch (err) {
+    console.error('toggleSeekerAiResumeBuilder error:', err);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };

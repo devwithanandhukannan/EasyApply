@@ -64,6 +64,7 @@ export default function SettingsPage() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [allowNewCompanyReg, setAllowNewCompanyReg] = useState(true);
   const [allowNewSeekerReg, setAllowNewSeekerReg] = useState(true);
+  const [allowSeekerAiResumeCreation, setAllowSeekerAiResumeCreation] = useState(true);
 
   // Queue
   const [walkInQueueMaxGlobal, setWalkInQueueMaxGlobal] = useState(200);
@@ -103,6 +104,7 @@ export default function SettingsPage() {
         setMaintenanceMode(!!s.maintenanceMode);
         setAllowNewCompanyReg(!!s.allowNewCompanyReg);
         setAllowNewSeekerReg(!!s.allowNewSeekerReg);
+        setAllowSeekerAiResumeCreation(s.allowSeekerAiResumeCreation !== undefined ? !!s.allowSeekerAiResumeCreation : true);
 
         setWalkInQueueMaxGlobal(s.walkInQueueMaxGlobal || 200);
       }
@@ -136,7 +138,7 @@ export default function SettingsPage() {
           emailFromName,
         });
       } else if (activeTab === 'ai') {
-        res = await api.put('/admin/settings/ai', { groqApiKey, groqModel });
+        res = await api.put('/admin/settings/ai', { groqApiKey, groqModel, allowSeekerAiResumeCreation });
       } else if (activeTab === 'video') {
         res = await api.put('/admin/settings/video', {
           livekitApiUrl,
@@ -151,6 +153,7 @@ export default function SettingsPage() {
           maintenanceMode,
           allowNewCompanyReg,
           allowNewSeekerReg,
+          allowSeekerAiResumeCreation,
         });
       } else if (activeTab === 'queue') {
         res = await api.put('/admin/settings/queue', {
@@ -445,6 +448,24 @@ export default function SettingsPage() {
                   <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Long Context)</option>
                 </select>
               </div>
+
+              <div style={{ background: 'var(--surface2)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Bot size={20} className="text-blue-400" />
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: '600' }}>Allow Candidate AI Resume Creation (Platform-Wide)</div>
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Master switch to enable or lock AI resume generation across all job seekers</div>
+                  </div>
+                </div>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={allowSeekerAiResumeCreation}
+                    onChange={(e) => setAllowSeekerAiResumeCreation(e.target.checked)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           )}
 
@@ -541,6 +562,20 @@ export default function SettingsPage() {
                   </div>
                   <label className="toggle">
                     <input type="checkbox" checked={allowNewSeekerReg} onChange={(e) => setAllowNewSeekerReg(e.target.checked)} />
+                    <span className="toggle-slider"></span>
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Bot size={18} className="text-blue-400" />
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '600' }}>Enable Job Seeker AI Resume Creation</div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Allow candidates to use AI resume generation & enhancement tools</div>
+                    </div>
+                  </div>
+                  <label className="toggle">
+                    <input type="checkbox" checked={allowSeekerAiResumeCreation} onChange={(e) => setAllowSeekerAiResumeCreation(e.target.checked)} />
                     <span className="toggle-slider"></span>
                   </label>
                 </div>
