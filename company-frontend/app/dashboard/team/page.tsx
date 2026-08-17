@@ -136,7 +136,7 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
             )}
           </div>
           <div className="space-y-0.5">
-            <div className="text-xs font-semibold text-white">{member.name || 'Pending Member'}</div>
+            <div className="text-xs font-semibold text-zinc-900 dark:text-dark">{member.name || 'Pending Member'}</div>
             <div className="text-[11px] text-zinc-500 font-mono tracking-tight">{member.email}</div>
           </div>
         </td>
@@ -145,9 +145,9 @@ const TeamRow = ({ member, getRoleBadge, handleRoleChange, handleRemove }: TeamR
           {getRoleBadge(currentRoleValue)}
         </td>
         
-        <td className="px-4 py-3.5 font-mono text-xs text-zinc-400 align-middle">
+        <td className="px-4 py-3.5 font-mono text-xs text-zinc-600 dark:text-zinc-400 align-middle">
           <div className="flex items-center gap-1.5">
-            <Calendar className="h-3.5 w-3.5 text-zinc-600" />
+            <Calendar className="h-3.5 w-3.5 text-zinc-400" />
             <span>
               {member.joinedAt || member.createdAt
                 ? new Date(member.joinedAt || member.createdAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -310,16 +310,32 @@ export default function TeamPage() {
 
     // 🟢 Priority checking layout via bitwise logic safely handles 4, 5, 8, 9, etc.
     if ((mask & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN) {
-      return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-purple-950/40 border-purple-900 text-purple-400">Admin</span>;
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-purple-100 dark:bg-purple-950/60 border border-purple-300 dark:border-purple-800/80 text-purple-700 dark:text-purple-300 shadow-xs">
+          Admin
+        </span>
+      );
     }
     if ((mask & ROLES.COMPANY_HR) === ROLES.COMPANY_HR) {
-      return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-blue-950/40 border-blue-900 text-blue-400">HR Manager</span>;
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-blue-100 dark:bg-blue-950/60 border border-blue-300 dark:border-blue-800/80 text-blue-700 dark:text-blue-300 shadow-xs">
+          HR Manager
+        </span>
+      );
     }
     if ((mask & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER) {
-      return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-emerald-950/40 border-emerald-900 text-emerald-400">Interviewer</span>;
+      return (
+        <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800/80 text-emerald-700 dark:text-emerald-300 shadow-xs">
+          Interviewer
+        </span>
+      );
     }
     
-    return <span className="px-2 py-0.5 border text-[10px] uppercase tracking-wider font-mono font-medium rounded-md bg-zinc-900 border-zinc-800 text-zinc-400">Viewer</span>;
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 text-[11px] uppercase tracking-wider font-bold rounded-lg bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 shadow-xs">
+        Viewer
+      </span>
+    );
   };
 
   if (loading) {
@@ -350,7 +366,7 @@ export default function TeamPage() {
 
       {/* Corporate Table Architecture */}
       {members.length === 0 ? (
-        <div className="border border-dashed border-zinc-900 bg-zinc-950/20 p-12 rounded-2xl text-center">
+        <div className="border border-dashed border-zinc-200 dark:border-zinc-900 bg-white/50 dark:bg-zinc-950/20 p-12 rounded-2xl text-center">
           <p className="text-xs text-zinc-500 font-mono">No registered team members linked to this corporate workspace identifier.</p>
         </div>
       ) : (

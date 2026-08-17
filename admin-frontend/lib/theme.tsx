@@ -41,21 +41,21 @@ export const THEME_CONFIG: Record<ThemeMode, ThemeColors> = {
     textMuted: '#94a3b8'
   },
   light: {
-    bgBase: '#f8fafc',
+    bgBase: '#f5f5f7',
     bgSurface: '#ffffff',
-    bgSurfaceHover: '#f1f5f9',
-    bgGlass: 'rgba(255, 255, 255, 0.85)',
-    colorPrimary: '#4f46e5',
-    colorPrimaryHover: '#4338ca',
-    colorPrimaryGlow: 'rgba(79, 70, 229, 0.15)',
-    colorSecondary: '#7c3aed',
+    bgSurfaceHover: '#ebebf0',
+    bgGlass: 'rgba(255, 255, 255, 0.82)',
+    colorPrimary: '#0071e3',
+    colorPrimaryHover: '#0077ed',
+    colorPrimaryGlow: 'rgba(0, 113, 227, 0.18)',
+    colorSecondary: '#5856d6',
     borderSubtle: 'rgba(0, 0, 0, 0.08)',
-    borderDefault: 'rgba(79, 70, 229, 0.25)',
-    borderFocus: '#4f46e5',
-    gradientPrimary: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-    gradientCard: 'linear-gradient(180deg, rgba(79, 70, 229, 0.04) 0%, rgba(255, 255, 255, 0.95) 100%)',
-    textColor: '#0f172a',
-    textMuted: '#64748b'
+    borderDefault: '#d2d2d7',
+    borderFocus: '#0071e3',
+    gradientPrimary: 'linear-gradient(135deg, #0071e3 0%, #47a0ff 100%)',
+    gradientCard: 'linear-gradient(180deg, rgba(0, 113, 227, 0.03) 0%, rgba(255, 255, 255, 0.98) 100%)',
+    textColor: '#1d1d1f',
+    textMuted: '#6e6e73'
   }
 };
 
