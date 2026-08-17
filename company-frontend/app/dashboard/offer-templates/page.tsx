@@ -185,20 +185,20 @@ export default function OfferTemplatesPage() {
   }
 
   return (
-    <div className="space-y-6 text-zinc-300 font-sans antialiased max-w-5xl mx-auto w-full p-4 animate-fade-in">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 text-[#1d1d1f] dark:text-[#f5f5f7] max-w-5xl mx-auto w-full">
       
       {/* Editorial Page Header */}
-      <div className="flex items-center justify-between border-b border-zinc-900 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-black/[0.06] dark:border-white/[0.08]">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-zinc-400" />
+          <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7] flex items-center gap-2">
+            <Sparkles className="w-6 h-6 text-[#0071e3]" />
             Offer Frameworks
           </h1>
-          <p className="text-xs sm:text-sm text-zinc-500 font-medium mt-0.5">Generate and review streamlined offer templates with AI validation.</p>
+          <p className="text-xs sm:text-sm text-[#86868b] mt-0.5">Generate, customize, and manage formal candidate offer letters with AI assistance.</p>
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="px-4 py-2 bg-white text-black font-bold rounded-xl hover:bg-zinc-200 transition-colors flex items-center gap-2 text-xs shadow-md shadow-white/5"
+          className="px-5 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold rounded-2xl transition-all flex items-center gap-2 text-xs shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer"
         >
           <Plus className="w-4 h-4" strokeWidth={2.5} />
           New Template
@@ -207,24 +207,27 @@ export default function OfferTemplatesPage() {
 
       {/* Main Templates Grid */}
       {templates.length === 0 ? (
-        <div className="border border-zinc-900 bg-zinc-950/40 p-12 rounded-2xl text-center max-w-md mx-auto shadow-xl">
-          <Sparkles className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
-          <h3 className="text-sm font-semibold text-white mb-1">No templates found</h3>
-          <p className="text-zinc-500 text-xs mb-5 max-w-xs mx-auto leading-relaxed">
-            Utilize integrated intelligence layers to draft clean templates for talent procurement structures.
-          </p>
+        <div className="border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-12 rounded-3xl text-center max-w-md mx-auto shadow-sm space-y-4">
+          <div className="w-14 h-14 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-2xl flex items-center justify-center mx-auto text-[#0071e3]">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7] mb-1">No templates found</h3>
+            <p className="text-[#86868b] text-xs max-w-xs mx-auto leading-relaxed">
+              Create and structure reusable offer templates or generate intelligent drafts with AI.
+            </p>
+          </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white rounded-xl text-xs font-medium transition-all flex items-center gap-2 mx-auto"
+            className="px-6 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-semibold transition-all flex items-center gap-2 mx-auto shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5" />
             Draft with AI
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {templates.map((template) => {
-            // Safely parse individual template data variables down to human abstracts 
             let parsedTerms = '';
             let positionTitle = '';
             
@@ -242,80 +245,77 @@ export default function OfferTemplatesPage() {
             return (
               <div
                 key={template.id}
-                className="border border-zinc-900 bg-zinc-950 p-5 rounded-2xl hover:border-zinc-800 transition-all flex flex-col justify-between group"
+                className="border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] hover:border-black/[0.12] dark:hover:border-white/[0.15] p-6 rounded-3xl shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-lg transition-all flex flex-col justify-between group space-y-4"
               >
                 <div>
-                  {/* Dynamic Card Header */}
+                  {/* Card Header */}
                   <div className="flex items-start justify-between mb-4 gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0">
-                        <FileText className="w-4 h-4 text-zinc-400" />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-2xl bg-[#0071e3]/10 border border-[#0071e3]/20 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-[#0071e3]" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-sm font-bold text-zinc-200 group-hover:text-white transition-colors truncate">
+                        <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7] truncate">
                           {template.name}
                         </h3>
-                        <p className="text-[10px] text-zinc-500 font-medium mt-0.5">
+                        <p className="text-[10px] text-[#86868b] font-medium mt-0.5">
                           Created {new Date(template.createdAt).toLocaleDateString()}
                         </p>
                       </div>
                       {template.isDefault && (
-                        <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                        <Star className="w-4 h-4 text-amber-500 fill-amber-500 shrink-0" />
                       )}
                     </div>
                     
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={() => openEditModal(template)}
-                        className="p-1.5 border border-zinc-900 hover:border-zinc-800 rounded-lg text-zinc-500 hover:text-white transition-colors"
-                        title="Modify template parameters"
+                        className="p-2 border border-black/[0.06] dark:border-white/[0.08] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-xl text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white transition-colors cursor-pointer"
+                        title="Edit Template"
                       >
                         <Edit className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(template.id)}
-                        className="p-1.5 border border-zinc-900 hover:border-zinc-800 rounded-lg text-zinc-600 hover:text-red-400 transition-colors"
-                        title="Remove template index"
+                        className="p-2 border border-black/[0.06] dark:border-white/[0.08] hover:bg-[#ff3b30]/10 rounded-xl text-[#86868b] hover:text-[#ff3b30] transition-colors cursor-pointer"
+                        title="Delete Template"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  {/* ─── MINIATURE CARD DOCUMENT PREVIEW ABSTRACT ─── */}
-                  <div className="bg-zinc-900/30 border border-zinc-900 rounded-xl p-3.5 mb-4 space-y-2 relative overflow-hidden group-hover:border-zinc-800/80 transition-all">
-                    <div className="flex items-center justify-between border-b border-zinc-900/60 pb-1.5 mb-2">
-                      <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1">
+                  {/* Document Snippet */}
+                  <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl p-4 space-y-2 relative overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-black/[0.04] dark:border-white/[0.06] pb-1.5 mb-2">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-[#86868b] flex items-center gap-1">
                         <Eye size={10} /> Document Snippet
                       </span>
                       {positionTitle && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 font-medium border border-zinc-800 truncate max-w-[140px]">
+                        <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white dark:bg-[#3a3a3c] text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold border border-black/[0.04] dark:border-white/[0.06] truncate max-w-[140px]">
                           {positionTitle}
                         </span>
                       )}
                     </div>
                     
-                    <p className="text-xs text-zinc-400 font-normal line-clamp-3 leading-relaxed">
+                    <p className="text-xs text-[#6e6e73] dark:text-[#aeaeb2] font-normal line-clamp-3 leading-relaxed">
                       {parsedTerms || "No formal offer terms defined inside template model parameters."}
                     </p>
-                    
-                    {/* Visual fading accent paper line block */}
-                    <div className="absolute bottom-0 right-0 left-0 h-4 bg-gradient-to-t from-zinc-950 to-transparent pointer-events-none" />
                   </div>
                 </div>
 
-                {/* Status Bar Row Footer */}
-                <div className="flex items-center justify-end text-[11px] font-medium border-t border-zinc-900/60 pt-3 mt-1">
+                {/* Status Bar */}
+                <div className="flex items-center justify-end text-[11px] font-semibold border-t border-black/[0.04] dark:border-white/[0.06] pt-3">
                   {template.isActive ? (
-                    <span className="text-emerald-500 flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_6px_rgba(16,185,129,0.5)]"></div>
-                      Active Structure
+                    <span className="text-[#248a3d] dark:text-[#30d158] flex items-center gap-1.5">
+                      <div className="w-2 h-2 bg-[#34c759] rounded-full shadow-[0_0_6px_rgba(52,199,89,0.5)]"></div>
+                      Active Framework
                     </span>
                   ) : (
-                    <span className="text-zinc-600 flex items-center gap-1.5">
-                      <div className="w-1.5 h-1.5 bg-zinc-600 rounded-full"></div>
-                      Inactive State
-                  </span>
+                    <span className="text-[#86868b] flex items-center gap-1.5">
+                      <div className="w-2 h-2 bg-[#86868b] rounded-full"></div>
+                      Inactive
+                    </span>
                   )}
                 </div>
               </div>
@@ -324,25 +324,25 @@ export default function OfferTemplatesPage() {
         </div>
       )}
 
-      {/* Main Structural Generation Modal Panel */}
+      {/* Generation / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl animate-fade-in">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
             
             {/* Modal Header */}
-            <div className="border-b border-zinc-900 p-5 flex items-center justify-between bg-zinc-900/20">
+            <div className="border-b border-black/[0.06] dark:border-white/[0.08] p-5 flex items-center justify-between bg-[#f2f2f7]/50 dark:bg-[#2c2c2e]/50">
               <div>
-                <h2 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-zinc-400" />
+                <h2 className="text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#0071e3]" />
                   {editingTemplate ? 'Modify Document Parameters' : 'AI Intent Formulation'}
                 </h2>
-                <p className="text-[11px] text-zinc-500 mt-0.5 font-medium">
+                <p className="text-xs text-[#86868b] mt-0.5">
                   {editingTemplate ? 'Update standard layout parameters.' : 'Outline requirements to auto-compile formal letters through the configuration layout.'}
                 </p>
               </div>
               <button
                 onClick={resetForm}
-                className="p-1.5 rounded-lg border border-zinc-900 hover:border-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer text-xs"
               >
                 ✕
               </button>
@@ -351,32 +351,32 @@ export default function OfferTemplatesPage() {
             {/* Modal Scroll Content Body */}
             <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
               
-              {/* Template Structural Name */}
-              <div className="grid grid-cols-1 gap-2">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                  Framework Identity *
+              {/* Template Name */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">
+                  Framework Title *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full bg-zinc-900/40 border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-white focus:border-zinc-700 outline-none"
-                  placeholder="e.g. Senior Executive Alignment Form"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl px-4 py-2.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:border-[#0071e3] outline-none font-medium"
+                  placeholder="e.g. Senior Executive Engineering Offer"
                 />
               </div>
 
               {/* Description Prompt Context Block */}
               {!editingTemplate && (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-1 gap-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#86868b]">
                       Context Requirements / Prompt
                     </label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                      className="w-full bg-zinc-900/40 border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-white focus:border-zinc-700 outline-none resize-none leading-relaxed"
+                      className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl px-4 py-2.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:border-[#0071e3] outline-none resize-none leading-relaxed font-medium"
                       rows={3}
                       placeholder="e.g. Specify standard 60-day evaluation parameters, equity configurations, and hybrid schedules..."
                     />
@@ -386,12 +386,12 @@ export default function OfferTemplatesPage() {
                     type="button"
                     onClick={handleGenerateAI}
                     disabled={isGenerating || !formData.name.trim()}
-                    className="px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 disabled:bg-zinc-900/20 disabled:border-zinc-900 text-zinc-200 disabled:text-zinc-600 rounded-xl text-xs font-medium transition-all flex items-center gap-2 shadow-sm"
+                    className="px-5 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] disabled:opacity-40 text-white rounded-2xl text-xs font-semibold transition-all flex items-center gap-2 shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer"
                   >
                     {isGenerating ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Analyzing and processing layout states...
+                        Generating Framework Layout...
                       </>
                     ) : (
                       <>
@@ -405,54 +405,54 @@ export default function OfferTemplatesPage() {
 
               {/* LIVE DOCUMENT MODAL PREVIEW */}
               {formData.content && getDocumentFields() && (
-                <div className="space-y-2 animate-fade-in">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-zinc-400 font-medium">
-                      <Eye className="w-3.5 h-3.5 text-zinc-500" />
+                    <div className="flex items-center gap-1.5 text-[#86868b] font-medium">
+                      <Eye className="w-3.5 h-3.5 text-[#0071e3]" />
                       <span className="text-[10px] font-bold uppercase tracking-wider">Document Simulation Preview</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowRawJson(!showRawJson)}
-                      className="text-[10px] font-medium text-zinc-600 hover:text-zinc-400 inline-flex items-center gap-1 transition-colors"
+                      className="text-[10px] font-semibold text-[#0071e3] hover:underline inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Code size={12} />
-                      <span>{showRawJson ? 'Hide Structural Array Data' : 'Inspect System JSON Matrix'}</span>
+                      <span>{showRawJson ? 'Hide Raw JSON' : 'Inspect JSON Schema'}</span>
                     </button>
                   </div>
                   
                   {/* Digital Paper Container Simulation */}
-                  <div className="bg-white border border-zinc-200 text-zinc-800 rounded-2xl p-6 shadow-xl max-h-72 overflow-y-auto space-y-4 font-sans text-xs leading-relaxed">
-                    <div className="border-b border-zinc-100 pb-3 flex items-center gap-2">
-                      <div className="w-7 h-7 rounded bg-zinc-900 flex items-center justify-center text-white shrink-0">
+                  <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-2xl p-6 shadow-sm max-h-72 overflow-y-auto space-y-4 text-xs leading-relaxed">
+                    <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-3 flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-xl bg-[#0071e3] flex items-center justify-center text-white shrink-0">
                         <Building2 size={14} />
                       </div>
                       <div>
-                        <p className="font-bold text-zinc-950 tracking-tight">Corporate Appointment Notice</p>
-                        <p className="text-[10px] text-zinc-400 font-medium">Ref Framework Mapping // Dynamic Output</p>
+                        <p className="font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">Corporate Appointment Notice</p>
+                        <p className="text-[10px] text-[#86868b]">Ref Framework Mapping // Dynamic Output</p>
                       </div>
                     </div>
 
                     <div className="space-y-3">
                       <div>
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block mb-0.5">Designated Assignment Title</span>
-                        <p className="font-bold text-zinc-950 text-sm">{getDocumentFields()?.title}</p>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#86868b] block mb-0.5">Designated Assignment Title</span>
+                        <p className="font-bold text-[#1d1d1f] dark:text-[#f5f5f7] text-sm">{getDocumentFields()?.title}</p>
                       </div>
 
                       <div>
-                        <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block mb-0.5">Letter Body Content Overview</span>
-                        <p className="text-zinc-600 font-normal whitespace-pre-line">{getDocumentFields()?.body}</p>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#86868b] block mb-0.5">Letter Body Content Overview</span>
+                        <p className="text-[#6e6e73] dark:text-[#aeaeb2] whitespace-pre-line leading-relaxed">{getDocumentFields()?.body}</p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-zinc-100">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
                         <div>
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block mb-0.5">Remuneration / Salary Parameters</span>
-                          <p className="font-semibold text-zinc-900">{getDocumentFields()?.salary}</p>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-[#86868b] block mb-0.5">Remuneration / Salary Parameters</span>
+                          <p className="font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">{getDocumentFields()?.salary}</p>
                         </div>
                         {getDocumentFields()?.benefits && (
                           <div>
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 block mb-0.5">Ancillary Allowances / Benefits</span>
-                            <p className="text-zinc-600 font-normal truncate">{String(getDocumentFields()?.benefits)}</p>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-[#86868b] block mb-0.5">Ancillary Allowances / Benefits</span>
+                            <p className="text-[#6e6e73] dark:text-[#aeaeb2] truncate">{String(getDocumentFields()?.benefits)}</p>
                           </div>
                         )}
                       </div>
@@ -463,11 +463,11 @@ export default function OfferTemplatesPage() {
 
               {/* Best Practices Advice */}
               {generatedPreview?.industryBestPractices && (
-                <div className="text-[11px] text-zinc-500 font-medium leading-relaxed bg-zinc-900/10 border border-zinc-900 p-3 rounded-xl">
-                  <p className="font-bold text-zinc-400 mb-1">💡 Industry Alignment Notes:</p>
-                  <ul className="list-disc list-inside space-y-0.5 text-zinc-500">
+                <div className="text-xs text-[#86868b] bg-[#0071e3]/5 border border-[#0071e3]/20 p-4 rounded-2xl space-y-1">
+                  <p className="font-bold text-[#0071e3] flex items-center gap-1.5">💡 Industry Alignment Notes:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-[#6e6e73] dark:text-[#aeaeb2]">
                     {generatedPreview.industryBestPractices.map((tip: string, idx: number) => (
-                      <li key={idx} className="font-normal">{tip}</li>
+                      <li key={idx}>{tip}</li>
                     ))}
                   </ul>
                 </div>
@@ -475,14 +475,14 @@ export default function OfferTemplatesPage() {
 
               {/* Collapsible Hidden Developer JSON View */}
               <div className={showRawJson || !formData.content ? "block" : "hidden"}>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-[#86868b] mb-2">
                   System Content Structuring Data (JSON Mapping Block)
                 </label>
                 <textarea
                   required
                   value={formData.content}
                   onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
-                  className="w-full bg-zinc-900/40 border border-zinc-900 rounded-xl px-4 py-2.5 text-xs text-zinc-400 focus:border-zinc-700 outline-none font-mono leading-relaxed"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl px-4 py-2.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] focus:border-[#0071e3] outline-none font-mono leading-relaxed"
                   rows={6}
                   placeholder="The operational parsing fields will update here automatically post-AI validation sequence..."
                 />
@@ -494,26 +494,26 @@ export default function OfferTemplatesPage() {
                   type="checkbox"
                   checked={formData.isDefault}
                   onChange={(e) => setFormData(prev => ({ ...prev, isDefault: e.target.checked }))}
-                  className="w-3.5 h-3.5 bg-zinc-900 border-zinc-800 rounded accent-white text-zinc-950"
+                  className="w-4 h-4 rounded-md accent-[#0071e3]"
                 />
-                <span className="text-xs text-zinc-400 font-medium inline-flex items-center gap-1">
-                  <Star className="w-3.5 h-3.5 text-zinc-500" />
+                <span className="text-xs text-[#6e6e73] dark:text-[#aeaeb2] font-semibold inline-flex items-center gap-1">
+                  <Star className="w-3.5 h-3.5 text-amber-500" />
                   Set as primary default choice template
                 </span>
               </label>
 
               {/* Action Buttons Panel */}
-              <div className="flex items-center gap-2 pt-4 border-t border-zinc-900 bg-zinc-950">
+              <div className="flex items-center gap-3 pt-4 border-t border-black/[0.06] dark:border-white/[0.08]">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-white text-black font-bold rounded-xl text-xs hover:bg-zinc-200 transition-colors shadow-sm"
+                  className="flex-1 px-5 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white font-semibold rounded-2xl text-xs shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all cursor-pointer"
                 >
                   {editingTemplate ? 'Update Document' : 'Save Template'}
                 </button>
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white rounded-xl text-xs font-medium transition-colors"
+                  className="px-5 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white rounded-2xl text-xs font-semibold transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>

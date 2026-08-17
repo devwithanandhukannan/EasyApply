@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/app/lib/axios';
 import { useGlassToast } from './GlassToastContainer';
-
 import { useAuth } from '@/app/contexts/AuthContext';
 
 interface JobCardProps {
@@ -25,13 +24,13 @@ export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
+        return 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border-[#34c759]/20';
       case 'closed':
-        return 'bg-red-500/10 text-red-500 border-red-500/20';
+        return 'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20';
       case 'draft':
-        return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+        return 'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20';
       default:
-        return 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
+        return 'bg-[#8e8e93]/10 text-[#6e6e73] dark:text-[#aeaeb2] border-[#8e8e93]/20';
     }
   };
 
@@ -42,7 +41,7 @@ export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
     try {
       setIsDeleting(true);
       await api.delete(`/company/jobs/${job.id}`);
-      onUpdate(); // Refresh the jobs list
+      onUpdate();
     } catch (error) {
       console.error('Error deleting job:', error);
       showToast('failed', 'Failed to delete job. Please try again.', 'danger');
@@ -58,7 +57,6 @@ export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Prevent navigation when clicking menu button or menu items
     if ((e.target as HTMLElement).closest('.menu-container')) {
       return;
     }
@@ -68,124 +66,124 @@ export default function JobCard({ job, onUpdate, onEdit }: JobCardProps) {
   return (
     <div 
       onClick={handleCardClick}
-      className="bg-zinc-950 border border-zinc-900 rounded-xl p-6 hover:border-zinc-800 transition-all group relative cursor-pointer"
+      className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] rounded-3xl p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-lg transition-all group relative cursor-pointer flex flex-col justify-between"
     >
-      {/* Menu */}
-      {(isAdmin || isHR) && (
-        <div className="absolute top-4 right-4 menu-container">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowMenu(!showMenu);
-            }}
-            className="p-2 rounded-lg hover:bg-zinc-900 transition-colors text-zinc-500 hover:text-white"
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-          
-          {showMenu && (
-            <>
-              <div 
-                className="fixed inset-0 z-10" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowMenu(false);
-                }}
-              />
-              <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-20 py-1">
-                <button
+      <div>
+        {/* Menu */}
+        {(isAdmin || isHR) && (
+          <div className="absolute top-5 right-5 menu-container">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
+              className="p-2 rounded-xl hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition-colors text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white cursor-pointer"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+            
+            {showMenu && (
+              <>
+                <div 
+                  className="fixed inset-0 z-10" 
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleEdit();
+                    setShowMenu(false);
                   }}
-                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 transition-colors"
-                >
-                  <Edit className="h-4 w-4" />
-                  Edit Job
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete();
-                  }}
-                  disabled={isDeleting}
-                  className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-400 hover:bg-zinc-800 transition-colors disabled:opacity-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {isDeleting ? 'Deleting...' : 'Delete Job'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="mb-4">
-        <div className="flex items-start gap-3 mb-2">
-          <h3 className="text-lg font-semibold text-white flex-1 pr-8">
-            {job.title}
-          </h3>
-        </div>
-        <p className="text-sm text-zinc-500">{job.department}</p>
-      </div>
-
-      {/* Status Badge */}
-      <div className="mb-4">
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${getStatusColor(job.status)}`}>
-          {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
-        </span>
-      </div>
-
-      {/* Details Grid */}
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <Clock className="h-4 w-4" />
-          <span>{job.jobType}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <MapPin className="h-4 w-4" />
-          <span>{job.locationType}</span>
-        </div>
-        {job.salaryRange && (
-          <div className="flex items-center gap-2 text-sm text-zinc-400">
-            <DollarSign className="h-4 w-4" />
-            <span>{job.salaryRange}</span>
+                />
+                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-2xl z-20 py-1.5 p-1 space-y-0.5">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEdit();
+                    }}
+                    className="flex items-center gap-3 w-full px-3 py-2 text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Edit className="h-4 w-4 text-[#0071e3]" />
+                    Edit Job
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete();
+                    }}
+                    disabled={isDeleting}
+                    className="flex items-center gap-3 w-full px-3 py-2 text-xs font-semibold text-[#ff3b30] hover:bg-[#ff3b30]/10 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {isDeleting ? 'Deleting...' : 'Delete Job'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
-        <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <Users className="h-4 w-4" />
-          <span>{job.openings} opening{job.openings > 1 ? 's' : ''}</span>
+
+        {/* Header */}
+        <div className="mb-3 pr-8">
+          <h3 className="text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7] leading-snug">
+            {job.title}
+          </h3>
+          <p className="text-xs text-[#86868b] mt-0.5">{job.department || 'General'}</p>
         </div>
+
+        {/* Status Badge */}
+        <div className="mb-4">
+          <span className={`inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${getStatusColor(job.status)}`}>
+            {job.status}
+          </span>
+        </div>
+
+        {/* Details Grid */}
+        <div className="grid grid-cols-2 gap-2.5 mb-4 text-xs text-[#6e6e73] dark:text-[#aeaeb2]">
+          <div className="flex items-center gap-1.5 font-medium">
+            <Clock className="h-3.5 w-3.5 text-[#0071e3]" />
+            <span>{job.jobType}</span>
+          </div>
+          <div className="flex items-center gap-1.5 font-medium">
+            <MapPin className="h-3.5 w-3.5 text-[#0071e3]" />
+            <span>{job.locationType}</span>
+          </div>
+          {job.salaryRange && (
+            <div className="flex items-center gap-1.5 font-medium">
+              <DollarSign className="h-3.5 w-3.5 text-[#0071e3]" />
+              <span>{job.salaryRange}</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5 font-medium">
+            <Users className="h-3.5 w-3.5 text-[#0071e3]" />
+            <span>{job.openings} opening{job.openings > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+
+        {/* Skills */}
+        {job.requiredSkills && job.requiredSkills.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {job.requiredSkills.slice(0, 3).map((skill: string, idx: number) => (
+              <span
+                key={idx}
+                className="px-2.5 py-0.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#1d1d1f] dark:text-[#f5f5f7] text-[11px] font-medium rounded-lg"
+              >
+                {skill}
+              </span>
+            ))}
+            {job.requiredSkills.length > 3 && (
+              <span className="px-2 py-0.5 text-[10px] text-[#86868b] font-medium">
+                +{job.requiredSkills.length - 3} more
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Skills */}
-      {job.requiredSkills && job.requiredSkills.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {job.requiredSkills.slice(0, 3).map((skill: string, idx: number) => (
-            <span
-              key={idx}
-              className="px-2.5 py-1 bg-zinc-900 text-zinc-400 text-xs rounded-md"
-            >
-              {skill}
-            </span>
-          ))}
-          {job.requiredSkills.length > 3 && (
-            <span className="px-2.5 py-1 bg-zinc-900 text-zinc-400 text-xs rounded-md">
-              +{job.requiredSkills.length - 3} more
-            </span>
-          )}
-        </div>
-      )}
-
       {/* Footer */}
-      <div className="pt-4 border-t border-zinc-900 flex items-center justify-between text-xs text-zinc-500">
-        <div className="flex items-center gap-2">
+      <div className="pt-3 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-[11px] text-[#86868b]">
+        <div className="flex items-center gap-1.5">
           <Calendar className="h-3.5 w-3.5" />
-          <span>Posted {new Date(job.createdAt).toLocaleDateString()}</span>
+          <span>{new Date(job.createdAt).toLocaleDateString()}</span>
         </div>
         {job.deadline && (
-          <span>Deadline: {new Date(job.deadline).toLocaleDateString()}</span>
+          <span>Due {new Date(job.deadline).toLocaleDateString()}</span>
         )}
       </div>
     </div>

@@ -56,18 +56,18 @@ interface InterviewRecord {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  scheduled: { label: 'Scheduled', color: 'bg-blue-950/40 text-blue-400 border-blue-900' },
-  confirmed: { label: 'Confirmed', color: 'bg-emerald-950/40 text-emerald-400 border-emerald-900' },
-  reschedule_requested: { label: 'Reschedule Req.', color: 'bg-amber-950/50 text-amber-400 border-amber-800' },
-  in_progress: { label: 'In Progress', color: 'bg-purple-950/40 text-purple-400 border-purple-900 animate-pulse' },
-  completed: { label: 'Completed', color: 'bg-zinc-900 text-zinc-500 border-zinc-800' },
-  cancelled: { label: 'Cancelled', color: 'bg-red-950/40 text-red-400 border-red-900' }
+  scheduled: { label: 'Scheduled', color: 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/20' },
+  confirmed: { label: 'Confirmed', color: 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border-[#34c759]/20' },
+  reschedule_requested: { label: 'Reschedule Req.', color: 'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20' },
+  in_progress: { label: 'In Progress', color: 'bg-[#af52de]/10 text-[#af52de] border-[#af52de]/20 animate-pulse' },
+  completed: { label: 'Completed', color: 'bg-[#8e8e93]/10 text-[#6e6e73] dark:text-[#aeaeb2] border-[#8e8e93]/20' },
+  cancelled: { label: 'Cancelled', color: 'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20' }
 };
 
 const PRIORITY_CONFIG: Record<number, { label: string; color: string }> = {
-  1: { label: 'P1', color: 'bg-red-950/40 text-red-400 border-red-900' },
-  2: { label: 'P2', color: 'bg-amber-950/40 text-amber-400 border-amber-900' },
-  3: { label: 'P3', color: 'bg-blue-950/40 text-blue-400 border-blue-900' }
+  1: { label: 'P1', color: 'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20' },
+  2: { label: 'P2', color: 'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20' },
+  3: { label: 'P3', color: 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/20' }
 };
 
 const STATUS_OPTIONS = ['scheduled', 'confirmed', 'in_progress', 'completed', 'cancelled'];
@@ -239,32 +239,34 @@ export default function CompanyInterviewsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center bg-black">
-        <p className="text-xs text-zinc-500 animate-pulse font-mono">Loading active interview pipelines...</p>
+      <div className="flex h-[60vh] items-center justify-center">
+        <p className="text-xs text-[#86868b] animate-pulse">Loading active interview pipelines...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 bg-black min-h-screen text-zinc-300 font-mono">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6 text-[#1d1d1f] dark:text-[#f5f5f7]">
       {/* Header */}
-      <div className="mb-6 border-b border-zinc-900 pb-5">
-        <h1 className="text-lg font-semibold tracking-tight text-white uppercase">Live Interview Pipeline</h1>
-        <p className="text-xs text-zinc-500 mt-1">Manage scheduled candidate tokens and host WebRTC rooms seamlessly.</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">Live Interview Pipeline</h1>
+          <p className="text-xs sm:text-sm text-[#86868b] mt-0.5">Manage scheduled candidate tokens and host WebRTC rooms seamlessly.</p>
+        </div>
       </div>
 
       {/* Filters Section */}
-      <div className="bg-zinc-950 rounded-xl border border-zinc-900 p-4 mb-6 space-y-4">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-5 sm:p-6 space-y-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Filter size={14} className="text-zinc-600" />
-            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Advanced Controls</span>
+            <Filter size={15} className="text-[#0071e3]" />
+            <span className="text-xs font-semibold text-[#6e6e73] dark:text-[#aeaeb2] uppercase tracking-wider">Pipeline Filters</span>
           </div>
           <button
             onClick={clearFilters}
-            className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors uppercase font-bold"
+            className="inline-flex items-center gap-1.5 text-xs text-[#86868b] hover:text-[#0071e3] transition-colors font-semibold cursor-pointer"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} />
             Reset Filters
           </button>
         </div>
@@ -272,13 +274,13 @@ export default function CompanyInterviewsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600" size={14} />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={14} />
             <input
               type="text"
-              placeholder="Candidate vector token, email, name..."
+              placeholder="Search candidate name, email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700 transition-colors"
+              className="w-full pl-9 pr-3 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] transition-all font-medium"
             />
           </div>
 
@@ -287,14 +289,14 @@ export default function CompanyInterviewsPage() {
             <select
               value={selectedJobTitle}
               onChange={(e) => setSelectedJobTitle(e.target.value)}
-              className="w-full pl-3 pr-8 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 appearance-none outline-none cursor-pointer focus:border-zinc-700"
+              className="w-full pl-3.5 pr-8 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] appearance-none outline-none cursor-pointer focus:border-[#0071e3] font-medium"
             >
-              <option value="all">ALL JOB TARGETS</option>
+              <option value="all">All Job Targets</option>
               {uniqueJobTitles.map(title => (
-                <option key={title} value={title}>{title.toUpperCase()}</option>
+                <option key={title} value={title}>{title}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+            <ChevronDown className="absolute right-3 w-3.5 h-3.5 text-[#86868b] pointer-events-none" />
           </div>
 
           {/* Date Range */}
@@ -303,13 +305,13 @@ export default function CompanyInterviewsPage() {
               type="date"
               value={dateRange.start}
               onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="w-full px-2 py-1 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 outline-none focus:border-zinc-700 uppercase"
+              className="w-full px-3 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] outline-none focus:border-[#0071e3] font-medium"
             />
             <input
               type="date"
               value={dateRange.end}
               onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="w-full px-2 py-1 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 outline-none focus:border-zinc-700 uppercase"
+              className="w-full px-3 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] outline-none focus:border-[#0071e3] font-medium"
             />
           </div>
 
@@ -319,38 +321,38 @@ export default function CompanyInterviewsPage() {
               <select
                 value={feedbackStatus}
                 onChange={(e) => setFeedbackStatus(e.target.value as any)}
-                className="w-full pl-2 pr-6 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 appearance-none outline-none cursor-pointer focus:border-zinc-700"
+                className="w-full pl-3 pr-6 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] appearance-none outline-none cursor-pointer focus:border-[#0071e3] font-medium"
               >
-                <option value="all">ALL LEDGERS</option>
-                <option value="has">HAS FEEDBACK</option>
-                <option value="none">NO FEEDBACK</option>
+                <option value="all">All Feedback</option>
+                <option value="has">Has Feedback</option>
+                <option value="none">No Feedback</option>
               </select>
-              <ChevronDown className="absolute right-2 w-3 h-3 text-zinc-600 pointer-events-none" />
+              <ChevronDown className="absolute right-2 w-3 h-3 text-[#86868b] pointer-events-none" />
             </div>
 
             <div className="relative flex-1 flex items-center">
               <select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                className="w-full pl-2 pr-6 py-2 bg-black border border-zinc-900 rounded-lg text-xs text-zinc-400 appearance-none outline-none cursor-pointer focus:border-zinc-700"
+                className="w-full pl-3 pr-6 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] appearance-none outline-none cursor-pointer focus:border-[#0071e3] font-medium"
               >
-                <option value="all">PRIORITY</option>
-                <option value="1">P1 MATRIX</option>
-                <option value="2">P2 MATRIX</option>
-                <option value="3">P3 MATRIX</option>
+                <option value="all">Priority</option>
+                <option value="1">P1 High</option>
+                <option value="2">P2 Medium</option>
+                <option value="3">P3 Normal</option>
               </select>
-              <ChevronDown className="absolute right-2 w-3 h-3 text-zinc-600 pointer-events-none" />
+              <ChevronDown className="absolute right-2 w-3 h-3 text-[#86868b] pointer-events-none" />
             </div>
 
             <button
               onClick={() => setStarredOnly(!starredOnly)}
-              className={`px-3 py-2 rounded-lg border text-xs font-semibold uppercase flex items-center gap-1.5 transition-colors ${
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
                 starredOnly
-                  ? 'bg-amber-950/20 border-amber-900 text-amber-400'
-                  : 'bg-black border-zinc-900 text-zinc-500 hover:text-zinc-300'
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-500'
+                  : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
               }`}
             >
-              <Star size={13} className={starredOnly ? 'fill-amber-400 text-amber-400' : ''} />
+              <Star size={14} className={starredOnly ? 'fill-amber-400 text-amber-400' : ''} />
             </button>
           </div>
         </div>
@@ -358,8 +360,8 @@ export default function CompanyInterviewsPage() {
 
       {/* Grouped Interviews */}
       {Object.keys(groupedInterviews).length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-zinc-900 bg-zinc-950 rounded-xl text-xs text-zinc-500">
-          No pipeline records matched current filter arrays.
+        <div className="text-center py-16 border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] rounded-3xl text-xs text-[#86868b] shadow-sm">
+          No pipeline records matched current filter criteria.
         </div>
       ) : (
         <div className="space-y-4">
@@ -369,43 +371,43 @@ export default function CompanyInterviewsPage() {
             const pendingFeedbacks = jobInterviews.filter(i => !i.feedbacks?.length).length;
 
             return (
-              <div key={jobTitle} className="bg-zinc-950 rounded-xl border border-zinc-900 overflow-hidden">
+              <div key={jobTitle} className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
                 {/* Job Group Header */}
                 <button
                   onClick={() => toggleJobExpand(jobTitle)}
-                  className="w-full flex items-center justify-between p-4 bg-zinc-950 hover:bg-zinc-900/40 transition-colors text-left border-b border-zinc-900/40"
+                  className="w-full flex items-center justify-between p-5 hover:bg-[#f2f2f7]/50 dark:hover:bg-[#2c2c2e]/50 transition-colors text-left border-b border-black/[0.04] dark:border-white/[0.06] cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-zinc-900 border border-zinc-800 rounded-lg">
-                      <Briefcase size={14} className="text-zinc-400" />
+                  <div className="flex items-center gap-3.5">
+                    <div className="p-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl">
+                      <Briefcase size={16} className="text-[#0071e3]" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-white uppercase tracking-wide">{jobTitle}</h3>
-                      <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-500">
-                        <span className="flex items-center gap-1">
-                          <Users size={12} /> {jobInterviews.length} Tracked Tokens
+                      <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">{jobTitle}</h3>
+                      <div className="flex items-center gap-3 mt-0.5 text-xs text-[#86868b]">
+                        <span className="flex items-center gap-1 font-medium">
+                          <Users size={13} /> {jobInterviews.length} Candidate{jobInterviews.length === 1 ? '' : 's'}
                         </span>
                         {pendingFeedbacks > 0 && (
-                          <span className="text-amber-500 flex items-center gap-1 font-bold">
-                            • {pendingFeedbacks} PENDING EVALS
+                          <span className="text-amber-500 font-bold flex items-center gap-1">
+                            • {pendingFeedbacks} Pending Feedback
                           </span>
                         )}
                         {hasPendingReschedule && (
-                          <span className="text-amber-400 flex items-center gap-1 font-bold animate-pulse">
-                            • RESCHEDULE REQ
+                          <span className="text-amber-500 font-bold flex items-center gap-1 animate-pulse">
+                            • Reschedule Requested
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="text-zinc-600">
-                    {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                  <div className="text-[#86868b]">
+                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                   </div>
                 </button>
 
                 {/* Interview Cards */}
                 {isExpanded && (
-                  <div className="p-4 space-y-4 bg-zinc-950/30 pl-3 border-l border-zinc-900">
+                  <div className="p-5 space-y-3.5 bg-[#f2f2f7]/30 dark:bg-[#2c2c2e]/20">
                     {jobInterviews.map((interview) => {
                       const hasFeedback = interview.feedbacks && interview.feedbacks.length > 0;
                       const existingFeedback = hasFeedback ? interview.feedbacks![0] : null;
@@ -420,43 +422,43 @@ export default function CompanyInterviewsPage() {
                         <div
                           key={interview.id}
                           onClick={() => router.push(`/dashboard/applications/${interview.application.id}`)}
-                          className={`border transition-all duration-200 p-5 rounded-xl flex flex-col space-y-4 cursor-pointer hover:border-zinc-700 hover:shadow-lg ${
-                            hasFeedback ? 'border-zinc-900/60 bg-zinc-950/40' : 'border-zinc-900 bg-zinc-950'
-                          }`}
+                          className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] transition-all p-5 rounded-2xl flex flex-col space-y-4 cursor-pointer shadow-sm hover:shadow-md"
                         >
                           {/* Top row */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                             <div className="flex items-center gap-3 min-w-0">
                               {(isAdmin || isHR) && (
                                 <button
                                   onClick={(e) => handleToggleStar(interview.application.id, interview.application.isStarred, e)}
-                                  className="flex-shrink-0 text-zinc-600 hover:text-amber-400 transition-colors"
+                                  className="flex-shrink-0 text-[#86868b] hover:text-amber-500 transition-colors"
                                 >
-                                  <Star size={14} className={interview.application.isStarred ? 'fill-amber-400 text-amber-400' : ''} />
+                                  <Star size={15} className={interview.application.isStarred ? 'fill-amber-400 text-amber-400' : ''} />
                                 </button>
                               )}
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-3">
                                 {candidateProfile.profilePhotoUrl ? (
                                   <img
                                     src={candidateProfile.profilePhotoUrl}
                                     alt=""
-                                    className="w-6 h-6 rounded-full border border-zinc-800 object-cover"
+                                    className="w-8 h-8 rounded-full border border-black/[0.08] dark:border-white/[0.1] object-cover"
                                   />
                                 ) : (
-                                  <User size={12} className="text-zinc-600" />
+                                  <div className="w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] flex items-center justify-center font-bold text-xs text-[#0071e3]">
+                                    {candidateProfile.fullName?.charAt(0) || 'U'}
+                                  </div>
                                 )}
                                 <div className="text-xs flex flex-wrap items-center gap-x-2">
-                                  <span className="font-semibold text-zinc-200 uppercase">{candidateProfile.fullName}</span>
-                                  <span className="text-zinc-600 font-normal text-[11px] font-mono hidden md:inline">// {candidateProfile.email}</span>
+                                  <span className="font-bold text-sm text-[#1d1d1f] dark:text-[#f5f5f7]">{candidateProfile.fullName}</span>
+                                  <span className="text-[#86868b] font-normal text-xs hidden md:inline">({candidateProfile.email})</span>
                                   
-                                  {/* NEW: Direct Link to Pool Modal */}
+                                  {/* Direct Link to Pool Modal */}
                                   {(isAdmin || isHR) && (
                                     <button
                                       onClick={(e) => openTalentPoolModal(interview.application.jobSeekerProfileId || candidateProfile.id, candidateProfile.fullName, e)}
-                                      className="p-1 text-zinc-500 hover:text-blue-400 rounded hover:bg-zinc-900/60 transition-colors ml-1"
+                                      className="p-1 text-[#86868b] hover:text-[#0071e3] rounded-lg hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition-colors ml-1"
                                       title="Add to Talent Pool"
                                     >
-                                      <FolderPlus size={13} />
+                                      <FolderPlus size={14} />
                                     </button>
                                   )}
                                 </div>
@@ -464,42 +466,42 @@ export default function CompanyInterviewsPage() {
                             </div>
                             <div className="flex items-center gap-2 self-start sm:self-auto">
                               {priorityConfig && (
-                                <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded border ${priorityConfig.color}`}>
+                                <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${priorityConfig.color}`}>
                                   {priorityConfig.label}
                                 </span>
                               )}
-                              <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded border uppercase ${statusConfig.color}`}>
+                              <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full border uppercase ${statusConfig.color}`}>
                                 {statusConfig.label}
                               </span>
                             </div>
                           </div>
 
                           {/* Details Row */}
-                          <div className="flex flex-wrap items-center gap-4 text-[11px] text-zinc-500 font-mono">
+                          <div className="flex flex-wrap items-center gap-4 text-xs text-[#86868b]">
                             <div className="flex items-center gap-1.5">
-                              <Calendar size={13} className="text-zinc-600" />
+                              <Calendar size={14} className="text-[#0071e3]" />
                               <span>{new Date(interview.scheduledTime).toLocaleDateString()}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <Clock size={13} className="text-zinc-600" />
+                              <Clock size={14} className="text-[#0071e3]" />
                               <span>{new Date(interview.scheduledTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
                             <div className="flex items-center gap-1.5">
-                              <Clock size={13} className="text-zinc-600" />
-                              <span>{interview.durationMinutes} MIN BLOCK</span>
+                              <Clock size={14} className="text-[#0071e3]" />
+                              <span>{interview.durationMinutes} Min Duration</span>
                             </div>
-                            <span className="text-[10px] text-zinc-600 border border-zinc-900 px-1.5 py-0.5 rounded uppercase bg-black">{interview.format}</span>
+                            <span className="text-[10px] text-[#6e6e73] dark:text-[#aeaeb2] border border-black/[0.06] dark:border-white/[0.08] px-2 py-0.5 rounded-full uppercase bg-[#f2f2f7] dark:bg-[#2c2c2e] font-semibold">{interview.format}</span>
                           </div>
 
                           {/* Reschedule alert banner */}
                           {pendingReschedule && (
-                            <div className="p-3 bg-amber-950/20 border border-amber-900/50 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-500">
+                            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-700 dark:text-amber-400">
                               <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                  <AlertCircle size={14} className="shrink-0" />
-                                  <span className="font-bold uppercase tracking-wider text-amber-400 text-[10px]">Candidate Reschedule Petitioned:</span>
+                                  <AlertCircle size={15} className="shrink-0 text-amber-500" />
+                                  <span className="font-bold uppercase tracking-wider text-[11px]">Candidate Reschedule Requested:</span>
                                 </div>
-                                <p className="text-[11px]">Proposed Window: <span className="text-zinc-300 font-bold">{new Date(pendingReschedule.proposedTime).toLocaleString()}</span></p>
+                                <p className="text-xs">Proposed Window: <span className="font-bold">{new Date(pendingReschedule.proposedTime).toLocaleString()}</span></p>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 {(isAdmin || isHR) ? (
@@ -507,21 +509,21 @@ export default function CompanyInterviewsPage() {
                                     <button
                                       onClick={(e) => handleRescheduleAction(interview.id, 'decline', e)}
                                       disabled={processingId !== null}
-                                      className="p-1.5 border border-zinc-800 hover:border-red-900 bg-zinc-900 hover:bg-red-950/20 text-zinc-500 hover:text-red-400 rounded-lg transition-all"
+                                      className="p-2 border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1c1c1e] text-[#ff3b30] rounded-xl hover:bg-red-500/10 transition-all cursor-pointer"
                                     >
                                       <X size={14} />
                                     </button>
                                     <button
                                       onClick={(e) => handleRescheduleAction(interview.id, 'approve', e)}
                                       disabled={processingId !== null}
-                                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-lg text-[11px] transition-colors flex items-center gap-1"
+                                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
                                     >
-                                      <Check size={13} className="stroke-[3]" />
+                                      <Check size={14} className="stroke-[3]" />
                                       Accept Window
                                     </button>
                                   </>
                                 ) : (
-                                  <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold">Contact HR/Admin</span>
+                                  <span className="text-xs text-[#86868b] font-semibold">Contact HR/Admin</span>
                                 )}
                               </div>
                             </div>
@@ -529,36 +531,36 @@ export default function CompanyInterviewsPage() {
 
                           {/* Feedback evaluation ledger */}
                           {existingFeedback && (
-                            <div className="p-3 bg-zinc-900/30 border border-zinc-900/80 rounded-lg text-[11px] text-zinc-400 space-y-2">
-                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-900/60 pb-1.5">
-                                <span className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Logged Ledger Score Summary:</span>
-                                <span className="text-white uppercase px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded font-bold text-[9px]">
-                                  Verdict // {existingFeedback.verdict.replace('_', ' ')}
+                            <div className="p-4 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl text-xs text-[#6e6e73] dark:text-[#aeaeb2] space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-black/[0.04] dark:border-white/[0.06] pb-2">
+                                <span className="text-xs text-[#86868b] font-semibold uppercase tracking-wider">Evaluation Score Summary:</span>
+                                <span className="text-[#0071e3] uppercase px-2.5 py-0.5 bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-full font-bold text-[10px]">
+                                  Verdict: {existingFeedback.verdict.replace('_', ' ')}
                                 </span>
                               </div>
-                              <div className="flex gap-4 flex-wrap text-zinc-500">
-                                <div>TECH: <span className="text-zinc-300 font-bold">{existingFeedback.technicalRating}/5</span></div>
-                                <div>COMM: <span className="text-zinc-300 font-bold">{existingFeedback.communicationRating}/5</span></div>
-                                <div>LOGIC: <span className="text-zinc-300 font-bold">{existingFeedback.problemSolvingRating}/5</span></div>
+                              <div className="flex gap-4 flex-wrap text-xs font-medium">
+                                <div>Technical: <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold">{existingFeedback.technicalRating}/5</span></div>
+                                <div>Communication: <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold">{existingFeedback.communicationRating}/5</span></div>
+                                <div>Problem Solving: <span className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold">{existingFeedback.problemSolvingRating}/5</span></div>
                               </div>
                               {existingFeedback.notes && (
-                                <p className="italic text-zinc-500 line-clamp-2">Observations: "{existingFeedback.notes}"</p>
+                                <p className="italic text-[#86868b] line-clamp-2 mt-1">"{existingFeedback.notes}"</p>
                               )}
                             </div>
                           )}
 
                           {/* Lower Action bar */}
-                          <div className="border-t border-zinc-900/60 pt-3 flex flex-wrap items-center justify-between gap-3">
+                          <div className="border-t border-black/[0.04] dark:border-white/[0.06] pt-3.5 flex flex-wrap items-center justify-between gap-3">
                             {/* Override Dropdown Engine or Static Badge */}
                             {(isAdmin || isHR) ? (
-                              <div className="relative font-mono" onClick={(e) => e.stopPropagation()}>
+                              <div className="relative" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setActiveDropdownId(activeDropdownId === interview.id ? null : interview.id);
                                   }}
                                   disabled={processingId === interview.id}
-                                  className={`px-3 py-1.5 border rounded-lg text-[11px] uppercase font-semibold flex items-center gap-2 transition-all min-w-[140px] justify-between ${statusConfig.color}`}
+                                  className={`px-3.5 py-2 border rounded-xl text-xs uppercase font-bold flex items-center gap-2 transition-all min-w-[150px] justify-between cursor-pointer ${statusConfig.color}`}
                                 >
                                   <span>{statusConfig.label}</span>
                                   <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${activeDropdownId === interview.id ? 'rotate-180' : ''}`} />
@@ -567,16 +569,16 @@ export default function CompanyInterviewsPage() {
                                 {activeDropdownId === interview.id && (
                                   <>
                                     <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setActiveDropdownId(null); }} />
-                                    <div className="absolute left-0 bottom-full mb-1 z-20 w-44 bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl p-1 space-y-0.5">
-                                      <div className="text-[9px] text-zinc-600 px-2 py-1 uppercase tracking-wider font-bold">Override Stage</div>
+                                    <div className="absolute left-0 bottom-full mb-1.5 z-20 w-48 bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl overflow-hidden shadow-2xl p-1.5 space-y-0.5">
+                                      <div className="text-[10px] text-[#86868b] px-2.5 py-1 uppercase tracking-wider font-bold">Update Status</div>
                                       {STATUS_OPTIONS.map((opt) => (
                                         <button
                                           key={opt}
                                           onClick={(e) => handleStatusUpdate(interview.id, opt, e)}
-                                          className={`w-full text-left px-2.5 py-1.5 rounded-md text-[11px] uppercase font-mono transition-colors block ${
+                                          className={`w-full text-left px-3 py-2 rounded-xl text-xs uppercase font-medium transition-colors block cursor-pointer ${
                                             interview.status === opt
-                                              ? 'bg-zinc-900 text-white font-bold'
-                                              : 'text-zinc-400 hover:bg-zinc-900/60 hover:text-white'
+                                              ? 'bg-[#0071e3] text-white font-bold'
+                                              : 'text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e]'
                                           }`}
                                         >
                                           {opt.replace('_', ' ')}
@@ -587,7 +589,7 @@ export default function CompanyInterviewsPage() {
                                 )}
                               </div>
                             ) : (
-                              <span className={`px-3 py-1.5 border rounded-lg text-[11px] uppercase font-semibold select-none ${statusConfig.color}`}>
+                              <span className={`px-3.5 py-1.5 border rounded-xl text-xs uppercase font-bold select-none ${statusConfig.color}`}>
                                 {statusConfig.label}
                               </span>
                             )}
@@ -596,13 +598,13 @@ export default function CompanyInterviewsPage() {
                               {!isViewer && (
                                 <button
                                   onClick={(e) => openFeedbackModal(interview.id, existingFeedback, e)}
-                                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 border ${
+                                  className={`px-4 py-2 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 border cursor-pointer ${
                                     hasFeedback
-                                      ? 'bg-amber-950/20 border-amber-900/60 text-amber-400 hover:bg-amber-950/40 hover:text-amber-300'
-                                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                                      ? 'bg-amber-500/10 border-amber-500/25 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20'
+                                      : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c]'
                                   }`}
                                 >
-                                  {hasFeedback ? <Edit3 size={13} /> : <CheckSquare size={13} />}
+                                  {hasFeedback ? <Edit3 size={14} /> : <CheckSquare size={14} />}
                                   {hasFeedback ? 'Update Feedback' : 'Log Feedback'}
                                 </button>
                               )}
@@ -612,13 +614,13 @@ export default function CompanyInterviewsPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
+                                className={`px-5 py-2 text-xs font-semibold rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-sm ${
                                   hasFeedback
-                                    ? 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
-                                    : 'bg-white text-black hover:bg-zinc-200'
+                                    ? 'bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                                    : 'bg-[#0071e3] hover:bg-[#0077ed] text-white shadow-[0_4px_14px_rgba(0,113,227,0.3)]'
                                 }`}
                               >
-                                <Play size={13} className={hasFeedback ? 'fill-zinc-500' : 'fill-black'} />
+                                <Play size={13} className={hasFeedback ? 'fill-current' : 'fill-white'} />
                                 Launch Room
                               </a>
                             </div>

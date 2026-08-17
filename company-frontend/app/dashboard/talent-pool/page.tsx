@@ -58,18 +58,18 @@ export default function TalentPoolPage() {
   const openEdit = (pool: Pool) => { setEditPool(pool); setModalOpen(true); };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto space-y-6 text-[#1d1d1f] dark:text-[#f5f5f7]">
       {/* Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-5 border-b border-zinc-800/60">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-black/[0.06] dark:border-white/[0.08]">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-50">Talent Pools</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            Segment and manage pipeline profiles for opportunistic sourcing strategies.
+          <h1 className="text-2xl font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">Company Talent Pools</h1>
+          <p className="text-xs sm:text-sm text-[#86868b] mt-0.5">
+            Segment and organize qualified candidate profiles for active and future recruitment pipelines.
           </p>
         </div>
         <button
           onClick={openCreate}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-zinc-50 text-zinc-950 text-sm font-medium rounded-xl hover:bg-zinc-200 active:bg-zinc-300 transition-all shadow-sm"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-semibold rounded-2xl transition-all shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -80,86 +80,88 @@ export default function TalentPoolPage() {
 
       {/* Error Boundary Banner */}
       {error && (
-        <div className="mb-6 p-4 bg-red-950/40 border border-red-900/50 rounded-xl text-sm text-red-400 flex items-center gap-2">
-          <svg className="w-4 h-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="p-4 bg-[#ff3b30]/10 border border-[#ff3b30]/20 rounded-2xl text-xs text-[#ff3b30] flex items-center gap-2 font-medium">
+          <svg className="w-4 h-4 text-[#ff3b30] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           {error}
         </div>
       )}
 
-      {/* Skeleton Loading Matrices */}
+      {/* Skeleton Loading */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-[180px] bg-zinc-900/50 border border-zinc-800/40 rounded-2xl animate-pulse" />
+            <div key={i} className="h-[200px] bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl animate-pulse" />
           ))}
         </div>
       ) : pools.length === 0 ? (
-        /* Refined Dark Empty Workspace State */
-        <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/20 max-w-3xl mx-auto">
-          <div className="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center shadow-md mb-4">
-            <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        /* Refined Apple Empty State */
+        <div className="flex flex-col items-center justify-center py-20 text-center border border-black/[0.06] dark:border-white/[0.08] rounded-3xl bg-white dark:bg-[#1c1c1e] max-w-2xl mx-auto shadow-sm p-8 space-y-4">
+          <div className="w-14 h-14 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl flex items-center justify-center shadow-sm">
+            <svg className="w-6 h-6 text-[#0071e3]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M17 20h5v-2a4 4 0 00-4-4h-1M9 20H4v-2a4 4 0 014-4h1m4-4a4 4 0 100-8 4 4 0 000 8z" />
             </svg>
           </div>
-          <h3 className="text-base font-semibold text-zinc-200 mb-1">No execution parameters located</h3>
-          <p className="text-sm text-zinc-400 mb-6 max-w-sm px-4">
-            No talent pooling segments generated inside this workspace yet. Create a cluster to begin assigning matching applicants.
-          </p>
+          <div>
+            <h3 className="text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">No Talent Pools Created</h3>
+            <p className="text-xs text-[#86868b] max-w-sm mt-1">
+              Create talent pools to categorize, curate, and nurture candidates for your upcoming roles.
+            </p>
+          </div>
           <button
             onClick={openCreate}
-            className="px-4 py-2 bg-zinc-50 text-zinc-950 text-sm font-medium rounded-xl hover:bg-zinc-200 transition-all shadow-sm"
+            className="px-6 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-semibold rounded-2xl transition-all shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer"
           >
-            Instantiate Cluster Sequence
+            Create Your First Pool
           </button>
         </div>
       ) : (
-        /* Modernized Obsidian Pool Grid Workspace */
+        /* Modern Apple Pool Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {pools.map(pool => (
             <div
               key={pool.id}
-              className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-5 hover:border-zinc-700 shadow-xl transition-all duration-200 flex flex-col justify-between group"
+              className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] rounded-3xl p-6 shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-lg transition-all duration-200 flex flex-col justify-between space-y-5"
             >
               <div>
                 <div className="flex items-start justify-between gap-3 mb-2">
-                  <h3 className="font-semibold text-zinc-100 text-[15px] leading-snug tracking-tight">
+                  <h3 className="font-bold text-[#1d1d1f] dark:text-[#f5f5f7] text-base leading-snug tracking-tight">
                     {pool.name}
                   </h3>
-                  <span className="shrink-0 text-xs font-semibold bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-md border border-zinc-700/50">
+                  <span className="shrink-0 text-[11px] font-bold bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] dark:text-[#47a0ff] px-2.5 py-0.5 rounded-full">
                     {pool._count.members} {pool._count.members === 1 ? 'candidate' : 'candidates'}
                   </span>
                 </div>
                 
                 {pool.description ? (
-                  <p className="text-xs text-zinc-400 line-clamp-2 mt-1.5 leading-relaxed pr-1">
+                  <p className="text-xs text-[#6e6e73] dark:text-[#aeaeb2] line-clamp-2 mt-1.5 leading-relaxed">
                     {pool.description}
                   </p>
                 ) : (
-                  <p className="text-xs italic text-zinc-600 mt-1.5">No descriptive context configured.</p>
+                  <p className="text-xs italic text-[#86868b] mt-1.5">No description provided.</p>
                 )}
                 
-                <p className="text-[11px] font-medium text-zinc-500 tracking-wide mt-4 uppercase">
+                <p className="text-[10px] font-semibold text-[#86868b] tracking-wider mt-4 uppercase">
                   Created {new Date(pool.createdAt).toLocaleDateString('en-IN', {
                     day: 'numeric', month: 'short', year: 'numeric'
                   })}
                 </p>
               </div>
 
-              {/* Action Sequences */}
-              <div className="flex items-center gap-2 mt-6 pt-4 border-t border-zinc-800/80">
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-4 border-t border-black/[0.04] dark:border-white/[0.06]">
                 <button
                   onClick={() => router.push(`/dashboard/talent-pool/${pool.id}`)}
-                  className="flex-1 text-xs font-semibold text-zinc-200 bg-zinc-950 border border-zinc-800 text-center py-2 rounded-xl hover:bg-zinc-800 hover:text-zinc-50 hover:border-zinc-700 transition-all active:bg-zinc-900"
+                  className="flex-1 text-xs font-semibold text-white bg-[#0071e3] hover:bg-[#0077ed] text-center py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
                 >
-                  View Workspace Members
+                  View Members
                 </button>
                 <button
                   onClick={() => openEdit(pool)}
-                  className="p-2 text-zinc-500 hover:text-zinc-200 border border-transparent hover:border-zinc-800 rounded-xl hover:bg-zinc-950 transition-all"
-                  title="Modify properties"
+                  className="p-2.5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border border-black/[0.06] dark:border-white/[0.08] rounded-xl hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition-all cursor-pointer"
+                  title="Edit Pool"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
@@ -169,8 +171,8 @@ export default function TalentPoolPage() {
                 <button
                   onClick={() => handleDelete(pool)}
                   disabled={deletingId === pool.id}
-                  className="p-2 text-zinc-500 hover:text-red-400 border border-transparent hover:border-red-950/50 rounded-xl hover:bg-red-950/30 transition-all disabled:opacity-40"
-                  title="Purge trace"
+                  className="p-2.5 text-[#ff3b30] hover:bg-[#ff3b30]/10 border border-black/[0.06] dark:border-white/[0.08] rounded-xl transition-all disabled:opacity-40 cursor-pointer"
+                  title="Delete Pool"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
