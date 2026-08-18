@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { prisma } from '../utils/prisma.ts';
 import fs from 'fs';
 import path from 'path';
