@@ -14,6 +14,7 @@ import {
   resetCompanyPassword
 } from '../controllers/companyAuth.controller.ts';
 import { authenticateCompany } from '../middleware/auth.middleware.ts';
+import { authLimiter, otpLimiter } from '../middleware/rateLimiter.ts';
 
 const router = express.Router();
 
@@ -49,15 +50,15 @@ const handleLogoUpload = (req: Request, res: Response, next: NextFunction) => {
   });
 };
 
-// ─── PUBLIC ROUTES ───────────────────────────────────────────────────────
-router.post('/send-otp', sendCompanyOtp);
-router.post('/verify-otp', verifyCompanyOtp);
-router.post('/register', handleLogoUpload, registerCompany);
-router.post('/login', companyLogin);
+// ─── PUBLIC ROUTES WITH RATE LIMITING ──────────────────────────────────────
+router.post('/send-otp', otpLimiter, sendCompanyOtp);
+router.post('/verify-otp', authLimiter, verifyCompanyOtp);
+router.post('/register', authLimiter, handleLogoUpload, registerCompany);
+router.post('/login', authLimiter, companyLogin);
 router.get('/verify-email', verifyCompanyEmail);
-router.post('/resend-verification', resendCompanyVerificationEmail);
-router.post('/forgot-password', forgotCompanyPassword);
-router.post('/reset-password', resetCompanyPassword);
+router.post('/resend-verification', otpLimiter, resendCompanyVerificationEmail);
+router.post('/forgot-password', authLimiter, forgotCompanyPassword);
+router.post('/reset-password', authLimiter, resetCompanyPassword);
 
 // ─── PROTECTED ROUTES ────────────────────────────────────────────────────
 router.get('/session', authenticateCompany, checkCompanySession);

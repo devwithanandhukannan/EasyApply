@@ -46,20 +46,21 @@ const handleCvUpload = (req: any, res: any, next: any) => {
 };
 
 import { requirePermission } from '../middleware/permission.middleware.ts';
+import { livekitLimiter, publicLimiter } from '../middleware/rateLimiter.ts';
 
 // ─── WALK-IN ROOMS ────────────────────────────────────────────────────────────
 
 // Public / Seeker — list open & paused walk-in rooms
-router.get('/active-rooms', optionalAuth, listActiveWalkInRooms);
+router.get('/active-rooms', publicLimiter, optionalAuth, listActiveWalkInRooms);
 
 // Public / Seeker — look up a specific room by code
-router.get('/rooms/:code/info', optionalAuth, getWalkInRoomByCode);
+router.get('/rooms/:code/info', publicLimiter, optionalAuth, getWalkInRoomByCode);
 
 // Company — manage rooms
 router.post('/rooms', authenticateCompany, requirePermission('walkin', 'create'), createWalkInRoom);
 router.get('/rooms', authenticateCompany, requirePermission('walkin', 'read'), listWalkInRooms);
 router.get('/rooms/:code/queue', authenticateCompany, requirePermission('walkin', 'read'), getQueueByRoom);
-router.post('/rooms/:code/call-next', authenticateCompany, requirePermission('walkin', 'manage'), callNextCandidate);
+router.post('/rooms/:code/call-next', livekitLimiter, authenticateCompany, requirePermission('walkin', 'manage'), callNextCandidate);
 router.put('/rooms/:code/status', authenticateCompany, requirePermission('walkin', 'manage'), updateRoomStatus);
 router.put('/rooms/:code/settings', authenticateCompany, requirePermission('walkin', 'manage'), updateRoomSettings);
 router.put('/queue/batch-status', authenticateCompany, requirePermission('walkin', 'manage'), batchUpdateQueueEntryStatus);
@@ -68,7 +69,7 @@ router.put('/queue/:entryId/priority', authenticateCompany, requirePermission('w
 
 // Seeker — join, check position, list my queues, leave queue
 router.get('/my-queues', authenticateToken, getMyWalkInQueues);
-router.post('/rooms/:code/join', authenticateToken, handleCvUpload, joinWalkInQueue);
+router.post('/rooms/:code/join', livekitLimiter, authenticateToken, handleCvUpload, joinWalkInQueue);
 router.get('/rooms/:code/position', authenticateToken, getSeekerQueuePosition);
 router.post('/rooms/:code/leave', authenticateToken, leaveWalkInQueue);
 

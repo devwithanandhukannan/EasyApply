@@ -7,6 +7,7 @@ import {
   requireCompanyRole 
 } from '../middleware/auth.middleware.ts';
 import { ROLES } from '../constants/roles.ts';
+import { livekitLimiter } from '../middleware/rateLimiter.ts';
 import { 
   addInterviewFeedback, 
   getInterviewFeedbacksList, 
@@ -18,8 +19,8 @@ import {
 
 const router = Router();
 
-router.post('/:id/token/company', authenticateCompany, getCompanyToken);
-router.post('/:id/token/jobseeker', authenticateToken, requireJobSeeker, getJobSeekerToken);
+router.post('/:id/token/company', livekitLimiter, authenticateCompany, getCompanyToken);
+router.post('/:id/token/jobseeker', livekitLimiter, authenticateToken, requireJobSeeker, getJobSeekerToken);
 
 // Accept security logs from proctored frontend
 router.post('/:id/security-logs', (req, res) => {

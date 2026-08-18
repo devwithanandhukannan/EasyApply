@@ -591,6 +591,7 @@ export const updateRoomSettings = async (req: Request, res: Response) => {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: 'Company context required' });
 
+    const { code } = req.params;
     const {
       title,
       description,

@@ -38,6 +38,7 @@ import {
 } from '../middleware/auth.middleware.ts';
 import { requirePermission } from '../middleware/permission.middleware.ts';
 import { ROLES } from '../constants/roles.ts';
+import { aiLimiter } from '../middleware/rateLimiter.ts';
 
 // Router mounts
 import offerRoutes from './offer.routes.ts';
@@ -99,13 +100,13 @@ router.get('/applications/:id/detail', requirePermission('jobs', 'read'), getApp
 router.post('/notification/send', requirePermission('jobs', 'edit'), sendNotificationToUser);
 
 // ─── 5. JOB OPERATIONS & EXPLICIT PATHS FIRST ────────────────────────────
-router.post('/jobs/generate-description', requirePermission('jobs', 'create'), generateAIDescription);
+router.post('/jobs/generate-description', aiLimiter, requirePermission('jobs', 'create'), generateAIDescription);
 router.post('/jobs', requirePermission('jobs', 'create'), createJob);
 router.get('/jobs', requirePermission('jobs', 'read'), getAllCompanyJobs);
 
 // Explicit sub-resource routes must sit ABOVE dynamic dynamic wildcards
 router.get('/jobs/:jobId/applications', requirePermission('jobs', 'read'), getJobApplications);
-router.post('/jobs/:jobId/ai-filter', requirePermission('jobs', 'edit'), aiFilterCandidates);
+router.post('/jobs/:jobId/ai-filter', aiLimiter, requirePermission('jobs', 'edit'), aiFilterCandidates);
 
 // Dynamic wildcards placed at bottom of the Job block
 router.get('/jobs/:id', requirePermission('jobs', 'read'), getJobDetails);

@@ -50,6 +50,7 @@ import { getSalaryComparison } from '../controllers/offer.controller.ts';
 import { saveNotificationToken } from '../controllers/notification.controller.ts';
 import { SpotJobController } from '../controllers/spotJob.controller.ts';
 import { parseAndLoadResume } from '../controllers/resumeParser.controller.ts';
+import { aiLimiter } from '../middleware/rateLimiter.ts';
 
 const router = express.Router();
 
@@ -83,7 +84,7 @@ const parseResumeUpload = multer({
   },
 });
 
-router.post('/parse-resume', parseResumeUpload.single('resume'), parseAndLoadResume);
+router.post('/parse-resume', aiLimiter, parseResumeUpload.single('resume'), parseAndLoadResume);
 
 // ─── RESUME DISK STORAGE (for save/analyze/download flows) ───────────────
 const UPLOAD_DIR = process.env.RESUME_UPLOAD_DIR ??
@@ -119,10 +120,10 @@ const resumeUpload = multer({
 });
 
 // ─── RESUME MANAGEMENT ───────────────────────────────────────────────────
-router.post('/resumes/upload', resumeUpload.single('resume'), uploadAndAnalyze);
-router.post('/resumes/generate', generateCV);
+router.post('/resumes/upload', aiLimiter, resumeUpload.single('resume'), uploadAndAnalyze);
+router.post('/resumes/generate', aiLimiter, generateCV);
 router.post('/resumes/:id/convert', convertResumeToHTML);
-router.post('/resumes/:id/optimize', optimizeResume);
+router.post('/resumes/:id/optimize', aiLimiter, optimizeResume);
 router.get('/resumes/:id/keywords', getKeywordSuggestions);
 router.patch('/resumes/:id/restore/:versionId', restoreVersion);
 router.get('/resumes', getAllResumes);
@@ -130,10 +131,10 @@ router.get('/resumes/:id', getResumeById);
 router.put('/resumes/:id', updateResume);
 router.delete('/resumes/:id', deleteResume);
 router.get('/resumes/:id/download', downloadResume);
-router.post('/resumes/:id/score', scoreContentOnly);
+router.post('/resumes/:id/score', aiLimiter, scoreContentOnly);
 router.get('/resumes/:id/inline-suggestions', getInlineSuggestions);
-router.post('/resumes/improve-text', improveSelectedText);
-router.post('/resumes/generate-regional', generateRegionalCV);
+router.post('/resumes/improve-text', aiLimiter, improveSelectedText);
+router.post('/resumes/generate-regional', aiLimiter, generateRegionalCV);
 
 // ─── APPLICATION MANAGEMENT ──────────────────────────────────────────────
 router.post('/applications/apply', resumeUpload.single('newResume'), applyToJob);

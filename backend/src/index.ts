@@ -13,9 +13,11 @@ import kanbanRouter from './routes/kanban.routes.ts';
 import crmRoutes from './routes/crm.routes.ts';
 import adminRoutes from './routes/admin.routes.ts';
 import walkInRoutes from './routes/walkIn.routes.ts';
+import { globalLimiter } from './middleware/rateLimiter.ts';
 
 const app = express();
 app.use(cookieParser());
+app.set('trust proxy', 1);
 
 const allowedOrigins = process.env.FRONTEND_URL
   ? process.env.FRONTEND_URL.split(',')
@@ -45,6 +47,9 @@ app.use(
 );
 
 app.use(express.json({ limit: '10mb' }));
+
+// Apply Global Rate Limiting to all /api endpoints
+app.use('/api', globalLimiter);
 
 // ─── API ROUTER REGISTER (ORDER MATTERS!) ───
 // Auth routes first
