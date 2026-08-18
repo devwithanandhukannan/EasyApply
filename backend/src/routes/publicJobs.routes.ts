@@ -21,6 +21,7 @@ router.get('/public', optionalAuth, getPublicJobs);
 router.get('/public/:id', optionalAuth, getPublicJobDetails);
 
 // ─── PUBLIC ROUTES (No authentication required) ───
+router.get('/jobs', optionalAuth, getPublicJobs);
 router.get('/companies', optionalAuth, getAllPublicCompanies);
 router.get('/companies/:identifier', optionalAuth, getPublicCompanyProfile);
 router.get('/companies/:identifier/jobs', optionalAuth, getPublicCompanyJobs);

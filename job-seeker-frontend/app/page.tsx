@@ -166,14 +166,6 @@ export default function Home() {
           <div className="flex items-center gap-2.5">
             <ThemeToggle />
 
-            <Link
-              href="/companies"
-              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold bg-[#f2f2f7] dark:bg-[#1c1c1e] hover:bg-[#e5e5ea] dark:hover:bg-[#2c2c2e] text-[#1d1d1f] dark:text-[#f5f5f7] border border-black/[0.06] dark:border-white/[0.08] transition shadow-xs"
-            >
-              <Globe className="w-3.5 h-3.5 text-[#86868b]" />
-              <span>Public Directory</span>
-            </Link>
-
             {isAuthenticated ? (
               <button
                 onClick={() => router.push('/dashboard')}

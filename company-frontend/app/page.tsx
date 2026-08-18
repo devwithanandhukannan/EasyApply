@@ -1,11 +1,15 @@
 'use client';
 
+import React from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { redirect, useRouter } from 'next/navigation';
 import {
-  Rocket, User, Building2, Kanban, Video, Bot,
+  Rocket, Building2, Kanban, Video, Bot,
   Zap, ShieldAlert, LineChart, Users, BarChart3,
-  CheckCircle, ArrowRight,
+  CheckCircle2, ArrowRight, ChevronRight, Globe,
+  DoorOpen, Sparkles, Layers, ShieldCheck, Check,
+  Laptop, ExternalLink
 } from 'lucide-react';
 
 export default function CompanyFrontPage() {
@@ -13,176 +17,499 @@ export default function CompanyFrontPage() {
   const router = useRouter();
 
   if (isAuthenticated) {
-    redirect('/dashboard');
+    router.push('/dashboard');
   }
 
-  const handleNavigation = (path: string) => { router.push(path); };
-
   const features = [
-    { icon: Kanban, title: 'Hiring Pipelines', desc: 'Drag-and-drop Kanban boards to move candidates through fully customizable evaluation stages.' },
-    { icon: Video, title: 'Live Interview Rooms', desc: 'HD video calls with integrated multi-language code editors, question panels, and candidate scoring.' },
-    { icon: Bot, title: 'AI Resume Matching', desc: 'Groq-powered semantic search ranks your entire applicant pool by skill relevance in milliseconds.' },
-    { icon: Zap, title: 'Spot Job Dispatch', desc: 'Post same-day hourly or daily task listings that instantly reach available on-demand workers nearby.' },
-    { icon: ShieldAlert, title: 'Proctored Assessments', desc: 'Client-side MediaPipe monitoring for tab-focus alerts and face detection during coding exams.' },
-    { icon: LineChart, title: 'Analytics Dashboard', desc: 'Monitor drop-off rates, source distributions, and time-to-hire metrics in real-time dashboards.' },
+    {
+      icon: DoorOpen,
+      title: 'Live Walk-In Interview Rooms',
+      desc: 'Host on-demand video interview sessions with 6-character room codes. Evaluate candidates queued in real-time with integrated notes and scoring.',
+      badge: 'Interactive',
+      color: '#0071e3',
+    },
+    {
+      icon: Bot,
+      title: 'Groq AI Semantic Screening',
+      desc: 'Screen 10,000+ resumes in milliseconds. Real-time ATS match scoring, missing keyword analysis, and automated candidate shortlisting.',
+      badge: 'AI Powered',
+      color: '#8b5cf6',
+    },
+    {
+      icon: Kanban,
+      title: 'Drag-and-Drop Hiring Pipelines',
+      desc: 'Fully customizable visual Kanban boards. Move candidates between Applied, Screening, Interview, and Offer stages with automatic notifications.',
+      badge: 'Visual CRM',
+      color: '#ff9500',
+    },
+    {
+      icon: Video,
+      title: 'HD Proctored Video Interviews',
+      desc: 'Built-in LiveKit WebRTC video rooms with embedded Monaco multi-language code editor, whiteboard, and client-side tab-focus proctoring.',
+      badge: 'Proctored',
+      color: '#0071e3',
+    },
+    {
+      icon: Zap,
+      title: 'Instant Spot Job Dispatch',
+      desc: 'Need immediate contract talent or same-day assignments? Post hourly spot jobs that instantly notify available nearby verified specialists.',
+      badge: 'Same-Day',
+      color: '#10b981',
+    },
+    {
+      icon: Users,
+      title: 'Multi-Role Team Workspaces',
+      desc: 'Role-based access controls for Recruiters, Technical Interviewers, HR Managers, and Admins to collaborate with team-wide hiring notes.',
+      badge: 'Team Ready',
+      color: '#6366f1',
+    },
   ];
 
-  const scaleItems = [
-    { icon: Kanban, title: 'Kanban Boards' },
-    { icon: Video, title: 'Video Interviews' },
-    { icon: Bot, title: 'AI Screening' },
-    { icon: ShieldAlert, title: 'Proctoring' },
-    { icon: BarChart3, title: 'Analytics' },
-    { icon: Users, title: 'Team Roles' },
+  const stats = [
+    { value: '70%', label: 'Shorter Time to Hire', desc: 'Instant queues replace back-and-forth emails' },
+    { value: '10k+', label: 'Verified Seekers', desc: 'Ready for live evaluation and spot dispatch' },
+    { value: '94%', label: 'ATS Screening Accuracy', desc: 'Deep semantic skill relevance scoring' },
+    { value: '3x', label: 'Candidate Engagement', desc: 'Live HD video and interactive code assessments' },
+  ];
+
+  const steps = [
+    {
+      num: '01',
+      title: 'Post Roles & Launch Walk-Ins',
+      desc: 'Create job postings or activate a live walk-in room with target skills, criteria, and custom queue sizes.',
+    },
+    {
+      num: '02',
+      title: 'AI Scores & Live Video Evaluation',
+      desc: 'AI scores incoming candidate resumes while candidates queue up directly for 1-on-1 live video assessment.',
+    },
+    {
+      num: '03',
+      title: 'Generate Offers in Minutes',
+      desc: 'Select candidates, draft customized offer letters from templates, and secure top talent before competitors.',
+    },
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f5f4fc', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif", color: '#111827' }}>
-
-      {/* ── NAVBAR ─────────────────────────────────── */}
-      <header style={{ background: '#ffffff', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-
+    <div className="min-h-screen bg-[#fafafa] dark:bg-[#000000] text-[#111827] dark:text-[#f5f5f7] font-sans antialiased selection:bg-[#0071e3]/20 selection:text-[#0071e3] flex flex-col">
+      
+      {/* ── HEADER NAVBAR ─────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#111112]/80 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.08]">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+          
           {/* Logo */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => handleNavigation('/')}>
-            <Rocket size={20} color="#2563eb" strokeWidth={2.5} />
-            <span style={{ fontWeight: 700, fontSize: 17, color: '#111827', letterSpacing: '-0.02em' }}>EasyApply</span>
-          </div>
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white flex items-center justify-center shadow-[0_2px_10px_rgba(0,113,227,0.35)] group-hover:scale-105 transition-transform">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-bold text-base tracking-tight text-[#111827] dark:text-white group-hover:text-[#0071e3] transition-colors">
+                EasyApply <span className="text-xs font-semibold text-[#0071e3] ml-1">for Employers</span>
+              </span>
+              <span className="text-[10px] font-semibold text-[#6b7280] -mt-1 hidden sm:inline">
+                Hiring Intelligence &amp; Live Walk-In Suite
+              </span>
+            </div>
+          </Link>
 
-          {/* Pill Toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', background: '#f3f4f6', borderRadius: 999, padding: 3, gap: 2 }}>
-            <button
-              onClick={() => window.open('http://localhost:3000', '_self')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 999,
-                background: 'transparent', color: '#6b7280', border: 'none', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#111827'; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#6b7280'; }}
+          {/* Navigation Links */}
+          <nav className="hidden md:flex items-center gap-1 bg-[#f2f2f7]/80 dark:bg-[#1c1c1e]/80 p-1 rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+            <a
+              href="#features"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#6b7280] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all"
             >
-              <User size={13} strokeWidth={2.5} /> Job Seekers
+              Features
+            </a>
+            <a
+              href="#walkin"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#6b7280] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all flex items-center gap-1.5"
+            >
+              <DoorOpen className="w-3.5 h-3.5 text-[#0071e3]" />
+              <span>Walk-In Suite</span>
+            </a>
+            <a
+              href="#how-it-works"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#6b7280] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all"
+            >
+              How It Works
+            </a>
+            <a
+              href="http://localhost:3000/companies"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#0071e3] hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all flex items-center gap-1"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Public Directory</span>
+              <ExternalLink className="w-3 h-3 opacity-60" />
+            </a>
+          </nav>
+
+          {/* Right Actions */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => router.push('/login')}
+              className="px-4 py-2 bg-transparent hover:bg-black/[0.04] dark:hover:bg-white/[0.06] text-[#111827] dark:text-white rounded-2xl text-xs font-bold transition cursor-pointer"
+            >
+              Sign In
             </button>
-            <button style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '6px 16px', borderRadius: 999,
-              background: '#2563eb', color: '#ffffff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}>
-              <Building2 size={13} strokeWidth={2} /> Employers
+            <button
+              onClick={() => router.push('/register')}
+              className="px-4 py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold shadow-[0_2px_8px_rgba(0,113,227,0.3)] transition cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Get Started</span>
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          {/* Sign In */}
-          <button
-            onClick={() => handleNavigation('/login')}
-            style={{ background: 'none', border: 'none', fontSize: 14, fontWeight: 600, color: '#111827', cursor: 'pointer', letterSpacing: '-0.01em' }}
-          >
-            Sign In
-          </button>
         </div>
       </header>
 
-      {/* ── HERO ───────────────────────────────────── */}
-      <section style={{ maxWidth: 720, margin: '0 auto', padding: '96px 24px 80px', textAlign: 'center' }}>
-        <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.1, marginBottom: 24, color: '#111827' }}>
-          Hire top talent with AI-powered precision.
-        </h1>
-        <p style={{ fontSize: 16, color: '#6b7280', lineHeight: 1.7, maxWidth: 560, margin: '0 auto 40px', fontWeight: 400 }}>
-          Manage candidate pipelines, run live technical interviews, and deploy spot job listings — all in one enterprise-grade platform powered by AI.
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button
-            onClick={() => handleNavigation('/register')}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: 999, padding: '13px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', letterSpacing: '-0.01em' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1d4ed8'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2563eb'; }}
-          >
-            <Building2 size={15} strokeWidth={2.5} /> Register Your Company <ArrowRight size={15} strokeWidth={2.5} />
-          </button>
-          <button
-            onClick={() => handleNavigation('/login')}
-            style={{ background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 999, padding: '13px 28px', fontSize: 15, fontWeight: 600, cursor: 'pointer', letterSpacing: '-0.01em' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#e5e7eb'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; }}
-          >
-            Access Employer Portal
-          </button>
-        </div>
-      </section>
-
-      {/* ── STATS ──────────────────────────────────── */}
-      <section style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px 80px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: '1px solid #e5e7eb', paddingTop: 48 }}>
-          {[
-            { value: '500+', label: 'Companies Hiring' },
-            { value: '92%', label: 'Hire Rate' },
-            { value: '3x', label: 'Faster Hiring' },
-            { value: '10k+', label: 'Candidates Placed' },
-          ].map((s, i) => (
-            <div key={i} style={{ textAlign: 'center', padding: '0 16px' }}>
-              <div style={{ fontSize: 32, fontWeight: 800, color: '#2563eb', letterSpacing: '-0.04em', marginBottom: 6 }}>{s.value}</div>
-              <div style={{ fontSize: 13, color: '#6b7280' }}>{s.label}</div>
+      {/* ── HERO SECTION ───────────────────────────────────────────── */}
+      <section className="relative pt-16 pb-20 md:pt-24 md:pb-28 overflow-hidden">
+        {/* Subtle Ambient Glows */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[450px] bg-gradient-to-tr from-[#0071e3]/12 via-[#6366f1]/10 to-transparent blur-3xl pointer-events-none rounded-full" />
+        
+        <div className="max-w-7xl mx-auto px-6 relative z-10">
+          <div className="text-center max-w-3xl mx-auto space-y-6">
+            
+            {/* Pill Tag */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] shadow-xs text-xs font-bold">
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0071e3] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0071e3]" />
+              </span>
+              <span className="text-[#111827] dark:text-white">Next-Gen Recruitment Operating System</span>
+              <span className="text-[#86868b]">•</span>
+              <a href="http://localhost:3000/companies" target="_blank" rel="noreferrer" className="text-[#0071e3] hover:underline flex items-center gap-0.5">
+                View Directory <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
-          ))}
-        </div>
-        <div style={{ height: 1, background: '#e5e7eb', marginTop: 48 }} />
-      </section>
 
-      {/* ── FEATURES ───────────────────────────────── */}
-      <section style={{ maxWidth: 960, margin: '0 auto', padding: '0 24px 96px' }}>
-        <h2 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em', textAlign: 'center', marginBottom: 48, color: '#111827' }}>
-          The full hiring stack for modern teams.
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-          {features.map((f, i) => {
-            const Icon = f.icon;
-            return (
-              <div
-                key={i}
-                style={{ background: '#ffffff', borderRadius: 16, padding: '28px 24px', border: '1px solid #e5e7eb', transition: 'all 0.2s', cursor: 'default' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = 'none'; (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)'; }}
+            {/* Headline */}
+            <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-[#111827] dark:text-white leading-[1.08]">
+              Hire top engineering talent with{' '}
+              <span className="bg-gradient-to-r from-[#0071e3] via-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
+                AI precision &amp; live walk-ins.
+              </span>
+            </h1>
+
+            {/* Subtitle */}
+            <p className="text-base sm:text-lg text-[#6b7280] font-medium leading-relaxed max-w-2xl mx-auto">
+              Automate candidate ranking with Groq semantic intelligence, host instant live video walk-in evaluation rooms, and manage team pipelines without friction.
+            </p>
+
+            {/* CTAs */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => router.push('/register')}
+                className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-[#0071e3] hover:bg-[#0077ed] text-white font-bold text-sm flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(0,113,227,0.35)] transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
               >
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-                  <Icon size={18} color="#2563eb" strokeWidth={2} />
-                </div>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 8, letterSpacing: '-0.02em' }}>{f.title}</h3>
-                <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
-              </div>
-            );
-          })}
+                <Building2 className="w-4 h-4" />
+                <span>Register Your Company</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => router.push('/login')}
+                className="w-full sm:w-auto px-7 py-3.5 rounded-2xl bg-white dark:bg-[#1c1c1e] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] text-[#111827] dark:text-[#f5f5f7] border border-black/[0.08] dark:border-white/[0.1] font-bold text-sm flex items-center justify-center gap-2 shadow-xs transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+              >
+                <span>Access Employer Portal</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Fast facts */}
+            <div className="pt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-[#86868b] font-semibold">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#34c759]" />
+                Live Walk-In Video Rooms
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#34c759]" />
+                Visual Kanban Pipeline
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#34c759]" />
+                Public Directory Exposure
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 
-      {/* ── FOOTER ─────────────────────────────────── */}
-      <footer style={{ background: '#ffffff', borderTop: '1px solid #e5e7eb', padding: '56px 24px 40px' }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 48 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Rocket size={18} color="#2563eb" strokeWidth={2.5} />
-              <span style={{ fontWeight: 700, fontSize: 16, color: '#111827', letterSpacing: '-0.02em' }}>EasyApply</span>
-            </div>
-            <p style={{ fontSize: 13, color: '#9ca3af', lineHeight: 1.6, margin: 0 }}>© 2024 EasyApply AI. Precision Recruitment.</p>
-          </div>
-          {[
-            { title: 'Platform', links: ['AI Resume Builder', 'Kanban Pipeline', 'Live Interviews'] },
-            { title: 'Solutions', links: ['For Job Seekers', 'For Employers', 'Enterprise CRM'] },
-            { title: 'Company', links: ['About Us', 'Careers', 'Contact'] },
-          ].map((col) => (
-            <div key={col.title}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 16 }}>{col.title}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {col.links.map((link) => (
-                  <span
-                    key={link}
-                    style={{ fontSize: 13, color: '#6b7280', cursor: 'pointer', transition: 'color 0.15s' }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLSpanElement).style.color = '#111827'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLSpanElement).style.color = '#6b7280'; }}
-                  >{link}</span>
-                ))}
+      {/* ── STATS STRIP ────────────────────────────────────────────── */}
+      <section className="py-12 border-y border-black/[0.06] dark:border-white/[0.08] bg-white/40 dark:bg-[#111112]/40">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+            {stats.map((s, idx) => (
+              <div key={idx} className="space-y-1 text-center sm:text-left">
+                <div className="text-3xl sm:text-4xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+                  {s.value}
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-[#0071e3]">
+                  {s.label}
+                </div>
+                <p className="text-[11px] text-[#86868b] font-medium">
+                  {s.desc}
+                </p>
               </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── BENTO FEATURES GRID ───────────────────────────────────── */}
+      <section id="features" className="py-20 md:py-28">
+        <div className="max-w-7xl mx-auto px-6">
+          
+          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
+            <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[#0071e3]/10 text-[#0071e3]">
+              Enterprise Suite
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+              Everything required to scale your engineering team.
+            </h2>
+            <p className="text-sm sm:text-base text-[#86868b] font-medium">
+              From sourcing to live evaluation and e-signature offer letters.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {features.map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <div
+                  key={idx}
+                  onClick={() => router.push('/register')}
+                  className="p-6 md:p-8 rounded-3xl bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.15] dark:hover:border-white/[0.2] shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between cursor-pointer group hover:-translate-y-1"
+                >
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-110"
+                        style={{ backgroundColor: `${item.color}15`, color: item.color }}
+                      >
+                        <Icon className="w-6 h-6" />
+                      </div>
+                      <span
+                        className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border"
+                        style={{
+                          backgroundColor: `${item.color}10`,
+                          borderColor: `${item.color}30`,
+                          color: item.color,
+                        }}
+                      >
+                        {item.badge}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-bold text-[#111827] dark:text-white group-hover:text-[#0071e3] transition-colors">
+                        {item.title}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-[#86868b] leading-relaxed font-medium">
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 mt-4 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs font-bold text-[#0071e3]">
+                    <span>Get Started</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+        </div>
+      </section>
+
+      {/* ── WALK-IN LIVE SPOTLIGHT SECTION ────────────────────────── */}
+      <section id="walkin" className="py-16 bg-gradient-to-b from-[#f2f2f7]/50 to-[#fafafa] dark:from-[#151516]/50 dark:to-[#000000] border-t border-black/[0.06] dark:border-white/[0.08]">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="rounded-3xl bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] p-8 md:p-12 shadow-sm flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-3 max-w-xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20">
+                <DoorOpen className="w-3.5 h-3.5" />
+                <span>Instant Walk-In Room Hosting</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-[#111827] dark:text-white">
+                Eliminate Recruiter Lag with Live Video Walk-Ins
+              </h2>
+              <p className="text-xs sm:text-sm text-[#86868b] font-medium leading-relaxed">
+                Publish a room code directly to the public directory. Candidates join real-time queues, submit their AI-analyzed resumes, and meet interviewers in browser-native HD video.
+              </p>
             </div>
-          ))}
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+              <button
+                onClick={() => router.push('/register')}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold flex items-center justify-center gap-2 shadow-md shadow-[#0071e3]/20 transition-all hover:scale-105 cursor-pointer"
+              >
+                <DoorOpen className="w-4 h-4" />
+                <span>Create Walk-In Room</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <a
+                href="http://localhost:3000/companies?tab=walkin"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#111827] dark:text-[#f5f5f7] border border-black/[0.06] dark:border-white/[0.08] text-xs font-bold flex items-center justify-center gap-2 transition"
+              >
+                <Globe className="w-4 h-4 text-[#0071e3]" />
+                <span>View Public Directory</span>
+                <ExternalLink className="w-3 h-3 opacity-60" />
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── 3-STEP HIRING PROCESS ──────────────────────────────────── */}
+      <section id="how-it-works" className="py-20 md:py-28">
+        <div className="max-w-7xl mx-auto px-6">
+          
+          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
+            <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-[#6366f1]/10 text-[#6366f1]">
+              Seamless Workflow
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+              Speed and precision at every stage.
+            </h2>
+            <p className="text-sm sm:text-base text-[#86868b] font-medium">
+              Eliminate friction between sourcing, technical evaluation, and closing.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {steps.map((step, idx) => (
+              <div
+                key={idx}
+                className="p-8 rounded-3xl bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] space-y-4 shadow-xs relative overflow-hidden"
+              >
+                <div className="text-4xl font-extrabold text-[#0071e3]/20 dark:text-[#0071e3]/30 font-mono">
+                  {step.num}
+                </div>
+                <h3 className="text-lg font-bold text-[#111827] dark:text-white">
+                  {step.title}
+                </h3>
+                <p className="text-xs sm:text-sm text-[#86868b] leading-relaxed font-medium">
+                  {step.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </section>
+
+      {/* ── FOOTER ─────────────────────────────────────────────────── */}
+      <footer className="border-t border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#111112] py-14 mt-auto">
+        <div className="max-w-7xl mx-auto px-6 space-y-10">
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            
+            <div className="space-y-3 md:col-span-1">
+              <div className="flex items-center gap-2 group">
+                <div className="w-7 h-7 rounded-xl bg-[#0071e3] text-white flex items-center justify-center shadow-xs">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <span className="font-bold text-base tracking-tight text-[#111827] dark:text-white">
+                  EasyApply for Employers
+                </span>
+              </div>
+              <p className="text-xs text-[#86868b] leading-relaxed font-medium">
+                End-to-end recruitment intelligence, automated ATS screening, and instant walk-in video interview rooms.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#111827] dark:text-white">
+                Employer Tools
+              </h4>
+              <ul className="space-y-2 text-xs text-[#86868b] font-medium">
+                <li>
+                  <Link href="/register" className="hover:text-[#0071e3] transition-colors">
+                    Post Open Jobs
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/register" className="hover:text-[#0071e3] transition-colors">
+                    Walk-In Interview Rooms
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/register" className="hover:text-[#0071e3] transition-colors">
+                    Spot Job Dispatch
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#111827] dark:text-white">
+                Public Ecosystem
+              </h4>
+              <ul className="space-y-2 text-xs text-[#86868b] font-medium">
+                <li>
+                  <a href="http://localhost:3000/companies" target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
+                    <span>Public Directory</span>
+                    <ExternalLink className="w-3 h-3 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a href="http://localhost:3000/companies?tab=walkin" target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
+                    <span>Live Walk-In Rooms</span>
+                    <ExternalLink className="w-3 h-3 opacity-60" />
+                  </a>
+                </li>
+                <li>
+                  <a href="http://localhost:3000" target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
+                    <span>Candidate Portal</span>
+                    <ExternalLink className="w-3 h-3 opacity-60" />
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#111827] dark:text-white">
+                Account
+              </h4>
+              <ul className="space-y-2 text-xs text-[#86868b] font-medium">
+                <li>
+                  <Link href="/login" className="hover:text-[#0071e3] transition-colors">
+                    Employer Sign In
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/register" className="hover:text-[#0071e3] transition-colors">
+                    Register Company
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/forgot-password" className="hover:text-[#0071e3] transition-colors">
+                    Account Recovery
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+          </div>
+
+          <div className="pt-8 border-t border-black/[0.04] dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#86868b] font-medium">
+            <p>© {new Date().getFullYear()} EasyApply Enterprise. All rights reserved.</p>
+            <div className="flex items-center gap-4">
+              <a href="http://localhost:3000/companies" target="_blank" rel="noreferrer" className="hover:text-[#0071e3]">
+                http://localhost:3000/companies
+              </a>
+            </div>
+          </div>
+
         </div>
       </footer>
+
     </div>
   );
 }
