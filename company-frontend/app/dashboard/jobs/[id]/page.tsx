@@ -188,6 +188,79 @@ export default function JobDetailsPage() {
     fetchApplications();
   };
 
+  const renderFormattedDescription = (text: string) => {
+    if (!text) return <p className="text-[#86868b] text-xs">No detailed description specified.</p>;
+
+    const parseInline = (lineText: string) => {
+      const parts = lineText.split(/(\*\*.*?\*\*)/g);
+      return parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return (
+            <strong key={i} className="font-bold text-[#1d1d1f] dark:text-white">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+        return part;
+      });
+    };
+
+    const lines = text.split('\n');
+    let currentListItems: React.ReactNode[] = [];
+    const elements: React.ReactNode[] = [];
+
+    const flushList = (keyPrefix: string | number) => {
+      if (currentListItems.length > 0) {
+        elements.push(
+          <ul key={`list-${keyPrefix}`} className="list-disc pl-5 space-y-2 mb-4 text-[#424245] dark:text-[#d2d2d7] text-sm marker:text-[#0071e3]">
+            {currentListItems.map((item, i) => (
+              <li key={i} className="leading-relaxed">{item}</li>
+            ))}
+          </ul>
+        );
+        currentListItems = [];
+      }
+    };
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith('#')) {
+        flushList(index);
+        const cleanHeader = trimmed.replace(/^#+\s*/, '').replace(/\*\*/g, '').trim();
+        elements.push(
+          <h4 key={index} className="text-[#1d1d1f] dark:text-white font-extrabold text-sm sm:text-base mt-6 mb-3 tracking-tight first:mt-0 flex items-center gap-2">
+            <span>{cleanHeader}</span>
+          </h4>
+        );
+      } else if (trimmed.startsWith('* ') || trimmed.startsWith('- ') || trimmed.startsWith('• ') || trimmed.startsWith('*')) {
+        const cleanItem = trimmed.replace(/^[\*\-•]\s*/, '').trim();
+        currentListItems.push(parseInline(cleanItem));
+      } else if (/^\d+\.\s/.test(trimmed)) {
+        flushList(index);
+        const cleanItem = trimmed.replace(/^\d+\.\s*/, '').trim();
+        elements.push(
+          <div key={index} className="flex items-start gap-2.5 mb-2 text-sm text-[#424245] dark:text-[#d2d2d7]">
+            <span className="font-bold text-[#0071e3] shrink-0">{trimmed.match(/^\d+\./)?.[0]}</span>
+            <span className="leading-relaxed">{parseInline(cleanItem)}</span>
+          </div>
+        );
+      } else if (trimmed === '') {
+        flushList(index);
+      } else {
+        flushList(index);
+        elements.push(
+          <p key={index} className="text-[#424245] dark:text-[#d2d2d7] text-sm leading-relaxed mb-4 font-normal">
+            {parseInline(trimmed)}
+          </p>
+        );
+      }
+    });
+
+    flushList('final');
+    return <div className="space-y-1">{elements}</div>;
+  };
+
   if (isLoading) return (
     <div className="flex items-center justify-center min-h-[60vh]">
       <div className="h-7 w-7 animate-spin rounded-full border-2 border-black/[0.1] border-t-[#0071e3]" />
@@ -403,10 +476,7 @@ export default function JobDetailsPage() {
 
           <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-6 sm:p-7 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
             <h3 className="font-bold text-[#1d1d1f] dark:text-white mb-3 text-sm">Job Description</h3>
-            <div
-              className="text-[#1d1d1f] dark:text-[#f5f5f7] text-sm leading-relaxed whitespace-pre-wrap font-normal"
-              dangerouslySetInnerHTML={{ __html: job.description.replace(/\n/g, '<br/>') }}
-            />
+            {renderFormattedDescription(job.description)}
           </div>
         </div>
       )}
