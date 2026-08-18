@@ -186,20 +186,21 @@ export default function ProfilePage() {
     formData.append('resume', file);
 
     try {
-      const response = await api.post('/jobseeker/profile/parse-resume', formData, {
+      const response = await api.post('/jobseeker/parse-resume', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       if (response.data.success) {
         const parsed = response.data.data;
-        if (parsed.fullName)  setBasicInfo(prev => ({ ...prev, fullName: parsed.fullName }));
-        if (parsed.email)     setBasicInfo(prev => ({ ...prev, email: parsed.email }));
-        if (parsed.phone)     setBasicInfo(prev => ({ ...prev, phone: parsed.phone }));
-        if (parsed.location)  setBasicInfo(prev => ({ ...prev, location: parsed.location }));
-        if (parsed.linkedin)  setBasicInfo(prev => ({ ...prev, linkedin: parsed.linkedin }));
-        if (parsed.github)    setBasicInfo(prev => ({ ...prev, github: parsed.github }));
-        if (parsed.portfolio) setBasicInfo(prev => ({ ...prev, portfolio: parsed.portfolio }));
-        if (parsed.bio)       setBasicInfo(prev => ({ ...prev, bio: parsed.bio }));
+        const info = parsed.basicInfo || parsed;
+        if (info.fullName)  setBasicInfo(prev => ({ ...prev, fullName: info.fullName }));
+        if (info.email)     setBasicInfo(prev => ({ ...prev, email: info.email }));
+        if (info.phone)     setBasicInfo(prev => ({ ...prev, phone: info.phone }));
+        if (info.location)  setBasicInfo(prev => ({ ...prev, location: info.location }));
+        if (info.linkedin)  setBasicInfo(prev => ({ ...prev, linkedin: info.linkedin }));
+        if (info.github)    setBasicInfo(prev => ({ ...prev, github: info.github }));
+        if (info.portfolio) setBasicInfo(prev => ({ ...prev, portfolio: info.portfolio }));
+        if (info.bio)       setBasicInfo(prev => ({ ...prev, bio: info.bio }));
 
         if (parsed.skills?.length) {
           setSkills(prev => Array.from(new Set([...prev, ...parsed.skills])));

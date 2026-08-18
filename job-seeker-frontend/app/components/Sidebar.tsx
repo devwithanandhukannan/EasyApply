@@ -17,6 +17,8 @@ import {
   Video,
   Zap,
   Rocket,
+  Globe,
+  Building2,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -48,6 +50,7 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
     { icon: Video, label: 'Walk-In Rooms', href: '/dashboard/walkin' },
     { icon: User, label: 'Profile Workspace', href: '/dashboard/profile' },
     { icon: Zap, label: 'Spot Jobs', href: '/dashboard/spot-jobs' },
+    { icon: Globe, label: 'Public Directory', href: '/companies' },
   ];
 
   const handleLogout = () => {

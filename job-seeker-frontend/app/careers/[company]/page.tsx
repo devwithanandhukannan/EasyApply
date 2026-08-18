@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import axios from '@/app/lib/axios';
 import publicAPIService from '@/app/lib/public';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { 
@@ -9,7 +10,8 @@ import {
   Search, Clock, ChevronRight,
   ArrowLeft, ShieldCheck, CheckCircle2,
   Sparkles, Layers, DollarSign, Filter,
-  Lock
+  Lock, Video, Copy, Check, ExternalLink,
+  Radio, Zap, ArrowRight, Tag
 } from 'lucide-react';
 
 interface CompanyProfile {
@@ -53,6 +55,17 @@ interface Job {
   appliedAt: string | null;
 }
 
+interface WalkInRoom {
+  id: string;
+  title: string;
+  description: string | null;
+  requiredSkills: string[];
+  roomCode: string;
+  status: 'OPEN' | 'PAUSED' | 'CLOSED';
+  maxQueue: number;
+  _count: { queue: number };
+}
+
 export default function CompanyCareerPage() {
   const params = useParams();
   const router = useRouter();
@@ -62,14 +75,17 @@ export default function CompanyCareerPage() {
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
+  const [walkinRooms, setWalkinRooms] = useState<WalkInRoom[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDept, setSelectedDept] = useState('all');
   const [selectedType, setSelectedType] = useState('all');
   const [selectedLocation, setSelectedLocation] = useState('all');
-  const [activeTab, setActiveTab] = useState<'jobs' | 'about'>('jobs');
+  const [activeTab, setActiveTab] = useState<'jobs' | 'walkin' | 'about'>('jobs');
 
   useEffect(() => {
     if (companyIdentifier) {
@@ -84,18 +100,49 @@ export default function CompanyCareerPage() {
   const loadCompanyData = async () => {
     try {
       setLoading(true);
-      const response = await publicAPIService.getCompanyProfile(companyIdentifier);
-      const resData = response.data;
-      if (resData?.success && resData?.data) {
-        setCompany(resData.data.company);
+      const [profileRes, walkinRes] = await Promise.allSettled([
+        publicAPIService.getCompanyProfile(companyIdentifier),
+        axios.get('/walkin/active-rooms'),
+      ]);
+
+      if (profileRes.status === 'fulfilled' && profileRes.value?.data?.success) {
+        const resData = profileRes.value.data;
+        const comp = resData.data.company;
+        setCompany(comp);
         setJobs(resData.data.jobs || []);
         setFilteredJobs(resData.data.jobs || []);
+
+        if (walkinRes.status === 'fulfilled' && walkinRes.value?.data?.success) {
+          const allRooms: any[] = walkinRes.value.data.rooms || [];
+          const companyRooms = allRooms.filter(
+            (r) =>
+              r.companyId === comp.id ||
+              r.company?.id === comp.id ||
+              r.company?.name?.toLowerCase() === comp.name?.toLowerCase()
+          );
+          setWalkinRooms(companyRooms);
+        }
       }
     } catch (error) {
       console.error('Failed to load company profile:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCopyCode = (code: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2200);
+  };
+
+  const handleCopyLink = (code: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const link = typeof window !== 'undefined' ? `${window.location.origin}/walkin/${code}` : `/walkin/${code}`;
+    navigator.clipboard.writeText(link);
+    setCopiedLink(code);
+    setTimeout(() => setCopiedLink(null), 2200);
   };
 
   const filterJobs = () => {
@@ -132,7 +179,6 @@ export default function CompanyCareerPage() {
 
   const getDepartments = () => [...new Set(jobs.map(j => j.department).filter(Boolean))] as string[];
   const getJobTypes = () => [...new Set(jobs.map(j => j.jobType).filter(Boolean))] as string[];
-  const getLocationTypes = () => [...new Set(jobs.map(j => j.locationType).filter(Boolean))] as string[];
 
   if (loading || authLoading) {
     return (
@@ -176,7 +222,7 @@ export default function CompanyCareerPage() {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] rounded-xl text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] transition-all cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Companies</span>
+              <span>Back to Directory</span>
             </button>
 
             {!isAuthenticated ? (
@@ -238,12 +284,21 @@ export default function CompanyCareerPage() {
                   <Layers className="w-3.5 h-3.5" />
                   <span>{company.activeJobsCount} Open Positions</span>
                 </div>
+                {walkinRooms.length > 0 && (
+                  <>
+                    <span>•</span>
+                    <div className="flex items-center gap-1 text-[#0071e3] font-bold">
+                      <Zap className="w-3.5 h-3.5 fill-[#0071e3]" />
+                      <span>{walkinRooms.length} Live Walk-In {walkinRooms.length === 1 ? 'Room' : 'Rooms'}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           {/* Tab Navigation */}
-          <div className="flex items-center gap-2 border-t border-black/[0.06] dark:border-white/[0.08] pt-3">
+          <div className="flex items-center gap-2 border-t border-black/[0.06] dark:border-white/[0.08] pt-3 flex-wrap">
             <button
               onClick={() => setActiveTab('jobs')}
               className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -253,6 +308,20 @@ export default function CompanyCareerPage() {
               }`}
             >
               Open Jobs ({jobs.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('walkin')}
+              className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'walkin'
+                  ? 'bg-[#0071e3] text-white shadow-xs'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white bg-[#f2f2f7] dark:bg-[#2c2c2e]'
+              }`}
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span>Walk-In Interviews ({walkinRooms.length})</span>
+              {walkinRooms.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-[#34c759] animate-pulse" />
+              )}
             </button>
             <button
               onClick={() => setActiveTab('about')}
@@ -272,6 +341,35 @@ export default function CompanyCareerPage() {
       <main className="flex-1 max-w-7xl mx-auto px-6 py-6 w-full">
         {activeTab === 'jobs' ? (
           <div className="space-y-4">
+            {/* Live Walk-in Banner if Available */}
+            {walkinRooms.length > 0 && (
+              <div
+                onClick={() => setActiveTab('walkin')}
+                className="p-4 rounded-2xl bg-gradient-to-r from-blue-600/10 via-indigo-600/10 to-violet-600/10 border border-[#0071e3]/20 flex items-center justify-between gap-4 cursor-pointer hover:border-[#0071e3]/40 transition shadow-xs"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0071e3] text-white flex items-center justify-center shadow-xs">
+                    <Video className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-[#1d1d1f] dark:text-white flex items-center gap-1.5">
+                      <span>Instant Walk-In Interviews Live Now</span>
+                      <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-[#34c759] text-white rounded-full uppercase">
+                        Active
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#86868b]">
+                      Skip traditional applications. Join live video queue directly for {walkinRooms.map((r) => r.title).join(', ')}.
+                    </p>
+                  </div>
+                </div>
+                <button className="px-3.5 py-1.5 bg-[#0071e3] text-white rounded-xl text-xs font-bold shrink-0 flex items-center gap-1">
+                  <span>View Walk-Ins</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Search & Filters */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[200px]">
@@ -372,6 +470,139 @@ export default function CompanyCareerPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'walkin' ? (
+          /* ── Walk-In Tab Content ────────────────────────────────── */
+          <div className="space-y-6">
+            {walkinRooms.length === 0 ? (
+              <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl p-12 text-center max-w-md mx-auto my-8 border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-3">
+                <Video className="w-10 h-10 text-[#86868b] mx-auto" />
+                <h3 className="text-base font-bold text-[#1d1d1f] dark:text-white">No Live Walk-Ins Currently</h3>
+                <p className="text-xs text-[#86868b] leading-relaxed font-medium">
+                  {company.name} is not currently running an instant walk-in room session. Check out their regular open positions!
+                </p>
+                <button
+                  onClick={() => setActiveTab('jobs')}
+                  className="px-5 py-2.5 bg-[#0071e3] text-white font-bold rounded-2xl text-xs shadow-xs cursor-pointer"
+                >
+                  View Open Positions
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {walkinRooms.map((room) => {
+                  const isCopied = copiedCode === room.roomCode;
+                  const isLinkCopied = copiedLink === room.roomCode;
+                  const isOpen = room.status === 'OPEN';
+
+                  return (
+                    <div
+                      key={room.id}
+                      onClick={() => router.push(`/walkin/${room.roomCode}`)}
+                      className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.15] dark:hover:border-white/[0.2] rounded-3xl p-6 flex flex-col justify-between shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_6px_24px_rgba(0,0,0,0.08)] transition-all cursor-pointer group"
+                    >
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3]">
+                              Instant Walk-In
+                            </span>
+                            <h3 className="text-lg font-bold text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors mt-1.5">
+                              {room.title}
+                            </h3>
+                          </div>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              isOpen
+                                ? 'bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158]'
+                                : 'bg-[#ff9500]/10 border border-[#ff9500]/20 text-[#ff9500]'
+                            }`}
+                          >
+                            {room.status}
+                          </span>
+                        </div>
+
+                        {room.description && (
+                          <p className="text-xs text-[#86868b] leading-relaxed line-clamp-2 font-medium">
+                            {room.description}
+                          </p>
+                        )}
+
+                        {room.requiredSkills && room.requiredSkills.length > 0 && (
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] font-bold text-[#86868b] uppercase tracking-wider">
+                              Required Skills
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {room.requiredSkills.map((skill, idx) => (
+                                <span
+                                  key={idx}
+                                  className="px-2.5 py-0.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-full text-[10px] font-medium text-[#1d1d1f] dark:text-[#f5f5f7]"
+                                >
+                                  {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer & Actions */}
+                      <div className="pt-4 border-t border-black/[0.06] dark:border-white/[0.08] space-y-3 mt-5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5 text-[#86868b]">
+                            <Users className="w-3.5 h-3.5" />
+                            <span>
+                              Queue: <strong className="text-[#1d1d1f] dark:text-white">{room._count?.queue ?? 0}</strong> / {room.maxQueue}
+                            </span>
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              onClick={(e) => handleCopyCode(room.roomCode, e)}
+                              className={`px-2 py-1 rounded-lg border font-mono font-bold text-xs flex items-center gap-1.5 transition cursor-pointer ${
+                                isCopied
+                                  ? 'bg-[#34c759]/15 border-[#34c759]/40 text-[#248a3d] dark:text-[#30d158]'
+                                  : 'bg-[#0071e3]/10 hover:bg-[#0071e3]/15 border-[#0071e3]/20 text-[#0071e3]'
+                              }`}
+                              title="Click to copy Room Code"
+                            >
+                              <span>{room.roomCode}</span>
+                              {isCopied ? <Check className="w-3.5 h-3.5 text-[#34c759]" /> : <Copy className="w-3.5 h-3.5" />}
+                            </div>
+
+                            <button
+                              onClick={(e) => handleCopyLink(room.roomCode, e)}
+                              className={`p-1.5 rounded-lg border text-xs transition cursor-pointer ${
+                                isLinkCopied
+                                  ? 'bg-[#34c759]/15 border-[#34c759]/40 text-[#248a3d] dark:text-[#30d158]'
+                                  : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] border-black/[0.06] dark:border-white/[0.08] text-[#86868b]'
+                              }`}
+                              title="Copy Direct Link to Room"
+                            >
+                              {isLinkCopied ? <Check className="w-3.5 h-3.5 text-[#34c759]" /> : <ExternalLink className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/walkin/${room.roomCode}`);
+                          }}
+                          disabled={!isOpen}
+                          className="w-full py-2.5 bg-[#0071e3] hover:bg-[#0077ed] disabled:opacity-50 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 shadow-[0_2px_8px_rgba(0,113,227,0.25)] transition cursor-pointer"
+                        >
+                          <Video className="w-3.5 h-3.5" />
+                          <span>Join Walk-In Queue</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

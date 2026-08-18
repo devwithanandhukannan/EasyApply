@@ -1,7 +1,33 @@
 import Groq from 'groq-sdk';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const MODEL = 'llama-3.3-70b-versatile';
+const DEFAULT_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+const FALLBACK_MODELS = [DEFAULT_MODEL, 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile'];
+
+export async function createGroqChatCompletion(params: Groq.Chat.CompletionCreateParamsNonStreaming) {
+  const targetModel = params.model || DEFAULT_MODEL;
+  const modelsToTry = [targetModel, ...FALLBACK_MODELS.filter(m => m !== targetModel)];
+  let lastError: any = null;
+
+  for (const model of modelsToTry) {
+    try {
+      return await groq.chat.completions.create({
+        ...params,
+        model,
+      });
+    } catch (err: any) {
+      lastError = err;
+      if (err?.status === 404 || err?.error?.error?.code === 'model_not_found' || err?.error?.code === 'model_not_found') {
+        console.warn(`[Groq AI] Model '${model}' not found or unavailable, attempting fallback model...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
+const MODEL = DEFAULT_MODEL;
 
 const normalizeScores = (scores: any) => {
   if (!scores || typeof scores !== 'object') return {};
@@ -59,7 +85,7 @@ Return ONLY valid JSON string mapped to this structural interface:
   ]
 }`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [
       { 
         role: 'system', 
@@ -217,7 +243,7 @@ Rules:
 
   let result: any = {};
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [
         {
           role: 'system',
@@ -278,7 +304,7 @@ Job Description:
 ${jobDescription}
 """`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -306,7 +332,7 @@ ${htmlContent}
   }
 }`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.1,
@@ -328,7 +354,7 @@ Same HTML rules: inline styles only, no wrapper tags, Georgia/serif font.
 Name as <h1>, section headings as <h2> with border-bottom dividers.
 Return: { "htmlContent": "<html>" }`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -381,7 +407,7 @@ Guidelines:
 - Keep tone professional but forward-looking
 - Output ONLY the formatted job description markdown block without text wrappers or meta comments`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.3,
@@ -459,7 +485,7 @@ Rules:
 - gaps: honest assessment of what they lack for this role (empty array if none)
 - recommendation must be one of the four exact strings above`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -514,7 +540,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -594,7 +620,7 @@ Return ONLY valid JSON:
   "industryBestPractices": ["tip1", "tip2", "tip3"]
 }`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.3,
@@ -648,7 +674,7 @@ Rules: all scores integers 0-100. Be accurate and strict. improvements MUST be a
 
   let result: any = {};
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [{ role: 'user', content: prompt }],
       model: MODEL,
       temperature: 0.1,
@@ -703,7 +729,7 @@ Rules:
 - Focus on high-impact changes: quantify achievements, add power verbs, fix weak phrasing
 - replacement should be a direct drop-in improvement`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -749,7 +775,7 @@ Rules:
 - Do NOT wrap the improved text in additional quotes inside the JSON string`;
 
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [{ role: 'user', content: prompt }],
       model: MODEL,
       temperature: 0.3,
@@ -913,7 +939,7 @@ Return ONLY valid JSON:
 Rules:
 - All score values: integers 0-100.`;
 
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],
     model: MODEL,
     temperature: 0.3,
@@ -970,7 +996,7 @@ Rules:
 
   let result: any = {};
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [{ role: 'user', content: prompt }],
       model: MODEL,
       temperature: 0.2,

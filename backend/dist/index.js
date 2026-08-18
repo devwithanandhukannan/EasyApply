@@ -188,6 +188,10 @@ var verifyOtp = async (req, res) => {
     const profile = user.jobSeekerProfile;
     const hasEmail = !!profile?.email;
     const hasFullName = !!(profile?.fullName && profile.fullName !== "Candidate");
+    const platformSettings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    const isGlobalAllowed = platformSettings?.allowSeekerAiResumeCreation ?? true;
+    const isCandidateAllowed = profile?.aiResumeBuilderEnabled ?? true;
+    const aiResumeBuilderEnabled = isGlobalAllowed && isCandidateAllowed;
     return res.status(200).json({
       success: true,
       message: "Login successful.",
@@ -200,7 +204,8 @@ var verifyOtp = async (req, res) => {
         hasFullName,
         email: profile?.email || "",
         fullName: profile?.fullName === "Candidate" ? "" : profile?.fullName || "",
-        profilePhotoUrl: profile?.profilePhotoUrl || null
+        profilePhotoUrl: profile?.profilePhotoUrl || null,
+        aiResumeBuilderEnabled
       }
     });
   } catch (error) {
@@ -224,6 +229,10 @@ var checkMe = async (req, res) => {
     const profile = user.jobSeekerProfile;
     const hasEmail = !!profile?.email;
     const hasFullName = !!(profile?.fullName && profile.fullName !== "Candidate");
+    const platformSettings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    const isGlobalAllowed = platformSettings?.allowSeekerAiResumeCreation ?? true;
+    const isCandidateAllowed = profile?.aiResumeBuilderEnabled ?? true;
+    const aiResumeBuilderEnabled = isGlobalAllowed && isCandidateAllowed;
     return res.status(200).json({
       success: true,
       user: {
@@ -234,7 +243,8 @@ var checkMe = async (req, res) => {
         hasFullName,
         email: profile?.email || "",
         fullName: profile?.fullName === "Candidate" ? "" : profile?.fullName || "",
-        profilePhotoUrl: profile?.profilePhotoUrl || null
+        profilePhotoUrl: profile?.profilePhotoUrl || null,
+        aiResumeBuilderEnabled
       }
     });
   } catch (error) {
@@ -615,8 +625,14 @@ var getProfile = async (req, res) => {
     }
     const completionScore = calculateCompletionScore(profile);
     const preferences = profile.jobPreferences || {};
+    const platformSettings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    const isGlobalAllowed = platformSettings?.allowSeekerAiResumeCreation ?? true;
+    const isCandidateAllowed = profile.aiResumeBuilderEnabled ?? true;
+    const aiResumeBuilderEnabled = isGlobalAllowed && isCandidateAllowed;
     const profileData = {
       completionScore,
+      aiResumeBuilderEnabled,
+      aiResumeBuilderLockedReason: !isGlobalAllowed ? "disabled_platform_wide" : !isCandidateAllowed ? "locked_by_admin" : null,
       availabilityStatus: profile.availabilityStatus || "available",
       // ✅ FIXED: Added this field
       fullName: profile.fullName || "",
@@ -2138,10 +2154,32 @@ ${data.achievements.join("\n")}
   }
   return text;
 };
+async function checkAiResumePermission(userId) {
+  try {
+    const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+    if (settings && settings.allowSeekerAiResumeCreation === false) {
+      return { allowed: false, message: "AI Resume creation is currently disabled platform-wide by the administrator." };
+    }
+    const profile = await prisma.jobSeekerProfile.findUnique({
+      where: { userId },
+      select: { aiResumeBuilderEnabled: true }
+    });
+    if (profile && profile.aiResumeBuilderEnabled === false) {
+      return { allowed: false, message: "AI Resume creation is locked for your account by the platform administrator." };
+    }
+    return { allowed: true };
+  } catch {
+    return { allowed: true };
+  }
+}
 var generateCV = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { customPrompt, jobDescription } = req.body;
+    const permission = await checkAiResumePermission(userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
       include: { skills: true, education: true, experience: true, projects: true, certifications: true, languages: true, achievements: true }
@@ -2404,6 +2442,10 @@ var getInlineSuggestions = async (req, res) => {
     if (!resume) return res.status(404).json({ success: false, message: "Resume not found" });
     const contentData = readContent(resume);
     if (!contentData.htmlContent) return res.status(422).json({ success: false, message: "Open in editor first" });
+    const permission = await checkAiResumePermission(userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
     const result = await generateInlineSuggestions(contentData.htmlContent);
     return res.json({ success: true, data: result });
   } catch (err) {
@@ -2425,6 +2467,10 @@ var improveSelectedText = async (req, res) => {
     if (action === "custom" && !customPrompt?.trim()) {
       return res.status(400).json({ success: false, message: "Custom prompt required" });
     }
+    const permission = await checkAiResumePermission(req.user.userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
     const result = await processTextSelection(selectedText, action, customPrompt, context);
     return res.json({ success: true, data: result });
   } catch (err) {
@@ -2441,6 +2487,10 @@ var generateRegionalCV = async (req, res) => {
     const userId = req.user.userId;
     const { country, style, jobDescription } = req.body;
     if (!country) return res.status(400).json({ success: false, message: "Country required" });
+    const permission = await checkAiResumePermission(userId);
+    if (!permission.allowed) {
+      return res.status(403).json({ success: false, message: permission.message });
+    }
     const profile = await prisma.jobSeekerProfile.findUnique({
       where: { userId },
       include: { skills: true, education: true, experience: true, projects: true, certifications: true, languages: true, achievements: true }
@@ -2639,6 +2689,14 @@ var applyToJob = async (req, res) => {
       if (!existingResume) {
         if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
         return res.status(404).json({ success: false, message: "Selected resume not found" });
+      }
+      if (jobPosting.disallowAiCv && existingResume.source === "built") {
+        if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          code: "MANUAL_PDF_REQUIRED",
+          message: "This employer requires a manually uploaded PDF resume. Direct AI-generated resumes cannot be attached automatically. Please download your resume as a PDF and upload the file to apply."
+        });
       }
       const contentData = existingResume.content ?? {};
       let rawText = contentData.rawText;
@@ -6807,7 +6865,24 @@ var companyLogin = async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ success: false, message: "Email and password required." });
     const normalizedEmail = email.trim().toLowerCase();
-    const company = await prisma.company.findUnique({ where: { email: normalizedEmail } });
+    const company = await prisma.company.findUnique({
+      where: { email: normalizedEmail },
+      include: {
+        subscription: {
+          include: {
+            plan: {
+              select: {
+                id: true,
+                name: true,
+                features: true,
+                maxJobPostings: true,
+                maxTeamMembers: true
+              }
+            }
+          }
+        }
+      }
+    });
     if (!company || !company.password)
       return res.status(401).json({ success: false, message: "Invalid credentials." });
     const isValid = await bcrypt3.compare(password, company.password);
@@ -6843,6 +6918,24 @@ var companyLogin = async (req, res) => {
     if (!adminMember)
       return res.status(422).json({ success: false, message: "No company workspace found." });
     const accessToken = issueSessionCookies(res, { userId: adminMember.user.id, globalRoles: adminMember.user.globalRoles });
+    let activeSub = company.subscription;
+    if (activeSub) {
+      activeSub = {
+        ...activeSub,
+        features: activeSub.features || activeSub.plan?.features || {}
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: "Free" } });
+      if (freePlan) {
+        activeSub = {
+          id: "free",
+          isActive: true,
+          planId: freePlan.id,
+          plan: freePlan,
+          features: freePlan.features
+        };
+      }
+    }
     return res.status(200).json({
       success: true,
       message: "Login successful.",
@@ -6850,10 +6943,19 @@ var companyLogin = async (req, res) => {
       user: {
         id: adminMember.user.id,
         globalRoles: adminMember.user.globalRoles,
+        rolesMask: adminMember.roles,
+        companyRoles: adminMember.roles,
+        roles: adminMember.roles,
         email: adminMember.user.jobSeekerProfile?.email || (adminMember.user.mobileNumber.includes("@") ? adminMember.user.mobileNumber : company.email),
         name: adminMember.user.jobSeekerProfile?.fullName || (adminMember.user.mobileNumber.includes("@") ? adminMember.user.mobileNumber.split("@")[0] : "Admin")
       },
-      company: { id: company.id, name: company.name, email: company.email, logoUrl: company.logoUrl || null }
+      company: {
+        id: company.id,
+        name: company.name,
+        email: company.email,
+        logoUrl: company.logoUrl || null,
+        subscription: activeSub
+      }
     });
   } catch (error) {
     console.error("companyLogin error:", error);
@@ -6893,7 +6995,27 @@ var checkCompanySession = async (req, res) => {
           where: { status: "active" },
           include: {
             company: {
-              select: { id: true, name: true, email: true, isVerified: true, logoUrl: true }
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                isVerified: true,
+                logoUrl: true,
+                createdAt: true,
+                subscription: {
+                  include: {
+                    plan: {
+                      select: {
+                        id: true,
+                        name: true,
+                        features: true,
+                        maxJobPostings: true,
+                        maxTeamMembers: true
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -6914,6 +7036,36 @@ var checkCompanySession = async (req, res) => {
       companyName: m.company.name,
       companyRoles: m.roles
     }));
+    let activeSub = activeMembership.company.subscription;
+    if (activeSub) {
+      activeSub = {
+        ...activeSub,
+        features: activeSub.features || activeSub.plan?.features || {}
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: "Free" } });
+      if (freePlan) {
+        activeSub = {
+          id: "default-free",
+          companyId: activeMembership.company.id,
+          planId: freePlan.id,
+          features: freePlan.features,
+          startsAt: activeMembership.company.createdAt,
+          expiresAt: null,
+          isActive: true,
+          notes: null,
+          createdAt: activeMembership.company.createdAt,
+          updatedAt: activeMembership.company.createdAt,
+          plan: {
+            id: freePlan.id,
+            name: freePlan.name,
+            features: freePlan.features,
+            maxJobPostings: freePlan.maxJobPostings,
+            maxTeamMembers: freePlan.maxTeamMembers
+          }
+        };
+      }
+    }
     return res.status(200).json({
       success: true,
       isAuthenticated: true,
@@ -6931,7 +7083,8 @@ var checkCompanySession = async (req, res) => {
         id: activeMembership.company.id,
         name: activeMembership.company.name,
         email: activeMembership.company.email,
-        logoUrl: activeMembership.company.logoUrl || null
+        logoUrl: activeMembership.company.logoUrl || null,
+        subscription: activeSub
       }
     });
   } catch (error) {
@@ -6996,6 +7149,19 @@ var getMyCompanyProfile = async (req, res) => {
               }
             }
           }
+        },
+        subscription: {
+          include: {
+            plan: {
+              select: {
+                id: true,
+                name: true,
+                features: true,
+                maxJobPostings: true,
+                maxTeamMembers: true
+              }
+            }
+          }
         }
       }
     });
@@ -7005,9 +7171,40 @@ var getMyCompanyProfile = async (req, res) => {
         message: "Company not found."
       });
     }
+    let activeSubscription = company.subscription;
+    if (activeSubscription) {
+      activeSubscription = {
+        ...activeSubscription,
+        features: activeSubscription.features || activeSubscription.plan?.features || {}
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: "Free" } });
+      if (freePlan) {
+        activeSubscription = {
+          id: "default-free",
+          companyId: company.id,
+          planId: freePlan.id,
+          features: freePlan.features,
+          startsAt: company.createdAt,
+          expiresAt: null,
+          isActive: true,
+          notes: null,
+          createdAt: company.createdAt,
+          updatedAt: company.createdAt,
+          plan: {
+            id: freePlan.id,
+            name: freePlan.name,
+            features: freePlan.features,
+            maxJobPostings: freePlan.maxJobPostings,
+            maxTeamMembers: freePlan.maxTeamMembers
+          }
+        };
+      }
+    }
     const mobileNumber = company.teamMembers.find((m) => m.userId === userId)?.user?.mobileNumber || null;
     const sanitizedCompany = {
       ...company,
+      subscription: activeSubscription,
       mobileNumber,
       // Include mobile from User
       services: company.services || [],
@@ -7571,7 +7768,8 @@ var createJob = async (req, res) => {
       salaryRange,
       deadline,
       openings,
-      status
+      status,
+      disallowAiCv
     } = req.body;
     const companyId = req.company?.companyId;
     if (!companyId) {
@@ -7592,7 +7790,8 @@ var createJob = async (req, res) => {
         salaryRange: salaryRange || null,
         deadline: deadline ? new Date(deadline) : null,
         openings: parseInt(openings, 10) || 1,
-        status: databaseStatus
+        status: databaseStatus,
+        disallowAiCv: Boolean(disallowAiCv)
       }
     });
     return res.status(201).json({
@@ -8363,7 +8562,6 @@ var teamMemberLogin = async (req, res) => {
       where: {
         OR: [
           { mobileNumber: normalizedEmail },
-          // Handles cases where an explicit email column is exposed on the User model
           ..."email" in prisma.user.fields ? [{ email: normalizedEmail }] : []
         ]
       },
@@ -8386,7 +8584,26 @@ var teamMemberLogin = async (req, res) => {
       },
       include: {
         company: {
-          select: { id: true, name: true, email: true, isVerified: true, logoUrl: true }
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            isVerified: true,
+            logoUrl: true,
+            subscription: {
+              include: {
+                plan: {
+                  select: {
+                    id: true,
+                    name: true,
+                    features: true,
+                    maxJobPostings: true,
+                    maxTeamMembers: true
+                  }
+                }
+              }
+            }
+          }
         }
       },
       orderBy: { createdAt: "asc" }
@@ -8421,6 +8638,24 @@ var teamMemberLogin = async (req, res) => {
       userId: user.id,
       globalRoles: user.globalRoles
     });
+    let activeSub = memberProfile.company.subscription;
+    if (activeSub) {
+      activeSub = {
+        ...activeSub,
+        features: activeSub.features || activeSub.plan?.features || {}
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: "Free" } });
+      if (freePlan) {
+        activeSub = {
+          id: "free",
+          isActive: true,
+          planId: freePlan.id,
+          plan: freePlan,
+          features: freePlan.features
+        };
+      }
+    }
     return res.status(200).json({
       success: true,
       accessToken,
@@ -8430,13 +8665,16 @@ var teamMemberLogin = async (req, res) => {
         email: user.jobSeekerProfile?.email || (user.mobileNumber.includes("@") ? user.mobileNumber : memberProfile.company.email),
         name: user.jobSeekerProfile?.fullName || (user.mobileNumber.includes("@") ? user.mobileNumber.split("@")[0] : "Admin"),
         globalRoles: user.globalRoles,
-        companyRoles: memberProfile.roles
+        rolesMask: memberProfile.roles,
+        companyRoles: memberProfile.roles,
+        roles: memberProfile.roles
       },
       company: {
         id: memberProfile.company.id,
         name: memberProfile.company.name,
         email: memberProfile.company.email,
-        logoUrl: memberProfile.company.logoUrl || null
+        logoUrl: memberProfile.company.logoUrl || null,
+        subscription: activeSub
       }
     });
   } catch (error) {
@@ -9431,6 +9669,123 @@ router8.patch(
 );
 var kanban_routes_default = router8;
 
+// src/controllers/featureRequest.controller.ts
+var createCompanyFeatureRequest = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: "Company authentication required" });
+    }
+    const { requestedFeatures, message, budgetRange } = req.body;
+    if (!requestedFeatures || typeof requestedFeatures !== "object") {
+      return res.status(400).json({ success: false, message: "requestedFeatures is required" });
+    }
+    const request = await prisma.companyFeatureRequest.create({
+      data: {
+        companyId,
+        requestedFeatures,
+        message: message ? String(message).trim() : null,
+        budgetRange: budgetRange ? String(budgetRange).trim() : null,
+        status: "PENDING"
+      },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            industry: true
+          }
+        }
+      }
+    });
+    return res.status(201).json({
+      success: true,
+      message: "Your custom business feature request has been submitted to EasyApply administrators.",
+      request
+    });
+  } catch (err) {
+    console.error("[FeatureRequest] createCompanyFeatureRequest error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var getMyCompanyFeatureRequests = async (req, res) => {
+  try {
+    const companyId = req.company?.companyId;
+    if (!companyId) {
+      return res.status(403).json({ success: false, message: "Company authentication required" });
+    }
+    const requests = await prisma.companyFeatureRequest.findMany({
+      where: { companyId },
+      orderBy: { createdAt: "desc" }
+    });
+    return res.json({ success: true, requests });
+  } catch (err) {
+    console.error("[FeatureRequest] getMyCompanyFeatureRequests error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var listAllFeatureRequests = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const where = {};
+    if (status && typeof status === "string") {
+      where.status = status.toUpperCase();
+    }
+    const requests = await prisma.companyFeatureRequest.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      include: {
+        company: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            industry: true,
+            size: true,
+            subscription: {
+              include: {
+                plan: {
+                  select: { id: true, name: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    return res.json({ success: true, requests });
+  } catch (err) {
+    console.error("[FeatureRequest] listAllFeatureRequests error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateFeatureRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminNotes } = req.body;
+    if (!status) {
+      return res.status(400).json({ success: false, message: "status is required" });
+    }
+    const updated = await prisma.companyFeatureRequest.update({
+      where: { id },
+      data: {
+        status: status.toUpperCase(),
+        ...adminNotes !== void 0 ? { adminNotes: adminNotes ? String(adminNotes).trim() : null } : {}
+      },
+      include: {
+        company: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+    return res.json({ success: true, request: updated });
+  } catch (err) {
+    console.error("[FeatureRequest] updateFeatureRequestStatus error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 // src/routes/company.routes.ts
 var upload3 = multer4({ storage: multer4.memoryStorage() });
 var router9 = Router4();
@@ -9476,6 +9831,8 @@ router9.post("/spot-jobs", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY
 router9.get("/spot-jobs/company-dashboard", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), SpotJobController.getCompanySpotDashboard);
 router9.get("/spot-jobs/:id/bookings", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), SpotJobController.getSpotJobBookings);
 router9.patch("/spot-jobs/:id/status", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), SpotJobController.updateSpotStatusByCompany);
+router9.post("/feature-requests", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), createCompanyFeatureRequest);
+router9.get("/feature-requests", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_VIEWER), getMyCompanyFeatureRequests);
 var company_routes_default = router9;
 
 // src/routes/publicJobs.routes.ts
@@ -9917,6 +10274,146 @@ var searchAllJobs = async (req, res) => {
   }
 };
 
+// src/controllers/adminSubscription.controller.ts
+var DEFAULT_FREE_FEATURES = {
+  jobPostings: true,
+  kanban: true,
+  atsScoring: false,
+  aiResumeScan: false,
+  aiResumeBuilder: false,
+  walkinInterview: false,
+  seekerDiscovery: false,
+  crmTalentPool: false,
+  spotJobs: false,
+  offerLetters: false,
+  interviewScheduling: false
+};
+var listPlans = async (_req, res) => {
+  try {
+    const plans = await prisma.subscriptionPlan.findMany({
+      orderBy: { createdAt: "asc" },
+      include: { _count: { select: { companySubscriptions: true } } }
+    });
+    return res.json({ success: true, plans });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var listPublicPlans = async (_req, res) => {
+  try {
+    const plans = await prisma.subscriptionPlan.findMany({
+      where: { isActive: true, isPublic: true },
+      orderBy: { createdAt: "asc" }
+    });
+    return res.json({ success: true, plans });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var createPlan = async (req, res) => {
+  try {
+    const { name, description, features, maxJobPostings, maxTeamMembers, price, isCustom, isPublic } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: "Plan name is required" });
+    const plan = await prisma.subscriptionPlan.create({
+      data: {
+        name,
+        description: description ?? null,
+        features: features ?? DEFAULT_FREE_FEATURES,
+        maxJobPostings: maxJobPostings ?? 3,
+        maxTeamMembers: maxTeamMembers ?? 2,
+        price: price ?? null,
+        isCustom: isCustom ?? false,
+        isPublic: isPublic !== void 0 ? Boolean(isPublic) : true
+      }
+    });
+    return res.status(201).json({ success: true, plan });
+  } catch (err) {
+    if (err?.code === "P2002") return res.status(409).json({ success: false, message: "A plan with this name already exists" });
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updatePlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, features, maxJobPostings, maxTeamMembers, price, isActive, isCustom, isPublic } = req.body;
+    const plan = await prisma.subscriptionPlan.update({
+      where: { id },
+      data: {
+        name,
+        description,
+        features,
+        maxJobPostings,
+        maxTeamMembers,
+        price,
+        isActive,
+        isCustom,
+        ...isPublic !== void 0 ? { isPublic: Boolean(isPublic) } : {}
+      }
+    });
+    return res.json({ success: true, plan });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var deactivatePlan = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.subscriptionPlan.update({ where: { id }, data: { isActive: false } });
+    return res.json({ success: true, message: "Plan deactivated" });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var assignSubscription = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { planId, features, expiresAt, notes } = req.body;
+    if (!planId) return res.status(400).json({ success: false, message: "planId is required" });
+    const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
+    if (!plan) return res.status(404).json({ success: false, message: "Plan not found" });
+    const subscription = await prisma.companySubscription.upsert({
+      where: { companyId },
+      update: {
+        planId,
+        features: features ?? null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        isActive: true,
+        notes: notes ?? null,
+        startsAt: /* @__PURE__ */ new Date()
+      },
+      create: {
+        companyId,
+        planId,
+        features: features ?? null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        isActive: true,
+        notes: notes ?? null
+      },
+      include: { plan: true }
+    });
+    return res.json({ success: true, subscription });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+var updateCompanyFeatureOverride = async (req, res) => {
+  try {
+    const { companyId } = req.params;
+    const { features } = req.body;
+    const sub = await prisma.companySubscription.findUnique({ where: { companyId } });
+    if (!sub) return res.status(404).json({ success: false, message: "No subscription found for this company" });
+    const existing = sub.features ?? {};
+    const updated = await prisma.companySubscription.update({
+      where: { companyId },
+      data: { features: { ...existing, ...features } },
+      include: { plan: true }
+    });
+    return res.json({ success: true, subscription: updated });
+  } catch {
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 // src/routes/publicJobs.routes.ts
 var router10 = express7.Router();
 router10.get("/public", optionalAuth, getPublicJobs);
@@ -9928,6 +10425,7 @@ router10.get("/companies/:identifier/jobs/:jobId", optionalAuth, getPublicJobDet
 router10.get("/search", optionalAuth, searchAllJobs);
 router10.get("/:jobId", optionalAuth, getPublicJobDetails);
 router10.get("/auth/me", optionalAuth, getCurrentUser);
+router10.get("/plans", listPublicPlans);
 var publicJobs_routes_default = router10;
 
 // src/routes/admin.routes.ts
@@ -10133,6 +10631,7 @@ var listSeekers = async (req, res) => {
           location: true,
           availabilityStatus: true,
           discoverable: true,
+          aiResumeBuilderEnabled: true,
           createdAt: true,
           _count: { select: { applications: true, skills: true } }
         }
@@ -10144,121 +10643,21 @@ var listSeekers = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-// src/controllers/adminSubscription.controller.ts
-var DEFAULT_FREE_FEATURES = {
-  jobPostings: true,
-  atsScoring: true,
-  aiResumeScan: true,
-  aiResumeBuilder: true,
-  walkinInterview: false,
-  seekerDiscovery: false,
-  crmTalentPool: false,
-  spotJobs: false,
-  offerLetters: true,
-  interviewScheduling: true,
-  kanban: true
-};
-var listPlans = async (_req, res) => {
-  try {
-    const plans = await prisma.subscriptionPlan.findMany({
-      orderBy: { createdAt: "asc" },
-      include: { _count: { select: { companySubscriptions: true } } }
-    });
-    return res.json({ success: true, plans });
-  } catch {
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-var createPlan = async (req, res) => {
-  try {
-    const { name, description, features, maxJobPostings, maxTeamMembers, price, isCustom } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: "Plan name is required" });
-    const plan = await prisma.subscriptionPlan.create({
-      data: {
-        name,
-        description: description ?? null,
-        features: features ?? DEFAULT_FREE_FEATURES,
-        maxJobPostings: maxJobPostings ?? 3,
-        maxTeamMembers: maxTeamMembers ?? 2,
-        price: price ?? null,
-        isCustom: isCustom ?? false
-      }
-    });
-    return res.status(201).json({ success: true, plan });
-  } catch (err) {
-    if (err?.code === "P2002") return res.status(409).json({ success: false, message: "A plan with this name already exists" });
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-var updatePlan = async (req, res) => {
+var toggleSeekerAiResumeBuilder = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, features, maxJobPostings, maxTeamMembers, price, isActive, isCustom } = req.body;
-    const plan = await prisma.subscriptionPlan.update({
+    const { aiResumeBuilderEnabled } = req.body;
+    if (typeof aiResumeBuilderEnabled !== "boolean") {
+      return res.status(400).json({ success: false, message: "aiResumeBuilderEnabled boolean is required" });
+    }
+    const updated = await prisma.jobSeekerProfile.update({
       where: { id },
-      data: { name, description, features, maxJobPostings, maxTeamMembers, price, isActive, isCustom }
+      data: { aiResumeBuilderEnabled },
+      select: { id: true, fullName: true, email: true, aiResumeBuilderEnabled: true }
     });
-    return res.json({ success: true, plan });
-  } catch {
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-var deactivatePlan = async (req, res) => {
-  try {
-    const { id } = req.params;
-    await prisma.subscriptionPlan.update({ where: { id }, data: { isActive: false } });
-    return res.json({ success: true, message: "Plan deactivated" });
-  } catch {
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-var assignSubscription = async (req, res) => {
-  try {
-    const { companyId } = req.params;
-    const { planId, features, expiresAt, notes } = req.body;
-    if (!planId) return res.status(400).json({ success: false, message: "planId is required" });
-    const plan = await prisma.subscriptionPlan.findUnique({ where: { id: planId } });
-    if (!plan) return res.status(404).json({ success: false, message: "Plan not found" });
-    const subscription = await prisma.companySubscription.upsert({
-      where: { companyId },
-      update: {
-        planId,
-        features: features ?? null,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
-        isActive: true,
-        notes: notes ?? null,
-        startsAt: /* @__PURE__ */ new Date()
-      },
-      create: {
-        companyId,
-        planId,
-        features: features ?? null,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
-        isActive: true,
-        notes: notes ?? null
-      },
-      include: { plan: true }
-    });
-    return res.json({ success: true, subscription });
-  } catch {
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-var updateCompanyFeatureOverride = async (req, res) => {
-  try {
-    const { companyId } = req.params;
-    const { features } = req.body;
-    const sub = await prisma.companySubscription.findUnique({ where: { companyId } });
-    if (!sub) return res.status(404).json({ success: false, message: "No subscription found for this company" });
-    const existing = sub.features ?? {};
-    const updated = await prisma.companySubscription.update({
-      where: { companyId },
-      data: { features: { ...existing, ...features } },
-      include: { plan: true }
-    });
-    return res.json({ success: true, subscription: updated });
-  } catch {
+    return res.json({ success: true, seeker: updated });
+  } catch (err) {
+    console.error("toggleSeekerAiResumeBuilder error:", err);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -10348,7 +10747,8 @@ var getSettings2 = async (_req, res) => {
         supportEmail: s?.supportEmail ?? null,
         maintenanceMode: s?.maintenanceMode ?? false,
         allowNewCompanyReg: s?.allowNewCompanyReg ?? true,
-        allowNewSeekerReg: s?.allowNewSeekerReg ?? true
+        allowNewSeekerReg: s?.allowNewSeekerReg ?? true,
+        allowSeekerAiResumeCreation: s?.allowSeekerAiResumeCreation ?? true
       }
     });
   } catch {
@@ -10423,10 +10823,11 @@ var testEmailSettings = async (req, res) => {
 };
 var updateAiSettings = async (req, res) => {
   try {
-    const { groqApiKey, groqModel } = req.body;
+    const { groqApiKey, groqModel, allowSeekerAiResumeCreation } = req.body;
     const data = {};
     if (groqApiKey && !groqApiKey.includes("\u2022")) data.groqApiKey = encrypt(groqApiKey);
     if (groqModel) data.groqModel = groqModel;
+    if (typeof allowSeekerAiResumeCreation === "boolean") data.allowSeekerAiResumeCreation = allowSeekerAiResumeCreation;
     await upsertSettings(data);
     invalidateSettingsCache();
     return res.json({ success: true, message: "AI settings updated" });
@@ -10450,7 +10851,7 @@ var updateVideoSettings = async (req, res) => {
 };
 var updateGeneralSettings = async (req, res) => {
   try {
-    const { platformName, platformLogoUrl, supportEmail, maintenanceMode, allowNewCompanyReg, allowNewSeekerReg } = req.body;
+    const { platformName, platformLogoUrl, supportEmail, maintenanceMode, allowNewCompanyReg, allowNewSeekerReg, allowSeekerAiResumeCreation } = req.body;
     const data = {};
     if (platformName !== void 0) data.platformName = platformName;
     if (platformLogoUrl !== void 0) data.platformLogoUrl = platformLogoUrl;
@@ -10458,6 +10859,7 @@ var updateGeneralSettings = async (req, res) => {
     if (typeof maintenanceMode === "boolean") data.maintenanceMode = maintenanceMode;
     if (typeof allowNewCompanyReg === "boolean") data.allowNewCompanyReg = allowNewCompanyReg;
     if (typeof allowNewSeekerReg === "boolean") data.allowNewSeekerReg = allowNewSeekerReg;
+    if (typeof allowSeekerAiResumeCreation === "boolean") data.allowSeekerAiResumeCreation = allowSeekerAiResumeCreation;
     await upsertSettings(data);
     invalidateSettingsCache();
     return res.json({ success: true, message: "General settings updated" });
@@ -10539,10 +10941,13 @@ router11.put("/companies/:companyId/subscription", adminAuth, assignSubscription
 router11.put("/companies/:companyId/subscription/features", adminAuth, updateCompanyFeatureOverride);
 router11.put("/walkin/rooms/:roomId/max-queue", adminAuth, overrideWalkInRoomMaxQueue);
 router11.get("/seekers", adminAuth, listSeekers);
+router11.put("/seekers/:id/ai-resume-builder", adminAuth, toggleSeekerAiResumeBuilder);
 router11.get("/subscriptions", adminAuth, listPlans);
 router11.post("/subscriptions", adminAuth, createPlan);
 router11.put("/subscriptions/:id", adminAuth, updatePlan);
 router11.delete("/subscriptions/:id", adminAuth, deactivatePlan);
+router11.get("/feature-requests", adminAuth, listAllFeatureRequests);
+router11.put("/feature-requests/:id/status", adminAuth, updateFeatureRequestStatus);
 router11.get("/settings", adminAuth, getSettings2);
 router11.put("/settings/payment", adminAuth, updatePaymentSettings);
 router11.post("/settings/payment/test", adminAuth, testPaymentSettings);
@@ -11285,11 +11690,11 @@ var getSeekerQueuePosition = async (req, res) => {
     const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code2.toUpperCase() } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
-    if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
+    if (!profile) return res.json({ success: false, inQueue: false, message: "Profile not found" });
     const entry = await prisma.walkInQueueEntry.findUnique({
       where: { roomId_jobSeekerProfileId: { roomId: room.id, jobSeekerProfileId: profile.id } }
     });
-    if (!entry) return res.status(404).json({ success: false, message: "You are not in this queue" });
+    if (!entry) return res.json({ success: false, inQueue: false, message: "You are not in this queue" });
     const ahead = await prisma.walkInQueueEntry.count({
       where: { roomId: room.id, status: "waiting", priorityScore: { gt: entry.priorityScore } }
     });
@@ -11363,6 +11768,9 @@ var listActiveWalkInRooms = async (req, res) => {
         } : {}
       }
     });
+    let availableRoomsCount = 0;
+    let openRoomsCount = 0;
+    let pausedRoomsCount = 0;
     const enrichedRooms = rooms.map((room) => {
       let mySkillMatch = null;
       if (candidateSkills.length > 0) {
@@ -11370,15 +11778,38 @@ var listActiveWalkInRooms = async (req, res) => {
       }
       const myEntry = room.queue && room.queue.length > 0 ? room.queue[0] : null;
       const hasApplied = Boolean(myEntry);
+      const isFinished = Boolean(myEntry && ["rejected", "passed", "hired", "skipped", "completed"].includes(myEntry.status.toLowerCase()));
+      const isActiveInQueue = Boolean(myEntry && ["waiting", "interviewing"].includes(myEntry.status.toLowerCase()));
+      const canJoin = room.status === "OPEN" && !hasApplied;
+      if (room.status === "OPEN") {
+        openRoomsCount++;
+        if (!hasApplied) {
+          availableRoomsCount++;
+        }
+      } else if (room.status === "PAUSED") {
+        pausedRoomsCount++;
+      }
       return {
         ...room,
         queue: void 0,
         mySkillMatch,
         myEntry,
-        hasApplied
+        hasApplied,
+        isFinished,
+        isActiveInQueue,
+        canJoin
       };
     });
-    return res.json({ success: true, rooms: enrichedRooms });
+    return res.json({
+      success: true,
+      rooms: enrichedRooms,
+      stats: {
+        totalActive: rooms.length,
+        openRooms: openRoomsCount,
+        pausedRooms: pausedRoomsCount,
+        availableToJoin: availableRoomsCount
+      }
+    });
   } catch (err) {
     console.error("[WalkIn] listActiveRooms", err);
     return res.status(500).json({ success: false, message: "Server error" });
@@ -11388,7 +11819,7 @@ var getMyWalkInQueues = async (req, res) => {
   try {
     const userId = req.user.userId;
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
-    if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
+    if (!profile) return res.json({ success: true, queues: [] });
     const entries = await prisma.walkInQueueEntry.findMany({
       where: {
         jobSeekerProfileId: profile.id,

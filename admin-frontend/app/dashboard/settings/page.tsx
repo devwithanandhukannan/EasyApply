@@ -443,9 +443,10 @@ export default function SettingsPage() {
               <div style={{ marginBottom: '24px' }}>
                 <label className="label">Inference Model</label>
                 <select className="input" value={groqModel} onChange={(e) => setGroqModel(e.target.value)}>
-                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Recommended - High Accuracy)</option>
-                  <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Fastest)</option>
-                  <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Long Context)</option>
+                  <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (Recommended - High Accuracy)</option>
+                  <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b (Fast & Accurate)</option>
+                  <option value="openai/gpt-oss-20b">openai/gpt-oss-20b (Fastest)</option>
+                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Legacy)</option>
                 </select>
               </div>
 

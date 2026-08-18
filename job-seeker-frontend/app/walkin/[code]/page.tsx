@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/app/lib/axios';
+import { useAuth } from '@/app/contexts/AuthContext';
 import {
   Users,
   Video,
@@ -18,6 +19,10 @@ import {
   BadgeCheck,
   LogOut,
   Upload,
+  Copy,
+  Check,
+  Share2,
+  ExternalLink,
 } from 'lucide-react';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
 import Link from 'next/link';
@@ -62,6 +67,7 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
   const resolvedParams = use(params);
   const code = resolvedParams.code.toUpperCase();
   const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const { showToast } = useGlassToast();
 
   const [room, setRoom] = useState<RoomInfo | null>(null);
@@ -75,11 +81,31 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
   const [resumes, setResumes] = useState<ResumeItem[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState<string>('');
 
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
   useEffect(() => {
     fetchRoomInfo();
     checkMyPosition();
-    fetchResumes();
-  }, [code]);
+    if (isAuthenticated) {
+      fetchResumes();
+    }
+  }, [code, isAuthenticated]);
+
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(true);
+    showToast('Code Copied', `Room code ${code} copied to clipboard`, 'success');
+    setTimeout(() => setCopiedCode(false), 2200);
+  };
+
+  const handleCopyLink = () => {
+    const link = typeof window !== 'undefined' ? window.location.href : `/walkin/${code}`;
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    showToast('Link Copied', 'Direct interview room link copied to clipboard', 'success');
+    setTimeout(() => setCopiedLink(false), 2200);
+  };
 
   // Poll position every 5s if in queue
   useEffect(() => {
@@ -92,10 +118,10 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
 
   const fetchResumes = async () => {
     try {
-      const res = await api.get('/resumes');
+      const res = await api.get('/jobseeker/resumes');
       if (res.data?.success) {
-        setResumes(res.data.resumes || []);
-        const primary = res.data.resumes?.find((r: ResumeItem) => r.isPrimary);
+        setResumes(res.data.data || []);
+        const primary = res.data.data?.find((r: ResumeItem) => r.isPrimary);
         if (primary) setSelectedResumeId(primary.id);
       }
     } catch {
@@ -138,6 +164,12 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
   };
 
   const handleJoinQueue = async () => {
+    if (!isAuthenticated) {
+      showToast('Sign In Required', 'Please sign in to your job seeker account to join the queue.', 'info');
+      router.push(`/login?redirect=/walkin/${code}`);
+      return;
+    }
+
     try {
       setJoining(true);
       const res = await api.post(`/walkin/rooms/${code}/join`, {
@@ -155,12 +187,15 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
         showToast('Already Applied', res.data?.message || 'You have already applied to this room.', 'info');
       }
     } catch (err: any) {
-      if (err.response?.data?.alreadyApplied && err.response?.data?.entry) {
+      if (err.response?.status === 401) {
+        showToast('Sign In Required', 'Please sign in to join the queue.', 'info');
+        router.push(`/login?redirect=/walkin/${code}`);
+      } else if (err.response?.data?.alreadyApplied && err.response?.data?.entry) {
         setEntry(err.response.data.entry);
         setQueuePos(err.response.data.queuePosition || 1);
         showToast('Already Applied', err.response.data.message || 'You have already applied to this room.', 'info');
       } else {
-        showToast('Error', err.response?.data?.message || 'Failed to join queue. Make sure you are logged in.', 'danger');
+        showToast('Error', err.response?.data?.message || 'Failed to join queue.', 'danger');
       }
     } finally {
       setJoining(false);
@@ -206,7 +241,7 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
           <p className="text-xs text-zinc-500">{error || 'This interview room does not exist or has ended.'}</p>
           <div className="pt-2 flex flex-col gap-2">
             <Link
-              href="/dashboard/walkin"
+              href="/companies"
               className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all"
             >
               Browse Active Walk-In Rooms
@@ -220,18 +255,43 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
   return (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4 sm:p-6">
       <div className="max-w-xl w-full space-y-6">
-        {/* Navigation Link */}
-        <div className="flex items-center justify-between">
+        {/* Navigation & Code Bar */}
+        <div className="flex items-center justify-between gap-3">
           <Link
-            href="/dashboard/walkin"
+            href="/companies"
             className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back to Walk-In Hub</span>
+            <span>Explore All Rooms</span>
           </Link>
-          <span className="text-xs text-zinc-500 font-mono">
-            Room: <strong className="text-indigo-400">{room.roomCode}</strong>
-          </span>
+
+          {/* Copy Code & Share Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopyCode}
+              className={`px-2.5 py-1 rounded-lg border text-xs font-mono font-bold flex items-center gap-1.5 transition ${
+                copiedCode
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                  : 'bg-zinc-900 border-zinc-800 text-indigo-400 hover:bg-zinc-800'
+              }`}
+              title="Copy Room Code"
+            >
+              <span>Code: {room.roomCode}</span>
+              {copiedCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+
+            <button
+              onClick={handleCopyLink}
+              className={`p-1.5 rounded-lg border text-xs transition ${
+                copiedLink
+                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white'
+              }`}
+              title="Copy Room Link"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
+            </button>
+          </div>
         </div>
 
         {/* Company & Room Header Card */}
@@ -391,7 +451,7 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
                 onClick={() =>
                   router.push(`/meet/${room.livekitRoom}?token=${encodeURIComponent(entry.livekitToken || '')}`)
                 }
-                className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all scale-[1.02] animate-pulse"
+                className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black font-extrabold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all scale-[1.02] animate-pulse cursor-pointer"
               >
                 <Video className="w-5 h-5" />
                 <span>Join Video Interview Room Now</span>
@@ -401,14 +461,14 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
               <div className="pt-2 flex items-center justify-between gap-3">
                 <button
                   onClick={checkMyPosition}
-                  className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold"
+                  className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Refresh Position
                 </button>
                 <button
                   onClick={handleLeaveQueue}
                   disabled={leaving}
-                  className="px-4 py-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40 text-rose-400 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                  className="px-4 py-2.5 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/40 text-rose-400 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>{leaving ? 'Leaving...' : 'Leave Queue'}</span>
@@ -417,7 +477,7 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
             ) : (
               <div className="pt-2">
                 <Link
-                  href="/dashboard/walkin"
+                  href="/companies"
                   className="w-full py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all"
                 >
                   <span>Browse Other Walk-In Rooms</span>
@@ -425,6 +485,28 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
                 </Link>
               </div>
             )}
+          </div>
+        ) : !isAuthenticated ? (
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-5">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Instant Walk-In Queue</span>
+              </div>
+              <h3 className="text-lg font-bold text-white">Join {room.company.name}&apos;s Walk-In Queue</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Sign in to your EasyApply account to upload or select your CV, compute your real-time skill score match, and join the live video evaluation room queue.
+              </p>
+            </div>
+
+            <button
+              onClick={() => router.push(`/login?redirect=/walkin/${code}`)}
+              disabled={room.status !== 'OPEN'}
+              className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition-all active:scale-98 cursor-pointer"
+            >
+              <span>Sign In to Join Walk-In Queue</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         ) : (
           <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 sm:p-8 space-y-5">
@@ -532,7 +614,7 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
             <button
               onClick={handleJoinQueue}
               disabled={joining || room.status !== 'OPEN'}
-              className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition-all active:scale-98"
+              className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 transition-all active:scale-98 cursor-pointer"
             >
               {joining ? (
                 <>

@@ -11,9 +11,39 @@ import {
   listDiscoverableSeekers, getDiscoverableSeekerProfile
 } from '../controllers/seekerDiscovery.controller.ts';
 
-import { upload } from '../utils/multer.ts';
+import multer from 'multer';
 
 const router = Router();
+
+const cvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'image/jpeg',
+      'image/png',
+      'image/jpg',
+      'image/webp',
+    ];
+    if (allowed.includes(file.mimetype) || file.mimetype.startsWith('text/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid CV file format. Please upload a PDF, DOCX, DOC, or Image file.'));
+    }
+  },
+});
+
+const handleCvUpload = (req: any, res: any, next: any) => {
+  cvUpload.single('cv')(req, res, (err: any) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message || 'File upload error' });
+    }
+    next();
+  });
+};
 
 // ─── WALK-IN ROOMS ────────────────────────────────────────────────────────────
 
@@ -36,7 +66,7 @@ router.put('/queue/:entryId/priority', authenticateCompany, updateQueueEntryPrio
 
 // Seeker — join, check position, list my queues, leave queue
 router.get('/my-queues', authenticateToken, getMyWalkInQueues);
-router.post('/rooms/:code/join', authenticateToken, upload.single('cv'), joinWalkInQueue);
+router.post('/rooms/:code/join', authenticateToken, handleCvUpload, joinWalkInQueue);
 router.get('/rooms/:code/position', authenticateToken, getSeekerQueuePosition);
 router.post('/rooms/:code/leave', authenticateToken, leaveWalkInQueue);
 

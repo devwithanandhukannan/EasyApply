@@ -389,7 +389,6 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
       where: {
         OR: [
           { mobileNumber: normalizedEmail },
-          // Handles cases where an explicit email column is exposed on the User model
           ...( 'email' in prisma.user.fields ? [{ email: normalizedEmail }] : [] )
         ]
       },
@@ -415,7 +414,26 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
       },
       include: {
         company: {
-          select: { id: true, name: true, email: true, isVerified: true, logoUrl: true }
+          select: { 
+            id: true, 
+            name: true, 
+            email: true, 
+            isVerified: true, 
+            logoUrl: true,
+            subscription: {
+              include: {
+                plan: {
+                  select: {
+                    id: true,
+                    name: true,
+                    features: true,
+                    maxJobPostings: true,
+                    maxTeamMembers: true,
+                  }
+                }
+              }
+            }
+          }
         }
       },
       orderBy: { createdAt: 'asc' }
@@ -429,7 +447,6 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
     }
 
     // 3. Fallback Password Resolution Check
-    // Extracts the password string regardless of whether it resides on the TeamMember row or the parent User record
     const targetPasswordHash = memberProfile.password || (user as any).password;
     if (!targetPasswordHash) {
       return res.status(401).json({ 
@@ -460,6 +477,25 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
       globalRoles: user.globalRoles 
     });
 
+    let activeSub = memberProfile.company.subscription;
+    if (activeSub) {
+      activeSub = {
+        ...activeSub,
+        features: (activeSub.features || activeSub.plan?.features || {}) as any,
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: 'Free' } });
+      if (freePlan) {
+        activeSub = {
+          id: 'free',
+          isActive: true,
+          planId: freePlan.id,
+          plan: freePlan,
+          features: freePlan.features as any,
+        } as any;
+      }
+    }
+
     return res.status(200).json({
       success: true,
       accessToken,
@@ -469,13 +505,16 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
         email: user.jobSeekerProfile?.email || (user.mobileNumber.includes('@') ? user.mobileNumber : memberProfile.company.email),
         name: user.jobSeekerProfile?.fullName || (user.mobileNumber.includes('@') ? user.mobileNumber.split('@')[0] : 'Admin'), 
         globalRoles: user.globalRoles,
-        companyRoles: memberProfile.roles 
+        rolesMask: memberProfile.roles,
+        companyRoles: memberProfile.roles,
+        roles: memberProfile.roles 
       },
       company: { 
         id: memberProfile.company.id, 
-        name: memberProfile.company.name,
-        email: memberProfile.company.email,
-        logoUrl: memberProfile.company.logoUrl || null
+        name: memberProfile.company.name, 
+        email: memberProfile.company.email, 
+        logoUrl: memberProfile.company.logoUrl || null,
+        subscription: activeSub,
       }
     });
 

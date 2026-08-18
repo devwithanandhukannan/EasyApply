@@ -226,9 +226,9 @@ export const joinWalkInQueue = async (req: Request, res: Response) => {
     }
 
     // Candidate experience text from profile
-    const candidateSkills = profile.skills.map(s => s.name);
-    const candidateExpText = profile.experience
-      .map(e => `${e.role} at ${e.company}${e.description ? ` (${e.description})` : ''}`)
+    const candidateSkills = (profile.skills || []).map(s => s.name);
+    const candidateExpText = (profile.experience || [])
+      .map(e => `${e.role || ''} at ${e.company || ''}${e.description ? ` (${e.description})` : ''}`)
       .join('; ');
 
     // 3. AI Validation & Score Matrix Generation
@@ -239,13 +239,13 @@ export const joinWalkInQueue = async (req: Request, res: Response) => {
       {
         title: room.title,
         description: room.description,
-        requiredSkills: room.requiredSkills,
+        requiredSkills: room.requiredSkills || [],
         minExperience: room.minExperience,
         evaluationCriteria: room.evaluationCriteria
       }
     );
 
-    const overallScore = cvAnalysis.overallScore;
+    const overallScore = cvAnalysis?.overallScore ?? 50;
     const isPriority = overallScore >= (room.priorityThreshold ?? 70);
     const initialStatus = isPriority ? 'priority' : 'waiting';
 
@@ -278,9 +278,9 @@ export const joinWalkInQueue = async (req: Request, res: Response) => {
         ? `⭐ Priority Shortlist! You match ${overallScore}% of room criteria.`
         : `You are #${ahead + 1} in the queue with ${overallScore}% score.`
     });
-  } catch (err) {
-    console.error('[WalkIn] joinQueue', err);
-    return res.status(500).json({ success: false, message: 'Server error' });
+  } catch (err: any) {
+    console.error('[WalkIn] joinQueue error:', err);
+    return res.status(500).json({ success: false, message: err?.message || 'Server error while joining queue' });
   }
 };
 

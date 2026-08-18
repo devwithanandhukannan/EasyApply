@@ -204,7 +204,25 @@ export const companyLogin = async (req: Request, res: Response) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const company = await prisma.company.findUnique({ where: { email: normalizedEmail } });
+    const company = await prisma.company.findUnique({ 
+      where: { email: normalizedEmail },
+      include: {
+        subscription: {
+          include: {
+            plan: {
+              select: {
+                id: true,
+                name: true,
+                features: true,
+                maxJobPostings: true,
+                maxTeamMembers: true,
+              }
+            }
+          }
+        }
+      }
+    });
+
     if (!company || !company.password)
       return res.status(401).json({ success: false, message: 'Invalid credentials.' });
 
@@ -244,6 +262,25 @@ export const companyLogin = async (req: Request, res: Response) => {
 
     const accessToken = issueSessionCookies(res, { userId: adminMember.user.id, globalRoles: adminMember.user.globalRoles });
 
+    let activeSub = company.subscription;
+    if (activeSub) {
+      activeSub = {
+        ...activeSub,
+        features: (activeSub.features || activeSub.plan?.features || {}) as any,
+      };
+    } else {
+      const freePlan = await prisma.subscriptionPlan.findUnique({ where: { name: 'Free' } });
+      if (freePlan) {
+        activeSub = {
+          id: 'free',
+          isActive: true,
+          planId: freePlan.id,
+          plan: freePlan,
+          features: freePlan.features as any,
+        } as any;
+      }
+    }
+
     return res.status(200).json({
       success: true,
       message: 'Login successful.',
@@ -251,10 +288,19 @@ export const companyLogin = async (req: Request, res: Response) => {
       user: { 
         id: adminMember.user.id, 
         globalRoles: adminMember.user.globalRoles,
+        rolesMask: adminMember.roles,
+        companyRoles: adminMember.roles,
+        roles: adminMember.roles,
         email: adminMember.user.jobSeekerProfile?.email || (adminMember.user.mobileNumber.includes('@') ? adminMember.user.mobileNumber : company.email),
         name: adminMember.user.jobSeekerProfile?.fullName || (adminMember.user.mobileNumber.includes('@') ? adminMember.user.mobileNumber.split('@')[0] : 'Admin')
       },
-      company: { id: company.id, name: company.name, email: company.email, logoUrl: company.logoUrl || null },
+      company: { 
+        id: company.id, 
+        name: company.name, 
+        email: company.email, 
+        logoUrl: company.logoUrl || null,
+        subscription: activeSub,
+      },
     });
   } catch (error) {
     console.error('companyLogin error:', error);

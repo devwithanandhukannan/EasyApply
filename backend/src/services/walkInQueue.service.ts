@@ -1,10 +1,7 @@
 import { prisma } from '../utils/prisma.ts';
 import mammoth from 'mammoth';
 import PDFParser from 'pdf2json';
-import Groq from 'groq-sdk';
-
-const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
-const MODEL = 'llama-3.3-70b-versatile';
+import { createGroqChatCompletion } from './groq.service.ts';
 
 // ─── 1. EXTRACT RAW TEXT FROM CV BUFFER ──────────────────────────────────────
 
@@ -100,7 +97,7 @@ export async function evaluateCandidateCvAgainstRoom(
   let heuristicExpScore = 60;
   let heuristicOverall = Math.round((heuristicSkillScore * 0.7) + (heuristicExpScore * 0.3));
 
-  if (!groq || (!cvText.trim() && candidateSkills.length === 0)) {
+  if (!process.env.GROQ_API_KEY || (!cvText.trim() && candidateSkills.length === 0)) {
     return {
       overallScore: Math.max(10, Math.min(100, heuristicOverall)),
       skillScore: heuristicSkillScore,
@@ -152,8 +149,7 @@ Return ONLY a valid JSON object matching this structure:
   "summary": "Candidate shows strong expertise in required web technologies with relevant production experience."
 }`;
 
-    const completion = await groq.chat.completions.create({
-      model: MODEL,
+    const completion = await createGroqChatCompletion({
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
       response_format: { type: 'json_object' }

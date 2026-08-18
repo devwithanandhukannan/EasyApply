@@ -6,7 +6,8 @@ import {
   ArrowLeft, MapPin, Clock, DollarSign, Users, Calendar,
   Edit, Trash2, Building2, Target, ChevronRight,
   Sparkles, UserCheck, UserX, Eye, BarChart3,
-  CheckSquare, Square, Check, Filter, X, MoveHorizontal
+  CheckSquare, Square, Check, Filter, X, MoveHorizontal,
+  Briefcase
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import JobPostingModal from '@/app/components/JobPostingModal';
@@ -16,26 +17,26 @@ import { useGlassToast } from '@/app/components/GlassToastContainer';
 import { useAuth } from '@/app/contexts/AuthContext';
 
 const STATUS_STYLES: Record<string, string> = {
-  active:      'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  closed:      'bg-red-500/10 text-red-400 border-red-500/20',
-  draft:       'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  applied:     'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  screened:    'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
-  technical_round: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  hr_round:    'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-  offer_sent:  'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  hired:       'bg-green-500/10 text-green-400 border-green-500/20',
-  rejected:    'bg-red-500/10 text-red-400 border-red-500/20',
+  active:          'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border-[#34c759]/20',
+  closed:          'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20',
+  draft:           'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20',
+  applied:         'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/20',
+  screened:        'bg-[#5856d6]/10 text-[#5856d6] border-[#5856d6]/20',
+  technical_round: 'bg-[#af52de]/10 text-[#af52de] border-[#af52de]/20',
+  hr_round:        'bg-[#30b0c7]/10 text-[#30b0c7] border-[#30b0c7]/20',
+  offer_sent:      'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20',
+  hired:           'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border-[#34c759]/20',
+  rejected:        'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20',
 };
 
 const STAGE_COLUMNS = [
-  { key: 'applied', label: 'Applied' },
-  { key: 'screened', label: 'Screened' },
-  { key: 'technical_round', label: 'Technical Round' },
-  { key: 'hr_round', label: 'HR Round' },
-  { key: 'offer_sent', label: 'Offer Sent' },
-  { key: 'hired', label: 'Hired' },
-  { key: 'rejected', label: 'Rejected' }
+  { key: 'applied', label: 'Applied', color: '#0071e3' },
+  { key: 'screened', label: 'Screened', color: '#5856d6' },
+  { key: 'technical_round', label: 'Technical Round', color: '#af52de' },
+  { key: 'hr_round', label: 'HR Round', color: '#30b0c7' },
+  { key: 'offer_sent', label: 'Offer Sent', color: '#ff9500' },
+  { key: 'hired', label: 'Hired', color: '#34c759' },
+  { key: 'rejected', label: 'Rejected', color: '#ff3b30' }
 ];
 
 export default function JobDetailsPage() {
@@ -188,8 +189,8 @@ export default function JobDetailsPage() {
   };
 
   if (isLoading) return (
-    <div className="flex items-center justify-center min-h-screen bg-black">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-white" />
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <div className="h-7 w-7 animate-spin rounded-full border-2 border-black/[0.1] border-t-[#0071e3]" />
     </div>
   );
   if (!job) return null;
@@ -198,42 +199,57 @@ export default function JobDetailsPage() {
   const kanbanData = getKanbanColumnsData();
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 px-4 sm:px-6 py-6 bg-black min-h-screen text-zinc-300">
+    <div className="max-w-7xl mx-auto space-y-6">
       
-      {/* Back button */}
-      <button onClick={() => router.push('/dashboard/jobs')}
-        className="inline-flex items-center gap-2 text-sm text-zinc-500 hover:text-white transition-colors">
-        <ArrowLeft size={16} /> Back to Jobs
-      </button>
+      {/* Top back button */}
+      <div>
+        <button
+          onClick={() => router.push('/dashboard/jobs')}
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition shadow-xs cursor-pointer"
+        >
+          <ArrowLeft size={14} className="text-[#86868b]" />
+          <span>Back to Jobs</span>
+        </button>
+      </div>
 
       {/* Job header card */}
-      <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6 shadow-sm">
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-6 sm:p-7 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
         <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-1">{job.title}</h1>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-500">
+          <div className="space-y-1.5">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">
+              {job.title}
+            </h1>
+            <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-[#86868b]">
               {job.department && (
                 <span className="flex items-center gap-1.5">
-                  <Building2 size={14} /> {job.department}
+                  <Building2 size={14} className="text-[#86868b]" /> {job.department}
                 </span>
               )}
               <span className="flex items-center gap-1.5">
-                <Calendar size={14} /> Posted {new Date(job.createdAt).toLocaleDateString()}
+                <Calendar size={14} className="text-[#86868b]" /> Posted {new Date(job.createdAt).toLocaleDateString()}
               </span>
             </div>
           </div>
+          
           <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded-full text-xs font-medium border ${STATUS_STYLES[job.status] || STATUS_STYLES.active}`}>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold border uppercase tracking-wider ${STATUS_STYLES[job.status] || STATUS_STYLES.active}`}>
               {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
             </span>
             {(isAdmin || isHR) && (
               <>
-                <button onClick={() => setEditOpen(true)}
-                  className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-white transition-colors">
+                <button
+                  onClick={() => setEditOpen(true)}
+                  className="p-2 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] rounded-2xl text-[#1d1d1f] dark:text-white border border-black/[0.04] transition cursor-pointer"
+                  title="Edit Job"
+                >
                   <Edit size={16} />
                 </button>
-                <button onClick={handleDelete} disabled={isDeleting}
-                  className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors disabled:opacity-50">
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="p-2 bg-[#ff3b30]/10 hover:bg-[#ff3b30]/20 rounded-2xl text-[#ff3b30] border border-[#ff3b30]/20 transition disabled:opacity-40 cursor-pointer"
+                  title="Delete Job"
+                >
                   <Trash2 size={16} />
                 </button>
               </>
@@ -242,64 +258,98 @@ export default function JobDetailsPage() {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-zinc-800">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-zinc-800 rounded-lg"><Clock size={16} className="text-zinc-400" /></div>
-            <div><p className="text-xs text-zinc-500">Job Type</p><p className="text-sm font-medium text-white">{job.jobType}</p></div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-5 border-t border-black/[0.06] dark:border-white/[0.08]">
+          <div className="flex items-center gap-3 bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+            <div className="w-10 h-10 rounded-xl bg-white dark:bg-[#1c1c1e] flex items-center justify-center text-[#0071e3] shadow-xs shrink-0">
+              <Briefcase size={18} />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">Job Type</p>
+              <p className="text-sm font-bold text-[#1d1d1f] dark:text-white">{job.jobType}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-zinc-800 rounded-lg"><MapPin size={16} className="text-zinc-400" /></div>
-            <div><p className="text-xs text-zinc-500">Location</p><p className="text-sm font-medium text-white">{job.locationType}</p></div>
+
+          <div className="flex items-center gap-3 bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+            <div className="w-10 h-10 rounded-xl bg-white dark:bg-[#1c1c1e] flex items-center justify-center text-[#5856d6] shadow-xs shrink-0">
+              <MapPin size={18} />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">Location</p>
+              <p className="text-sm font-bold text-[#1d1d1f] dark:text-white">{job.locationType}</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-zinc-800 rounded-lg"><Users size={16} className="text-zinc-400" /></div>
-            <div><p className="text-xs text-zinc-500">Openings</p><p className="text-sm font-medium text-white">{job.openings} open</p></div>
+
+          <div className="flex items-center gap-3 bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+            <div className="w-10 h-10 rounded-xl bg-white dark:bg-[#1c1c1e] flex items-center justify-center text-[#ff9500] shadow-xs shrink-0">
+              <Users size={18} />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">Openings</p>
+              <p className="text-sm font-bold text-[#1d1d1f] dark:text-white">{job.openings} open</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-zinc-800 rounded-lg"><BarChart3 size={16} className="text-zinc-400" /></div>
-            <div><p className="text-xs text-zinc-500">Applicants</p><p className="text-sm font-medium text-white">{totalApps} total</p></div>
+
+          <div className="flex items-center gap-3 bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+            <div className="w-10 h-10 rounded-xl bg-white dark:bg-[#1c1c1e] flex items-center justify-center text-[#248a3d] dark:text-[#30d158] shadow-xs shrink-0">
+              <BarChart3 size={18} />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider">Applicants</p>
+              <p className="text-sm font-bold text-[#1d1d1f] dark:text-white">{totalApps} total</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs with blinking alert on top of the layout option */}
-      <div className="border-b border-zinc-800 flex justify-between items-center">
-        <div className="flex gap-6">
-          <button onClick={() => setActiveTab('details')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-colors capitalize ${
-              activeTab === 'details' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}>
+      {/* Tabs bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <div className="flex items-center p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+          <button
+            onClick={() => setActiveTab('details')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              activeTab === 'details'
+                ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+            }`}
+          >
             Job Details
           </button>
           
-          <button onClick={() => setActiveTab('applicants')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-all capitalize flex items-center gap-1.5 relative ${
-              activeTab === 'applicants' ? 'border-white text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'
-            }`}>
-            <span>Applicants ({totalApps})</span>
-            
-            {/* High-fidelity glowing notification alert pill layer above the element */}
-            {totalApps > 0 && (
-              <span className="absolute -top-1.5 -right-3.5 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.9)]"></span>
-              </span>
-            )}
+          <button
+            onClick={() => setActiveTab('applicants')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer relative ${
+              activeTab === 'applicants'
+                ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+            }`}
+          >
+            <span>Applicants</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#0071e3]/10 text-[#0071e3]">
+              {totalApps}
+            </span>
           </button>
         </div>
         
         {activeTab === 'applicants' && (
-          <div className="flex bg-zinc-800 rounded-lg p-0.5">
-            <button onClick={() => setViewMode('list')}
-              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                viewMode === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
-              }`}>
+          <div className="flex items-center p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+              }`}
+            >
               List
             </button>
-            <button onClick={() => setViewMode('kanban')}
-              className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                viewMode === 'kanban' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'
-              }`}>
+            <button
+              onClick={() => setViewMode('kanban')}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                viewMode === 'kanban'
+                  ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+              }`}
+            >
               Kanban
             </button>
           </div>
@@ -308,48 +358,55 @@ export default function JobDetailsPage() {
 
       {/* Details Tab View */}
       {activeTab === 'details' && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           { (job.location || job.experienceRequired || job.salaryRange) && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {job.location && (
-                <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">City</p>
-                  <p className="text-white">{job.location}</p>
+                <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
+                  <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">City / Region</p>
+                  <p className="text-sm font-bold text-[#1d1d1f] dark:text-white">{job.location}</p>
                 </div>
               )}
               {job.experienceRequired && (
-                <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Experience</p>
-                  <p className="text-white">{job.experienceRequired}</p>
+                <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
+                  <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">Experience Required</p>
+                  <p className="text-sm font-bold text-[#1d1d1f] dark:text-white">{job.experienceRequired}</p>
                 </div>
               )}
               {job.salaryRange && (
-                <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-5">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Salary Range</p>
-                  <p className="text-white">{job.salaryRange}</p>
+                <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-5 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
+                  <p className="text-[11px] font-semibold text-[#86868b] uppercase tracking-wider mb-1">Salary Range</p>
+                  <p className="text-sm font-bold text-[#1d1d1f] dark:text-white">{job.salaryRange}</p>
                 </div>
               )}
             </div>
           )}
 
           {job.requiredSkills?.length > 0 && (
-            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
+            <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-6 sm:p-7 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
               <div className="flex items-center gap-2 mb-4">
-                <Target size={16} className="text-zinc-400" />
-                <h3 className="font-semibold text-white text-sm">Required Skills</h3>
+                <Target size={16} className="text-[#0071e3]" />
+                <h3 className="font-bold text-[#1d1d1f] dark:text-white text-sm">Required Skills &amp; Stack</h3>
               </div>
               <div className="flex flex-wrap gap-2">
                 {job.requiredSkills.map((s: string, i: number) => (
-                  <span key={i} className="px-3 py-1.5 bg-white text-black rounded-lg text-xs font-medium">{s}</span>
+                  <span
+                    key={i}
+                    className="px-3.5 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-xl text-xs font-semibold"
+                  >
+                    {s}
+                  </span>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-6">
-            <h3 className="font-semibold text-white mb-4">Job Description</h3>
-            <div className="text-zinc-300 text-sm leading-relaxed whitespace-pre-wrap"
-              dangerouslySetInnerHTML={{ __html: job.description.replace(/\n/g, '<br/>') }} />
+          <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-6 sm:p-7 shadow-[0_2px_12px_rgba(0,0,0,0.02)]">
+            <h3 className="font-bold text-[#1d1d1f] dark:text-white mb-3 text-sm">Job Description</h3>
+            <div
+              className="text-[#1d1d1f] dark:text-[#f5f5f7] text-sm leading-relaxed whitespace-pre-wrap font-normal"
+              dangerouslySetInnerHTML={{ __html: job.description.replace(/\n/g, '<br/>') }}
+            />
           </div>
         </div>
       )}
@@ -360,140 +417,176 @@ export default function JobDetailsPage() {
           
           {/* Stage filter pills */}
           <div className="flex flex-wrap gap-2">
-            {['all','applied','screened','technical_round','hr_round','offer_sent','hired','rejected'].map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  statusFilter === s
-                    ? 'bg-white text-black'
-                    : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-                }`}>
-                {s === 'all' ? 'All Stages' : s.replace('_', ' ')}
-              </button>
-            ))}
+            {['all','applied','screened','technical_round','hr_round','offer_sent','hired','rejected'].map(s => {
+              const isActive = statusFilter === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`px-3.5 py-1.5 rounded-2xl text-xs font-semibold transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#0071e3] text-white shadow-[0_4px_14px_rgba(0,113,227,0.25)]'
+                      : 'bg-white dark:bg-[#1c1c1e] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+                  }`}
+                >
+                  {s === 'all' ? 'All Stages' : s.replace('_', ' ')}
+                </button>
+              );
+            })}
           </div>
 
           {/* Filter bar toggle & AI button */}
-          <div className="flex justify-between items-center">
-            <button onClick={() => setShowFilters(!showFilters)}
-              className="inline-flex items-center gap-2 text-xs text-zinc-400 hover:text-white transition-colors">
-              <Filter size={14} />
-              {showFilters ? 'Hide Filters' : 'Show Filters'}
+          <div className="flex justify-between items-center gap-3">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition shadow-xs cursor-pointer"
+            >
+              <Filter size={14} className="text-[#86868b]" />
+              <span>{showFilters ? 'Hide Filters' : 'Show Filters'}</span>
             </button>
             {(isAdmin || isHR) && (
-              <button onClick={() => setAiFilterOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-lg text-xs font-medium text-white hover:from-violet-700 hover:to-indigo-700 transition-all shadow-sm">
+              <button
+                onClick={() => setAiFilterOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0071e3] hover:bg-[#0077ed] rounded-2xl text-xs font-bold text-white shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition-all cursor-pointer"
+              >
                 <Sparkles size={14} />
-                AI Match
+                <span>AI Match</span>
               </button>
             )}
           </div>
 
           {/* Advanced filters (collapsible) */}
           {showFilters && (
-            <div className="bg-zinc-900 rounded-xl border border-zinc-800 p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-5 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Search by name, email or skill</label>
-                <input type="text" placeholder="e.g., John, frontend, react..."
-                  value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-black border border-zinc-800 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-zinc-600" />
+                <label className="block text-xs font-semibold text-[#86868b] uppercase tracking-wider mb-1.5">
+                  Search by name, email or skill
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., John, frontend, react..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl px-4 py-2.5 text-xs text-[#1d1d1f] dark:text-white font-medium placeholder:text-[#86868b] focus:border-[#0071e3] outline-none"
+                />
               </div>
               <div>
-                <div className="flex justify-between mb-1">
-                  <label className="text-xs font-medium text-zinc-400">Minimum ATS Score</label>
-                  <span className="text-xs font-bold text-indigo-400">{minAtsScore}%</span>
+                <div className="flex justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Minimum ATS Score</label>
+                  <span className="text-xs font-bold text-[#0071e3]">{minAtsScore}%</span>
                 </div>
-                <input type="range" min="0" max="100" value={minAtsScore}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={minAtsScore}
                   onChange={(e) => setMinAtsScore(Number(e.target.value))}
-                  className="w-full accent-white bg-zinc-800 h-1.5 rounded-lg cursor-pointer" />
+                  className="w-full accent-[#0071e3] bg-[#f2f2f7] dark:bg-[#2c2c2e] h-2 rounded-lg cursor-pointer"
+                />
               </div>
             </div>
           )}
 
           {/* Batch actions bar (only when selected) */}
           {selectedApplicationIds.length > 0 && (
-            <div className="bg-zinc-800/50 rounded-lg p-3 flex items-center justify-between border border-zinc-700">
-              <span className="text-sm text-white">{selectedApplicationIds.length} candidate(s) selected</span>
-              <button onClick={() => setScheduleModalOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-1.5 bg-white text-black text-sm font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+            <div className="bg-[#0071e3]/10 border border-[#0071e3]/20 rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-[#0071e3]">
+                {selectedApplicationIds.length} candidate(s) selected
+              </span>
+              <button
+                onClick={() => setScheduleModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold rounded-2xl shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition-all cursor-pointer"
+              >
                 <Calendar size={14} />
-                Schedule Batch Call
+                <span>Schedule Batch Call</span>
               </button>
             </div>
           )}
 
           {/* Loading / Empty states */}
           {appsLoading ? (
-            <div className="flex justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-700 border-t-white" /></div>
+            <div className="flex justify-center py-16">
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-black/[0.1] border-t-[#0071e3]" />
+            </div>
           ) : displayedApplications.length === 0 ? (
-            <div className="text-center py-16 bg-zinc-900 rounded-xl border border-zinc-800">
-              <Users size={40} className="text-zinc-700 mx-auto mb-3" />
-              <p className="text-zinc-400 font-medium">No candidates match current criteria</p>
-              <p className="text-zinc-600 text-xs mt-1">Adjust filters or search query</p>
+            <div className="text-center py-16 px-6 bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] shadow-[0_2px_12px_rgba(0,0,0,0.03)] space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex items-center justify-center text-[#86868b] mx-auto">
+                <Users size={28} />
+              </div>
+              <div>
+                <p className="text-base font-bold text-[#1d1d1f] dark:text-white">No candidates match current criteria</p>
+                <p className="text-xs text-[#86868b] font-medium mt-0.5">Adjust filters or search query to view candidates</p>
+              </div>
             </div>
           ) : viewMode === 'list' ? (
             /* List View */
             <div className="space-y-3">
               {displayedApplications.length > 1 && (
-                <div className="bg-zinc-900/50 rounded-lg px-4 py-2 flex justify-between items-center text-xs border border-zinc-800">
+                <div className="bg-white dark:bg-[#1c1c1e] rounded-2xl px-4 py-2.5 flex justify-between items-center text-xs font-semibold border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
                   {(isAdmin || isHR) ? (
-                    <button onClick={toggleSelectAllVisible} className="flex items-center gap-2 text-zinc-400 hover:text-white">
+                    <button
+                      onClick={toggleSelectAllVisible}
+                      className="flex items-center gap-2 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white cursor-pointer"
+                    >
                       {selectedApplicationIds.length === displayedApplications.length ? (
-                        <CheckSquare size={14} />
+                        <CheckSquare size={16} className="text-[#0071e3]" />
                       ) : (
-                        <Square size={14} />
+                        <Square size={16} />
                       )}
-                      {selectedApplicationIds.length === displayedApplications.length ? 'Deselect all' : 'Select all'}
+                      <span>{selectedApplicationIds.length === displayedApplications.length ? 'Deselect all' : 'Select all'}</span>
                     </button>
                   ) : (
                     <div />
                   )}
-                  <span className="text-zinc-500">{displayedApplications.length} of {totalApps} shown</span>
+                  <span className="text-[#86868b]">{displayedApplications.length} of {totalApps} shown</span>
                 </div>
               )}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {displayedApplications.map((app: any) => {
                   const targetId = app.applicationId || app.id;
                   const isSelected = selectedApplicationIds.includes(targetId);
                   const profile = app.candidate || app.jobSeekerProfile || {};
                   return (
-                    <div key={targetId}
+                    <div
+                      key={targetId}
                       onClick={() => router.push(`/dashboard/jobs/${params.id}/applicants/${targetId}`)}
-                      className={`bg-zinc-900 border rounded-xl p-4 cursor-pointer transition-all group flex items-center gap-4 ${
-                        isSelected ? 'border-zinc-600 bg-zinc-800/60' : 'border-zinc-800 hover:border-zinc-700'
-                      }`}>
+                      className={`bg-white dark:bg-[#1c1c1e] border rounded-2xl p-4 cursor-pointer transition-all group flex items-center gap-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-md hover:border-[#0071e3]/30 ${
+                        isSelected ? 'border-[#0071e3] bg-[#0071e3]/5' : 'border-black/[0.06] dark:border-white/[0.08]'
+                      }`}
+                    >
                       {(isAdmin || isHR) && (
-                        <div onClick={(e) => toggleSelectCandidate(targetId, e)} className="flex-shrink-0">
+                        <div onClick={(e) => toggleSelectCandidate(targetId, e)} className="shrink-0 cursor-pointer">
                           {isSelected ? (
-                            <div className="w-4 h-4 rounded bg-white flex items-center justify-center">
-                              <Check size={12} className="text-black" />
+                            <div className="w-4 h-4 rounded-md bg-[#0071e3] flex items-center justify-center text-white">
+                              <Check size={12} />
                             </div>
                           ) : (
-                            <div className="w-4 h-4 rounded border border-zinc-600 group-hover:border-zinc-400" />
+                            <div className="w-4 h-4 rounded-md border border-black/[0.2] dark:border-white/[0.2] group-hover:border-[#0071e3]" />
                           )}
                         </div>
                       )}
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                      <div className="h-10 w-10 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] flex items-center justify-center text-[#1d1d1f] dark:text-white font-bold text-sm shrink-0">
                         {profile.fullName?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                          <p className="font-semibold text-white text-sm">{profile.fullName}</p>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${STATUS_STYLES[app.status] || ''}`}>
+                          <p className="font-bold text-[#1d1d1f] dark:text-white text-sm">{profile.fullName}</p>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${STATUS_STYLES[app.status] || ''}`}>
                             {app.status.replace('_', ' ')}
                           </span>
                         </div>
-                        <p className="text-zinc-500 text-xs truncate">{profile.email}</p>
+                        <p className="text-[#86868b] text-xs font-medium truncate">{profile.email}</p>
                       </div>
                       {app.resume?.atsScore != null && (
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-[10px] text-zinc-500">ATS Score</p>
+                        <div className="text-right shrink-0">
+                          <p className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider">ATS Score</p>
                           <p className={`text-sm font-bold ${
-                            app.resume.atsScore >= 70 ? 'text-emerald-400' :
-                            app.resume.atsScore >= 40 ? 'text-yellow-400' : 'text-red-400'
+                            app.resume.atsScore >= 70 ? 'text-[#248a3d] dark:text-[#30d158]' :
+                            app.resume.atsScore >= 40 ? 'text-[#ff9500]' : 'text-[#ff3b30]'
                           }`}>{app.resume.atsScore}%</p>
                         </div>
                       )}
-                      <ChevronRight size={16} className="text-zinc-600 group-hover:text-zinc-400 flex-shrink-0" />
+                      <ChevronRight size={16} className="text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white transition shrink-0" />
                     </div>
                   );
                 })}
@@ -505,17 +598,21 @@ export default function JobDetailsPage() {
               {STAGE_COLUMNS.map(col => {
                 const columnCards = kanbanData[col.key] || [];
                 return (
-                  <div key={col.key}
+                  <div
+                    key={col.key}
                     onDragOver={(e) => (isAdmin || isHR) && e.preventDefault()}
                     onDrop={(e) => (isAdmin || isHR) && handleDrop(e, col.key)}
-                    className="w-80 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col flex-shrink-0 max-h-[70vh]">
-                    <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 flex justify-between items-center rounded-t-xl">
-                      <span className="font-medium text-sm text-white">{col.label}</span>
-                      <span className="bg-zinc-800 px-2 py-0.5 rounded text-xs font-bold text-zinc-400">{columnCards.length}</span>
+                    className="w-80 bg-[#f8f8fa] dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl flex flex-col shrink-0 max-h-[70vh] shadow-[0_2px_12px_rgba(0,0,0,0.03)]"
+                  >
+                    <div className="p-4 border-b border-black/[0.06] dark:border-white/[0.08] flex justify-between items-center rounded-t-3xl">
+                      <span className="font-bold text-xs text-[#1d1d1f] dark:text-white uppercase tracking-wider">{col.label}</span>
+                      <span className="bg-white dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] px-2.5 py-0.5 rounded-full text-xs font-bold text-[#86868b] shadow-xs">
+                        {columnCards.length}
+                      </span>
                     </div>
-                    <div className="p-2 space-y-2 overflow-y-auto flex-1 min-h-[200px]">
+                    <div className="p-3 space-y-2.5 overflow-y-auto flex-1 min-h-[200px]">
                       {columnCards.length === 0 ? (
-                        <div className="py-8 text-center text-zinc-600 text-xs border border-dashed border-zinc-800 rounded-lg">
+                        <div className="py-10 text-center text-[#86868b] text-xs font-medium border border-dashed border-black/[0.08] dark:border-white/[0.1] rounded-2xl">
                           Drop candidates here
                         </div>
                       ) : (
@@ -523,25 +620,27 @@ export default function JobDetailsPage() {
                           const cardId = card.applicationId || card.id;
                           const profile = card.jobSeekerProfile || card.candidate || {};
                           return (
-                            <div key={cardId}
+                            <div
+                              key={cardId}
                               draggable={isAdmin || isHR}
                               onDragStart={(e) => (isAdmin || isHR) ? handleDragStart(e, cardId, col.key) : e.preventDefault()}
                               onClick={() => router.push(`/dashboard/jobs/${params.id}/applicants/${cardId}`)}
-                              className="p-3 bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700 rounded-lg cursor-grab active:cursor-grabbing transition-colors group">
+                              className="p-3.5 bg-white dark:bg-[#2c2c2e] hover:shadow-md border border-black/[0.06] dark:border-white/[0.08] rounded-2xl cursor-grab active:cursor-grabbing transition-all group"
+                            >
                               <div className="flex justify-between items-start gap-2">
-                                <p className="font-medium text-white text-sm truncate">{profile.fullName || 'Anonymous'}</p>
+                                <p className="font-bold text-[#1d1d1f] dark:text-white text-xs truncate">{profile.fullName || 'Anonymous'}</p>
                                 {card.resume?.atsScore != null && (
                                   <span className={`text-[10px] font-bold ${
-                                    card.resume.atsScore >= 70 ? 'text-emerald-400' :
-                                    card.resume.atsScore >= 40 ? 'text-yellow-400' : 'text-red-400'
+                                    card.resume.atsScore >= 70 ? 'text-[#248a3d] dark:text-[#30d158]' :
+                                    card.resume.atsScore >= 40 ? 'text-[#ff9500]' : 'text-[#ff3b30]'
                                   }`}>{card.resume.atsScore}%</span>
                                 )}
                               </div>
-                              <p className="text-zinc-400 text-xs truncate mt-0.5">{profile.email}</p>
+                              <p className="text-[#86868b] text-[11px] font-medium truncate mt-0.5">{profile.email}</p>
                               {profile.skills?.length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-2">
+                                <div className="flex flex-wrap gap-1 mt-2.5">
                                   {profile.skills.slice(0, 2).map((sk: string, i: number) => (
-                                    <span key={i} className="px-1.5 py-0.5 bg-black border border-zinc-700 text-zinc-400 text-[9px] rounded">
+                                    <span key={i} className="px-2 py-0.5 bg-[#f2f2f7] dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-[#f5f5f7] text-[10px] font-semibold rounded-lg">
                                       {sk}
                                     </span>
                                   ))}

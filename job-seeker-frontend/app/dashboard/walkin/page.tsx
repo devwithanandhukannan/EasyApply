@@ -145,7 +145,7 @@ export default function JobSeekerWalkInDirectoryPage() {
 
   const fetchRooms = async () => {
     try {
-      const res = await api.get('/walkin/rooms', {
+      const res = await api.get('/walkin/active-rooms', {
         params: { search: search.trim() || undefined },
       });
       if (res.data?.success) {
@@ -169,7 +169,7 @@ export default function JobSeekerWalkInDirectoryPage() {
 
   const fetchResumes = async () => {
     try {
-      const res = await api.get('/resumes');
+      const res = await api.get('/jobseeker/resumes');
       if (res.data?.success && Array.isArray(res.data.data)) {
         const mapped: ResumeOption[] = res.data.data.map((r: any) => ({
           id: r.id,
@@ -208,7 +208,7 @@ export default function JobSeekerWalkInDirectoryPage() {
   const fetchDataSilent = async () => {
     try {
       const [roomsRes, queuesRes] = await Promise.all([
-        api.get('/walkin/rooms', { params: { search: search.trim() || undefined } }),
+        api.get('/walkin/active-rooms', { params: { search: search.trim() || undefined } }),
         api.get('/walkin/my-queues'),
       ]);
       if (roomsRes.data?.success) setRooms(roomsRes.data.rooms || []);

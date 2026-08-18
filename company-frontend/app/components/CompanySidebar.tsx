@@ -21,6 +21,8 @@ import {
   Search,
   Lock,
   Sparkles,
+  Globe,
+  ExternalLink,
 } from 'lucide-react';
 import CustomBusinessRequestModal from './CustomBusinessRequestModal';
 
@@ -137,6 +139,14 @@ export default function CompanySidebar({
         icon: Building2, 
         visible: hasAccess && (isAdmin || isHR || isViewer),
         isLocked: false,
+      },
+      { 
+        name: 'Public Directory', 
+        href: 'http://localhost:3000/companies', 
+        icon: Globe, 
+        visible: hasAccess,
+        isLocked: false,
+        isExternal: true,
       }
     ].filter(item => item.visible);
   }, [isMounted, isLoading, isAdmin, isHR, isInterviewer, isViewer, features, company]);
@@ -144,9 +154,32 @@ export default function CompanySidebar({
   const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
     <>
       {filteredNav.map((item) => {
-        const isActive = item.href === '/dashboard' 
+        const isActive = !item.isExternal && (item.href === '/dashboard' 
           ? pathname === '/dashboard' 
-          : pathname.startsWith(item.href);
+          : pathname.startsWith(item.href));
+
+        if (item.isExternal) {
+          return (
+            <a
+              key={item.name}
+              href={item.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={onClickItem}
+              className="flex items-center justify-between px-3 py-2.5 rounded-2xl text-xs font-semibold transition-all group duration-200 text-[#6e6e73] dark:text-[#aeaeb2] hover:text-[#1d1d1f] dark:hover:text-[#f5f5f7] hover:bg-black/[0.03] dark:hover:bg-white/[0.05] border border-transparent"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <item.icon className="h-4 w-4 shrink-0 text-[#86868b] group-hover:text-[#0071e3] transition-colors" />
+                <span className={`truncate transition-opacity duration-200 ${isCollapsed ? 'md:hidden opacity-0' : 'opacity-100'}`}>
+                  {item.name}
+                </span>
+              </div>
+              <span className={`shrink-0 flex items-center justify-center ${isCollapsed ? 'hidden' : ''}`}>
+                <ExternalLink className="w-3 h-3 text-[#aeaeb2] group-hover:text-[#0071e3]" />
+              </span>
+            </a>
+          );
+        }
 
         return (
           <Link

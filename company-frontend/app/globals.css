@@ -115,9 +115,6 @@ html:not(.dark) {
   }
 
   /* Text Colors */
-  .text-white {
-    color: #111827 !important;
-  }
   .text-zinc-100,
   .text-zinc-200,
   .text-zinc-300 {
@@ -146,7 +143,6 @@ html:not(.dark) {
     background-color: #f3f4f6 !important;
   }
 
-  .hover\:text-white:hover,
   .hover\:text-zinc-100:hover,
   .hover\:text-zinc-200:hover {
     color: #111827 !important;

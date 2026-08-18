@@ -137,51 +137,57 @@ const KANBAN_COLUMNS: {
   color: string;
   borderColor: string;
   bgColor: string;
+  headerBg: string;
   icon: any;
 }[] = [
   {
     id: 'waiting',
     title: 'Applied / Queue',
     description: 'Candidates waiting in queue',
-    color: 'text-sky-400',
-    borderColor: 'border-sky-500/30',
-    bgColor: 'bg-sky-950/20',
+    color: 'text-[#0071e3]',
+    borderColor: 'border-[#0071e3]/20',
+    bgColor: 'bg-white dark:bg-[#1c1c1e]',
+    headerBg: 'bg-[#0071e3]/10',
     icon: Clock,
   },
   {
     id: 'priority',
     title: 'Priority Shortlist',
     description: 'Fast-tracked by recruiter',
-    color: 'text-amber-400',
-    borderColor: 'border-amber-500/30',
-    bgColor: 'bg-amber-950/20',
+    color: 'text-[#ff9500]',
+    borderColor: 'border-[#ff9500]/20',
+    bgColor: 'bg-white dark:bg-[#1c1c1e]',
+    headerBg: 'bg-[#ff9500]/10',
     icon: Star,
   },
   {
     id: 'interviewing',
     title: 'Live Interview',
     description: 'Active in LiveKit Video Call',
-    color: 'text-emerald-400',
-    borderColor: 'border-emerald-500/40',
-    bgColor: 'bg-emerald-950/20',
+    color: 'text-[#34c759]',
+    borderColor: 'border-[#34c759]/20',
+    bgColor: 'bg-white dark:bg-[#1c1c1e]',
+    headerBg: 'bg-[#34c759]/10',
     icon: Video,
   },
   {
     id: 'accepted',
     title: 'Accepted / OK',
     description: 'Qualified & short-listed',
-    color: 'text-teal-400',
-    borderColor: 'border-teal-500/30',
-    bgColor: 'bg-teal-950/20',
+    color: 'text-[#30b0c7]',
+    borderColor: 'border-[#30b0c7]/20',
+    bgColor: 'bg-white dark:bg-[#1c1c1e]',
+    headerBg: 'bg-[#30b0c7]/10',
     icon: CheckCircle2,
   },
   {
     id: 'skipped',
     title: 'Rejected / Skipped',
     description: 'Disqualified or passed over',
-    color: 'text-rose-400',
-    borderColor: 'border-rose-500/30',
-    bgColor: 'bg-rose-950/20',
+    color: 'text-[#ff3b30]',
+    borderColor: 'border-[#ff3b30]/20',
+    bgColor: 'bg-white dark:bg-[#1c1c1e]',
+    headerBg: 'bg-[#ff3b30]/10',
     icon: XCircle,
   },
 ];
@@ -198,6 +204,8 @@ export default function CompanyWalkInKanbanPage() {
   const [selectedRoom, setSelectedRoom] = useState<WalkInRoom | null>(null);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isForbidden, setIsForbidden] = useState(false);
+  const [forbiddenMessage, setForbiddenMessage] = useState<string>('');
   const [callingNext, setCallingNext] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
@@ -264,12 +272,12 @@ export default function CompanyWalkInKanbanPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedRoom) {
+    if (selectedRoom && !isForbidden) {
       fetchQueue(selectedRoom.roomCode);
       const interval = setInterval(() => fetchQueue(selectedRoom.roomCode), 4000);
       return () => clearInterval(interval);
     }
-  }, [selectedRoom?.roomCode]);
+  }, [selectedRoom?.roomCode, isForbidden]);
 
   const fetchRooms = async () => {
     try {
@@ -281,7 +289,15 @@ export default function CompanyWalkInKanbanPage() {
           setSelectedRoom(res.data.rooms[0]);
         }
       }
-    } catch {
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        // Stop all further retries — refreshing token won't fix a 403
+        setIsForbidden(true);
+        setForbiddenMessage(
+          err.response?.data?.message || 'Access denied. Your company account may be pending verification.'
+        );
+        return;
+      }
       showToast('Error', 'Failed to load walk-in rooms', 'danger');
     } finally {
       setLoading(false);
@@ -576,16 +592,16 @@ export default function CompanyWalkInKanbanPage() {
   };
 
   return (
-    <div className="space-y-6 w-full max-w-full pb-16">
+    <div className="space-y-6 w-full max-w-full pb-16 text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased">
       {/* ─── ROOM SWITCHER / TOP BAR ──────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-900 pb-5">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
         <div>
-          <h1 className="text-xl font-bold text-white sm:text-2xl flex items-center gap-2.5">
-            <DoorOpen className="w-6 h-6 text-indigo-400" />
-            <span>Walk-In Rooms & Kanban Board</span>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white flex items-center gap-2.5">
+            <DoorOpen className="w-6 h-6 text-[#0071e3]" />
+            <span>Walk-In Rooms &amp; Kanban Board</span>
           </h1>
-          <p className="text-xs text-zinc-400 mt-1">
-            Host live walk-in rooms, inspect uploaded CVs, and drag & drop candidates across evaluation stages.
+          <p className="text-xs sm:text-sm text-[#86868b] mt-0.5 font-medium">
+            Host live walk-in rooms, inspect uploaded CVs, and drag &amp; drop candidates across evaluation stages.
           </p>
         </div>
 
@@ -598,7 +614,7 @@ export default function CompanyWalkInKanbanPage() {
                 const found = rooms.find((r) => r.id === e.target.value);
                 if (found) setSelectedRoom(found);
               }}
-              className="bg-zinc-900 border border-zinc-800 text-white rounded-xl px-3.5 py-2 text-xs font-semibold outline-none focus:border-indigo-500"
+              className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] text-[#1d1d1f] dark:text-white rounded-2xl px-4 py-2 text-xs font-semibold shadow-xs outline-none focus:border-[#0071e3]"
             >
               {rooms.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -610,7 +626,7 @@ export default function CompanyWalkInKanbanPage() {
 
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/20"
+            className="px-4 py-2 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-[0_4px_14px_rgba(0,113,227,0.25)] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>New Walk-In Room</span>
@@ -618,21 +634,27 @@ export default function CompanyWalkInKanbanPage() {
         </div>
       </div>
 
-      {loading ? (
+      {isForbidden ? (
+        <div className="bg-white dark:bg-[#1c1c1e] border border-[#ff3b30]/20 rounded-3xl p-12 text-center space-y-4 max-w-md mx-auto shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+          <AlertCircle className="w-12 h-12 text-[#ff3b30] mx-auto" />
+          <h2 className="text-lg font-bold text-[#1d1d1f] dark:text-white">Access Denied</h2>
+          <p className="text-xs text-[#86868b] leading-relaxed">{forbiddenMessage}</p>
+        </div>
+      ) : loading ? (
         <div className="py-24 text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto" />
-          <p className="text-sm text-zinc-500">Loading Walk-In Rooms...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-[#0071e3] mx-auto" />
+          <p className="text-xs font-medium text-[#86868b]">Loading Walk-In Rooms...</p>
         </div>
       ) : !selectedRoom ? (
-        <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-12 text-center space-y-4 max-w-md mx-auto">
-          <DoorOpen className="w-12 h-12 text-zinc-600 mx-auto" />
-          <h2 className="text-lg font-bold text-white">No Walk-In Rooms Yet</h2>
-          <p className="text-xs text-zinc-400 leading-relaxed">
+        <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-12 text-center space-y-4 max-w-md mx-auto shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+          <DoorOpen className="w-12 h-12 text-[#86868b] mx-auto" />
+          <h2 className="text-lg font-bold text-[#1d1d1f] dark:text-white">No Walk-In Rooms Yet</h2>
+          <p className="text-xs text-[#86868b] leading-relaxed">
             Create an instant walk-in room with required skills and capacity limits. Candidates can apply with CVs for immediate evaluation.
           </p>
           <button
             onClick={() => setCreateModalOpen(true)}
-            className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2"
+            className="w-full py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,113,227,0.25)] cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Create Your First Room</span>
@@ -641,51 +663,51 @@ export default function CompanyWalkInKanbanPage() {
       ) : (
         <>
           {/* ─── ACTIVE ROOM HEADER & CAPACITY CONTROLS ───────────────── */}
-          <div className="bg-zinc-950 border border-zinc-800/80 rounded-2xl p-5 sm:p-6 space-y-5 relative overflow-hidden backdrop-blur-xl">
+          <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-5 sm:p-6 space-y-5 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
               <div className="space-y-2">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <span
                     onClick={() => handleCopyCode(selectedRoom.roomCode)}
-                    className="cursor-pointer group inline-flex items-center gap-1.5 px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-lg text-xs font-mono font-bold text-indigo-400 transition-all"
+                    className="cursor-pointer group inline-flex items-center gap-1.5 px-3 py-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] border border-black/[0.04] dark:border-white/[0.06] rounded-xl text-xs font-mono font-bold text-[#0071e3] transition-all shadow-2xs"
                     title="Click to copy room code"
                   >
                     <span>CODE: {selectedRoom.roomCode}</span>
                     {copiedCode === selectedRoom.roomCode ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <Check className="w-3.5 h-3.5 text-[#34c759]" />
                     ) : (
-                      <Copy className="w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300" />
+                      <Copy className="w-3.5 h-3.5 text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white" />
                     )}
                   </span>
 
                   <span
-                    className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider ${
+                    className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
                       selectedRoom.status === 'OPEN'
-                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                        ? 'bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158]'
                         : selectedRoom.status === 'PAUSED'
-                        ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
-                        : 'bg-rose-500/10 border border-rose-500/30 text-rose-400'
+                        ? 'bg-[#ff9500]/10 border border-[#ff9500]/20 text-[#ff9500]'
+                        : 'bg-[#ff3b30]/10 border border-[#ff3b30]/20 text-[#ff3b30]'
                     }`}
                   >
                     {selectedRoom.status}
                   </span>
 
-                  <span className="px-2.5 py-1 text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg font-medium">
-                    Queue: <strong className="text-white">{queue.length}</strong> / {selectedRoom.maxQueue}
+                  <span className="px-3 py-1 text-xs bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#86868b] rounded-xl font-medium">
+                    Queue: <strong className="text-[#1d1d1f] dark:text-white font-bold">{queue.length}</strong> / {selectedRoom.maxQueue}
                   </span>
                 </div>
 
-                <h2 className="text-xl font-extrabold text-white tracking-tight">{selectedRoom.title}</h2>
+                <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white tracking-tight">{selectedRoom.title}</h2>
                 {selectedRoom.description && (
-                  <p className="text-xs text-zinc-400 max-w-2xl leading-relaxed">{selectedRoom.description}</p>
+                  <p className="text-xs text-[#86868b] max-w-2xl leading-relaxed font-medium">{selectedRoom.description}</p>
                 )}
 
                 {/* Skills tags */}
                 {selectedRoom.requiredSkills.length > 0 && (
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                    <span className="text-[11px] font-semibold text-zinc-500 mr-1">Required Skills:</span>
+                    <span className="text-[11px] font-semibold text-[#86868b] mr-1">Required Skills:</span>
                     {selectedRoom.requiredSkills.map((s, idx) => (
-                      <span key={idx} className="px-2 py-0.5 text-[11px] bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-md">
+                      <span key={idx} className="px-2.5 py-0.5 text-[11px] bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-lg font-medium">
                         {s}
                       </span>
                     ))}
@@ -698,7 +720,7 @@ export default function CompanyWalkInKanbanPage() {
                 <button
                   onClick={() => handleCallCandidate()}
                   disabled={callingNext || selectedRoom.status === 'CLOSED'}
-                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all active:scale-95 disabled:opacity-50"
+                  className="px-5 py-2.5 bg-[#34c759] hover:bg-[#30d158] text-white font-bold rounded-2xl text-xs flex items-center gap-2 shadow-[0_4px_14px_rgba(52,199,89,0.25)] transition-all cursor-pointer disabled:opacity-40"
                 >
                   <PhoneCall className="w-3.5 h-3.5" />
                   <span>{callingNext ? 'Calling...' : 'Call Top Candidate'}</span>
@@ -708,44 +730,44 @@ export default function CompanyWalkInKanbanPage() {
                 {selectedRoom.status === 'OPEN' ? (
                   <button
                     onClick={() => handleUpdateStatus('PAUSED')}
-                    className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-amber-400 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                    className="px-4 py-2.5 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.06] dark:border-white/[0.08] text-[#ff9500] rounded-2xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Pause className="w-3.5 h-3.5" />
+                    <Pause className="w-3.5 h-3.5 text-[#ff9500]" />
                     <span>Pause Room</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => handleUpdateStatus('OPEN')}
-                    className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-emerald-400 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                    className="px-4 py-2.5 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.06] dark:border-white/[0.08] text-[#248a3d] dark:text-[#30d158] rounded-2xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Play className="w-3.5 h-3.5" />
+                    <Play className="w-3.5 h-3.5 text-[#34c759]" />
                     <span>Open Room</span>
                   </button>
                 )}
 
                 <button
                   onClick={openSettingsModal}
-                  className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                  className="px-4 py-2.5 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-white rounded-2xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                   title="Configure Room & Capacity"
                 >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>Limit & Settings</span>
+                  <Settings className="w-3.5 h-3.5 text-[#86868b]" />
+                  <span>Limit &amp; Settings</span>
                 </button>
               </div>
             </div>
           </div>
 
           {/* ─── SEARCH & FILTER TOOLBAR ─────────────────────────────────── */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-zinc-950 p-4 rounded-xl border border-zinc-900">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#1c1c1e] p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
             <div className="flex items-center gap-3 flex-1 flex-wrap">
               <div className="relative min-w-[220px] max-w-sm flex-1">
-                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-[#86868b] absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="Search candidate, email, skills..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-zinc-500 outline-none transition-all"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl pl-9 pr-3.5 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] outline-none transition-all"
                 />
               </div>
 
@@ -753,7 +775,7 @@ export default function CompanyWalkInKanbanPage() {
               <select
                 value={minSkillMatch}
                 onChange={(e) => setMinSkillMatch(Number(e.target.value))}
-                className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-xl px-3 py-1.5 text-xs font-medium outline-none"
+                className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-2xl px-3.5 py-2 text-xs font-semibold outline-none focus:border-[#0071e3]"
               >
                 <option value={0}>All Skill Match %</option>
                 <option value={50}>Match &ge; 50%</option>
@@ -764,10 +786,10 @@ export default function CompanyWalkInKanbanPage() {
               {/* Has CV Toggle */}
               <button
                 onClick={() => setHasCvOnly(!hasCvOnly)}
-                className={`px-3 py-1.5 rounded-xl border text-xs font-medium transition-all flex items-center gap-1.5 ${
+                className={`px-3.5 py-2 rounded-2xl border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   hasCvOnly
-                    ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300'
-                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-[#0071e3]/10 border-[#0071e3]/30 text-[#0071e3] font-bold'
+                    : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
@@ -776,13 +798,13 @@ export default function CompanyWalkInKanbanPage() {
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center gap-1 bg-zinc-900/60 p-1 rounded-xl border border-zinc-800/80 shrink-0 self-end sm:self-auto">
+            <div className="inline-flex p-1 bg-[#e5e5ea] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl shrink-0 self-end sm:self-auto">
               <button
                 onClick={() => setViewMode('kanban')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   viewMode === 'kanban'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                    : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
                 }`}
                 title="Kanban Board View"
               >
@@ -791,10 +813,10 @@ export default function CompanyWalkInKanbanPage() {
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                   viewMode === 'list'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                    : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
                 }`}
                 title="List View"
               >
@@ -808,10 +830,10 @@ export default function CompanyWalkInKanbanPage() {
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             <button
               onClick={() => setSelectedStageFilter('all')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+              className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
                 selectedStageFilter === 'all'
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-500/50'
-                  : 'bg-zinc-950 border border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                  ? 'bg-[#0071e3] text-white shadow-[0_4px_14px_rgba(0,113,227,0.25)]'
+                  : 'bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white shadow-xs'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -826,10 +848,10 @@ export default function CompanyWalkInKanbanPage() {
                 <button
                   key={col.id}
                   onClick={() => setSelectedStageFilter(isActive ? 'all' : col.id)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                  className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
                     isActive
-                      ? `${col.bgColor} ${col.color} ring-1 ${col.borderColor} shadow-md`
-                      : 'bg-zinc-950 border border-zinc-800/80 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                      ? `${col.headerBg} ${col.color} border ${col.borderColor} shadow-xs`
+                      : 'bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white shadow-xs'
                   }`}
                 >
                   <ColIcon className={`w-3.5 h-3.5 ${col.color}`} />
@@ -844,13 +866,13 @@ export default function CompanyWalkInKanbanPage() {
             {filteredQueue.length > 0 && (
               <button
                 onClick={handleSelectAllVisible}
-                className={`ml-auto px-3.5 py-1.5 rounded-xl text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all ${
+                className={`ml-auto px-4 py-2 rounded-2xl text-xs font-semibold shrink-0 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer ${
                   selectedEntryIds.length > 0
-                    ? 'bg-indigo-600/20 border border-indigo-500/50 text-indigo-300'
-                    : 'bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 text-zinc-400'
+                    ? 'bg-[#0071e3]/10 border border-[#0071e3]/30 text-[#0071e3] font-bold'
+                    : 'bg-white dark:bg-[#1c1c1e] hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
                 }`}
               >
-                <CheckSquare className="w-3.5 h-3.5 text-indigo-400" />
+                <CheckSquare className="w-3.5 h-3.5 text-[#0071e3]" />
                 <span>
                   {selectedEntryIds.length > 0
                     ? `Deselect (${selectedEntryIds.length})`
@@ -883,25 +905,25 @@ export default function CompanyWalkInKanbanPage() {
                     key={col.id}
                     onDragOver={(e) => handleDragOver(e, col.id)}
                     onDrop={(e) => handleDrop(e, col.id)}
-                    className={`rounded-2xl border transition-all flex flex-col min-h-[500px] ${
-                      isFocusedSingleStage ? 'col-span-full bg-zinc-950/60 p-4' : col.bgColor
+                    className={`rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-[#f8f8fa] dark:bg-[#1c1c1e] transition-all flex flex-col min-h-[520px] shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden ${
+                      isFocusedSingleStage ? 'col-span-full p-4' : ''
                     } ${
-                      isDragOver ? `${col.borderColor} ring-2 ring-indigo-500/40 bg-zinc-900/60` : 'border-zinc-900'
+                      isDragOver ? `${col.borderColor} ring-2 ring-[#0071e3]/40 bg-[#0071e3]/5` : ''
                     }`}
                   >
                     {/* Column Header */}
-                    <div className="p-3.5 border-b border-zinc-900/80 flex items-center justify-between">
+                    <div className="p-4 border-b border-black/[0.06] dark:border-white/[0.08] bg-white/70 dark:bg-[#2c2c2e]/50 backdrop-blur-md flex items-center justify-between">
                       <div
                         onClick={() => setSelectedStageFilter(selectedStageFilter === col.id ? 'all' : col.id)}
                         className="flex items-center gap-2 cursor-pointer group"
                         title={selectedStageFilter === col.id ? 'Show all stages' : `Filter only ${col.title}`}
                       >
                         <ColumnIcon className={`w-4 h-4 ${col.color}`} />
-                        <h3 className="text-xs font-bold text-white tracking-wide group-hover:text-indigo-400 transition-colors">
+                        <h3 className="text-xs font-bold text-[#1d1d1f] dark:text-white tracking-tight group-hover:text-[#0071e3] transition-colors">
                           {col.title}
                         </h3>
                         {selectedStageFilter === col.id && (
-                          <span className="text-[10px] text-zinc-500 font-normal">(Click to show all)</span>
+                          <span className="text-[10px] text-[#86868b] font-normal">(Click to show all)</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
@@ -917,13 +939,13 @@ export default function CompanyWalkInKanbanPage() {
                                 setSelectedEntryIds(Array.from(set));
                               }
                             }}
-                            className="text-[10px] text-zinc-400 hover:text-white px-1.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors"
+                            className="text-[10px] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white px-2 py-0.5 rounded-lg bg-[#f2f2f7] dark:bg-[#3a3a3c] border border-black/[0.04] transition-colors cursor-pointer font-medium"
                             title="Select all in column"
                           >
                             Select All
                           </button>
                         )}
-                        <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-zinc-900 border border-zinc-800 ${col.color}`}>
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${col.headerBg} ${col.color}`}>
                           {items.length}
                         </span>
                       </div>
@@ -931,12 +953,12 @@ export default function CompanyWalkInKanbanPage() {
 
                     {/* Column Items */}
                     <div
-                      className={`p-2.5 space-y-2.5 flex-1 overflow-y-auto max-h-[75vh] ${
+                      className={`p-3 space-y-3 flex-1 overflow-y-auto max-h-[75vh] ${
                         isFocusedSingleStage ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 space-y-0' : ''
                       }`}
                     >
                       {items.length === 0 ? (
-                        <div className="h-32 flex items-center justify-center border-2 border-dashed border-zinc-900 rounded-xl text-[11px] text-zinc-600 col-span-full">
+                        <div className="h-36 flex items-center justify-center border-2 border-dashed border-black/[0.08] dark:border-white/[0.08] rounded-2xl text-xs text-[#86868b] col-span-full">
                           Drop candidates here or change filter
                         </div>
                       ) : (
@@ -948,10 +970,10 @@ export default function CompanyWalkInKanbanPage() {
                               key={entry.id}
                               draggable
                               onDragStart={() => handleDragStart(entry.id)}
-                              className={`rounded-xl p-3.5 space-y-3 cursor-grab active:cursor-grabbing transition-all shadow-md group relative select-none border ${
+                              className={`rounded-2xl p-4 space-y-3 cursor-grab active:cursor-grabbing transition-all group relative select-none border ${
                                 isSelected
-                                  ? 'bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/10'
-                                  : 'bg-zinc-950 hover:bg-zinc-900/80 border-zinc-800 hover:border-zinc-700'
+                                  ? 'bg-[#0071e3]/5 border-[#0071e3] ring-2 ring-[#0071e3]/30 shadow-md'
+                                  : 'bg-white dark:bg-[#2c2c2e] hover:shadow-md border-black/[0.06] dark:border-white/[0.08]'
                               }`}
                             >
                               {/* Candidate Header with Checkbox */}
@@ -960,17 +982,17 @@ export default function CompanyWalkInKanbanPage() {
                                   {/* Selection Checkbox */}
                                   <button
                                     onClick={(e) => toggleSelectCandidate(entry.id, e)}
-                                    className={`p-0.5 rounded transition-colors shrink-0 ${
+                                    className={`p-0.5 rounded-lg transition-colors shrink-0 cursor-pointer ${
                                       isSelected
-                                        ? 'text-indigo-400 bg-indigo-500/20'
-                                        : 'text-zinc-600 hover:text-zinc-300'
+                                        ? 'text-[#0071e3] bg-[#0071e3]/10'
+                                        : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
                                     }`}
                                     title={isSelected ? 'Deselect candidate' : 'Select candidate'}
                                   >
-                                    {isSelected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
+                                    {isSelected ? <CheckSquare className="w-4 h-4 text-[#0071e3]" /> : <Square className="w-4 h-4" />}
                                   </button>
 
-                                  <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-300 shrink-0 overflow-hidden">
+                                  <div className="w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#3a3a3c] border border-black/[0.06] flex items-center justify-center font-bold text-xs text-[#1d1d1f] dark:text-white shrink-0 overflow-hidden">
                                     {entry.jobSeekerProfile.profilePhotoUrl ? (
                                       <img
                                         src={entry.jobSeekerProfile.profilePhotoUrl}
@@ -982,10 +1004,10 @@ export default function CompanyWalkInKanbanPage() {
                                     )}
                                   </div>
                                   <div className="min-w-0">
-                                    <h4 className="text-xs font-bold text-white truncate group-hover:text-indigo-400 transition-colors">
+                                    <h4 className="text-xs font-bold text-[#1d1d1f] dark:text-white truncate group-hover:text-[#0071e3] transition-colors">
                                       {entry.jobSeekerProfile.fullName}
                                     </h4>
-                                    <p className="text-[10px] text-zinc-500 truncate">{entry.jobSeekerProfile.email}</p>
+                                    <p className="text-[10px] text-[#86868b] truncate font-medium">{entry.jobSeekerProfile.email}</p>
                                   </div>
                                 </div>
 
@@ -993,15 +1015,15 @@ export default function CompanyWalkInKanbanPage() {
                                   const displayScore = Math.round(entry.cvAnalysis?.overallScore ?? entry.skillScore);
                                   const scoreColor =
                                     displayScore >= 75
-                                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                      ? 'bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border-[#34c759]/20'
                                       : displayScore >= 55
-                                      ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30'
+                                      ? 'bg-[#0071e3]/10 text-[#0071e3] border-[#0071e3]/20'
                                       : displayScore >= 40
-                                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30';
+                                      ? 'bg-[#ff9500]/10 text-[#ff9500] border-[#ff9500]/20'
+                                      : 'bg-[#ff3b30]/10 text-[#ff3b30] border-[#ff3b30]/20';
 
                                   return (
-                                    <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md border shrink-0 ${scoreColor}`}>
+                                    <span className={`px-2 py-0.5 text-[10px] font-bold rounded-lg border shrink-0 ${scoreColor}`}>
                                       {displayScore}%
                                     </span>
                                   );
@@ -1012,17 +1034,17 @@ export default function CompanyWalkInKanbanPage() {
                               {entry.cvAnalysis?.recommendation && (
                                 <div className="flex items-center gap-1.5">
                                   {entry.cvAnalysis.recommendation === 'STRONG_MATCH' && (
-                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full flex items-center gap-1">
+                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border border-[#34c759]/20 rounded-full flex items-center gap-1">
                                       <span>⭐</span> Strong Match
                                     </span>
                                   )}
                                   {entry.cvAnalysis.recommendation === 'GOOD_MATCH' && (
-                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-full flex items-center gap-1">
+                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20 rounded-full flex items-center gap-1">
                                       <span>✓</span> Good Fit
                                     </span>
                                   )}
                                   {entry.cvAnalysis.recommendation === 'MODERATE_MATCH' && (
-                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-full flex items-center gap-1">
+                                    <span className="px-2 py-0.5 text-[9px] font-bold bg-[#ff9500]/10 text-[#ff9500] border border-[#ff9500]/20 rounded-full flex items-center gap-1">
                                       <span>⚠</span> Moderate
                                     </span>
                                   )}
@@ -1030,14 +1052,14 @@ export default function CompanyWalkInKanbanPage() {
                               )}
 
                               {/* Scores & Resume Pill & Dynamic Aging */}
-                              <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-900 flex-wrap gap-1">
+                              <div className="flex items-center justify-between text-[10px] text-[#86868b] pt-2 border-t border-black/[0.04] dark:border-white/[0.06] flex-wrap gap-1 font-medium">
                                 <div className="flex items-center gap-1.5">
                                   <span>
-                                    Priority: <strong className="text-emerald-400 font-semibold">{Math.round(entry.effectivePriority ?? entry.priorityScore)}</strong>
+                                    Priority: <strong className="text-[#248a3d] dark:text-[#30d158] font-bold">{Math.round(entry.effectivePriority ?? entry.priorityScore)}</strong>
                                   </span>
                                   {(entry.agingBonus > 0 || (entry.minutesWaiting ?? 0) > 0) && (
                                     <span
-                                      className="px-1.5 py-0.2 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded text-[9px]"
+                                      className="px-1.5 py-0.5 bg-[#f2f2f7] dark:bg-[#3a3a3c] border border-black/[0.04] text-[#86868b] rounded-md text-[9px]"
                                       title="Dynamic anti-starvation boost"
                                     >
                                       ⏱ {entry.minutesWaiting ?? 0}m (+{Math.round(entry.agingBonus ?? 0)} pts)
@@ -1051,22 +1073,22 @@ export default function CompanyWalkInKanbanPage() {
                                       e.stopPropagation();
                                       openCandidateDrawer(entry);
                                     }}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 rounded border border-zinc-800 transition-colors"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] rounded-lg border border-[#0071e3]/20 transition-colors font-bold cursor-pointer"
                                     title="View CV & AI Score Matrix"
                                   >
                                     <FileText className="w-3 h-3" />
                                     <span>AI Matrix</span>
                                   </button>
                                 ) : (
-                                  <span className="text-zinc-600">Profile Only</span>
+                                  <span className="text-[#86868b]">Profile Only</span>
                                 )}
                               </div>
 
                               {/* Actions on Card */}
-                              <div className="pt-2 border-t border-zinc-900 flex items-center justify-between gap-1">
+                              <div className="pt-2 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between gap-1">
                                 <button
                                   onClick={() => openCandidateDrawer(entry)}
-                                  className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-900 transition-colors"
+                                  className="p-1.5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white rounded-lg hover:bg-[#f2f2f7] dark:hover:bg-[#3a3a3c] transition-colors cursor-pointer"
                                   title="View Full Profile & CV"
                                 >
                                   <Eye className="w-3.5 h-3.5" />
@@ -1076,7 +1098,7 @@ export default function CompanyWalkInKanbanPage() {
                                   {col.id !== 'interviewing' && (
                                     <button
                                       onClick={() => handleCallCandidate(entry)}
-                                      className="px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                                      className="px-2.5 py-1 bg-[#34c759]/10 hover:bg-[#34c759]/20 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158] rounded-xl text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer"
                                       title="Call into Video Call"
                                     >
                                       <Video className="w-3 h-3" />
@@ -1087,7 +1109,7 @@ export default function CompanyWalkInKanbanPage() {
                                   {col.id !== 'priority' && col.id !== 'accepted' && (
                                     <button
                                       onClick={() => handleMoveCandidateStatus(entry.id, 'priority')}
-                                      className="p-1.5 text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                                      className="p-1.5 text-[#ff9500] hover:bg-[#ff9500]/10 rounded-lg transition-colors cursor-pointer"
                                       title="Move to Priority"
                                     >
                                       <Star className="w-3.5 h-3.5" />
@@ -1097,7 +1119,7 @@ export default function CompanyWalkInKanbanPage() {
                                   {col.id !== 'accepted' && (
                                     <button
                                       onClick={() => handleMoveCandidateStatus(entry.id, 'accepted')}
-                                      className="p-1.5 text-teal-400 hover:bg-teal-500/10 rounded-lg transition-colors"
+                                      className="p-1.5 text-[#30b0c7] hover:bg-[#30b0c7]/10 rounded-lg transition-colors cursor-pointer"
                                       title="Accept / Shortlist"
                                     >
                                       <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1110,7 +1132,7 @@ export default function CompanyWalkInKanbanPage() {
                                         setCandidateToReject(entry);
                                         setRejectModalOpen(true);
                                       }}
-                                      className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                      className="p-1.5 text-[#ff3b30] hover:bg-[#ff3b30]/10 rounded-lg transition-colors cursor-pointer"
                                       title="Reject / Skip"
                                     >
                                       <XCircle className="w-3.5 h-3.5" />
@@ -1129,18 +1151,18 @@ export default function CompanyWalkInKanbanPage() {
             </div>
           ) : (
             /* ─── LIST VIEW ──────────────────────────────────────────────── */
-            <div className="bg-zinc-950 border border-zinc-800/80 rounded-2xl overflow-hidden">
+            <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-[11px] text-zinc-500 uppercase tracking-wider bg-zinc-900/40">
+                  <tr className="border-b border-black/[0.06] dark:border-white/[0.08] text-[11px] text-[#86868b] uppercase tracking-wider bg-[#f8f8fa] dark:bg-[#2c2c2e]/50 font-bold">
                     <th className="p-4 w-12">
                       <button
                         onClick={handleSelectAllVisible}
-                        className="text-zinc-500 hover:text-zinc-300"
+                        className="text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white cursor-pointer"
                         title="Select All"
                       >
                         {selectedEntryIds.length > 0 ? (
-                          <CheckSquare className="w-4 h-4 text-indigo-400" />
+                          <CheckSquare className="w-4 h-4 text-[#0071e3]" />
                         ) : (
                           <Square className="w-4 h-4" />
                         )}
@@ -1149,103 +1171,94 @@ export default function CompanyWalkInKanbanPage() {
                     <th className="p-4">Candidate</th>
                     <th className="p-4">Stage</th>
                     <th className="p-4">Skill Match</th>
-                    <th className="p-4">Priority Score</th>
-                    <th className="p-4">Resume / CV</th>
+                    <th className="p-4">Waiting Time</th>
+                    <th className="p-4">Resume</th>
                     <th className="p-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-900 text-xs">
-                  {filteredQueue
-                    .filter((e) =>
-                      selectedStageFilter === 'all' ? true : e.status === selectedStageFilter
-                    )
-                    .map((entry) => {
-                      const isSelected = selectedEntryIds.includes(entry.id);
-
-                      return (
-                        <tr
-                          key={entry.id}
-                          className={`transition-colors ${
-                            isSelected ? 'bg-indigo-950/20' : 'hover:bg-zinc-900/30'
-                          }`}
-                        >
-                          <td className="p-4">
-                            <button
-                              onClick={(e) => toggleSelectCandidate(entry.id, e)}
-                              className={`p-0.5 rounded transition-colors ${
-                                isSelected ? 'text-indigo-400' : 'text-zinc-600 hover:text-zinc-400'
-                              }`}
-                            >
-                              {isSelected ? (
-                                <CheckSquare className="w-4 h-4 text-indigo-400" />
+                <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.06] text-xs font-medium">
+                  {filteredQueue.map((entry) => {
+                    const isSelected = selectedEntryIds.includes(entry.id);
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={`hover:bg-[#f8f8fa] dark:hover:bg-[#2c2c2e]/40 transition-colors ${
+                          isSelected ? 'bg-[#0071e3]/5' : ''
+                        }`}
+                      >
+                        <td className="p-4">
+                          <button
+                            onClick={(e) => toggleSelectCandidate(entry.id, e)}
+                            className="text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white cursor-pointer"
+                          >
+                            {isSelected ? <CheckSquare className="w-4 h-4 text-[#0071e3]" /> : <Square className="w-4 h-4" />}
+                          </button>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#3a3a3c] border border-black/[0.06] flex items-center justify-center font-bold text-xs text-[#1d1d1f] dark:text-white overflow-hidden shrink-0">
+                              {entry.jobSeekerProfile.profilePhotoUrl ? (
+                                <img
+                                  src={entry.jobSeekerProfile.profilePhotoUrl}
+                                  alt={entry.jobSeekerProfile.fullName}
+                                  className="w-full h-full object-cover"
+                                />
                               ) : (
-                                <Square className="w-4 h-4" />
+                                entry.jobSeekerProfile.fullName.charAt(0)
                               )}
+                            </div>
+                            <div>
+                              <div className="font-bold text-[#1d1d1f] dark:text-white">{entry.jobSeekerProfile.fullName}</div>
+                              <div className="text-[11px] text-[#86868b]">{entry.jobSeekerProfile.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-[#f5f5f7]">
+                            {entry.status}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className="font-bold text-[#248a3d] dark:text-[#30d158]">
+                            {Math.round(entry.cvAnalysis?.overallScore ?? entry.skillScore)}%
+                          </span>
+                        </td>
+                        <td className="p-4 text-[#86868b]">
+                          {entry.minutesWaiting ?? Math.round((Date.now() - new Date(entry.waitingSince).getTime()) / 60000)} mins
+                        </td>
+                        <td className="p-4">
+                          {entry.resume ? (
+                            <button
+                              onClick={() => openCandidateDrawer(entry)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0071e3] rounded-xl border border-[#0071e3]/20 text-xs font-bold cursor-pointer"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>{entry.resume.name || 'View CV'}</span>
                             </button>
-                          </td>
-                          <td className="p-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-300 overflow-hidden">
-                                {entry.jobSeekerProfile.profilePhotoUrl ? (
-                                  <img
-                                    src={entry.jobSeekerProfile.profilePhotoUrl}
-                                    alt={entry.jobSeekerProfile.fullName}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  entry.jobSeekerProfile.fullName.charAt(0)
-                                )}
-                              </div>
-                              <div>
-                                <div className="font-bold text-white">{entry.jobSeekerProfile.fullName}</div>
-                                <div className="text-[11px] text-zinc-500">{entry.jobSeekerProfile.email}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <span className="px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider bg-zinc-900 border border-zinc-800 text-zinc-300">
-                              {entry.status}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            <span className="font-bold text-indigo-400">{Math.round(entry.skillScore)}%</span>
-                          </td>
-                          <td className="p-4">
-                            <span className="font-bold text-emerald-400">{Math.round(entry.priorityScore)}</span>
-                          </td>
-                          <td className="p-4">
-                            {entry.resume ? (
-                              <button
-                                onClick={() => openCandidateDrawer(entry)}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-indigo-400 rounded-lg border border-zinc-800 text-xs font-semibold"
-                              >
-                                <FileText className="w-3.5 h-3.5" />
-                                <span>{entry.resume.name || 'View CV'}</span>
-                              </button>
-                            ) : (
-                              <span className="text-zinc-600 text-xs">No CV</span>
-                            )}
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleCallCandidate(entry)}
-                                className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold flex items-center gap-1"
-                              >
-                                <Video className="w-3.5 h-3.5" />
-                                <span>Call</span>
-                              </button>
-                              <button
-                                onClick={() => openCandidateDrawer(entry)}
-                                className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-lg text-xs font-semibold"
-                              >
-                                Inspect
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          ) : (
+                            <span className="text-[#86868b] text-xs">No CV</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleCallCandidate(entry)}
+                              className="px-3.5 py-1.5 bg-[#34c759]/10 hover:bg-[#34c759]/20 text-[#248a3d] dark:text-[#30d158] border border-[#34c759]/20 rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <Video className="w-3.5 h-3.5" />
+                              <span>Call</span>
+                            </button>
+                            <button
+                              onClick={() => openCandidateDrawer(entry)}
+                              className="px-3.5 py-1.5 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white border border-black/[0.06] dark:border-white/[0.08] rounded-xl text-xs font-semibold cursor-pointer"
+                            >
+                              Inspect
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1253,54 +1266,54 @@ export default function CompanyWalkInKanbanPage() {
 
           {/* ─── FLOATING BATCH ACTION TOOLBAR ─────────────────────────────── */}
           {selectedEntryIds.length > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-zinc-950/95 border border-indigo-500/60 backdrop-blur-xl shadow-2xl rounded-2xl p-3 sm:px-5 flex items-center gap-3 sm:gap-4 max-w-2xl w-[92vw] sm:w-auto animate-in fade-in slide-in-from-bottom-5">
-              <div className="flex items-center gap-2 shrink-0 text-xs font-bold text-white pr-3 border-r border-zinc-800">
-                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/95 dark:bg-[#1c1c1e]/95 border border-black/[0.08] dark:border-white/[0.1] backdrop-blur-xl shadow-2xl rounded-3xl p-3.5 sm:px-6 flex items-center gap-3 sm:gap-4 max-w-2xl w-[92vw] sm:w-auto animate-in fade-in slide-in-from-bottom-5">
+              <div className="flex items-center gap-2 shrink-0 text-xs font-bold text-[#1d1d1f] dark:text-white pr-3 border-r border-black/[0.06] dark:border-white/[0.08]">
+                <span className="w-2 h-2 rounded-full bg-[#0071e3] animate-pulse" />
                 <span>
                   {selectedEntryIds.length} Candidate{selectedEntryIds.length > 1 ? 's' : ''} Selected
                 </span>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap flex-1 justify-center sm:justify-start">
-                <span className="text-[11px] text-zinc-500 font-semibold hidden md:inline">Assign:</span>
+                <span className="text-[11px] text-[#86868b] font-semibold hidden md:inline">Assign:</span>
 
                 <button
                   onClick={() => handleBatchMove('priority')}
                   disabled={batchUpdating}
-                  className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-[#ff9500]/10 hover:bg-[#ff9500]/20 border border-[#ff9500]/30 text-[#ff9500] rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-40"
                   title="Move selected to Priority Shortlist"
                 >
-                  <Star className="w-3.5 h-3.5 text-amber-400" />
+                  <Star className="w-3.5 h-3.5 text-[#ff9500]" />
                   <span>Priority</span>
                 </button>
 
                 <button
                   onClick={() => handleBatchMove('waiting')}
                   disabled={batchUpdating}
-                  className="px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 border border-[#0071e3]/30 text-[#0071e3] rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-40"
                   title="Move selected to Applied Queue"
                 >
-                  <Clock className="w-3.5 h-3.5 text-sky-400" />
+                  <Clock className="w-3.5 h-3.5 text-[#0071e3]" />
                   <span>Queue</span>
                 </button>
 
                 <button
                   onClick={() => handleBatchMove('accepted')}
                   disabled={batchUpdating}
-                  className="px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-[#30b0c7]/10 hover:bg-[#30b0c7]/20 border border-[#30b0c7]/30 text-[#30b0c7] rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-40"
                   title="Mark selected as Accepted / Shortlisted"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#30b0c7]" />
                   <span>Accept / OK</span>
                 </button>
 
                 <button
                   onClick={() => handleBatchMove('skipped')}
                   disabled={batchUpdating}
-                  className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-[#ff3b30]/10 hover:bg-[#ff3b30]/20 border border-[#ff3b30]/30 text-[#ff3b30] rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-40"
                   title="Reject / Skip selected candidates"
                 >
-                  <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                  <XCircle className="w-3.5 h-3.5 text-[#ff3b30]" />
                   <span>Reject</span>
                 </button>
               </div>
@@ -1319,18 +1332,18 @@ export default function CompanyWalkInKanbanPage() {
 
       {/* ─── CANDIDATE PROFILE & CV DRAWER / MODAL ─────────────────────── */}
       {candidateDrawerOpen && selectedCandidate && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-2xl w-full p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto relative shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 max-h-[90vh] overflow-y-auto relative shadow-2xl">
             <button
               onClick={() => setCandidateDrawerOpen(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-900"
+              className="absolute top-5 right-5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white p-1.5 rounded-xl hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Candidate Header */}
             <div className="flex items-start gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xl font-bold text-white overflow-hidden shrink-0">
+              <div className="w-14 h-14 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-center text-xl font-bold text-[#1d1d1f] dark:text-white overflow-hidden shrink-0">
                 {selectedCandidate.jobSeekerProfile.profilePhotoUrl ? (
                   <img
                     src={selectedCandidate.jobSeekerProfile.profilePhotoUrl}
@@ -1343,14 +1356,14 @@ export default function CompanyWalkInKanbanPage() {
               </div>
               <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-xl font-extrabold text-white">{selectedCandidate.jobSeekerProfile.fullName}</h2>
-                  <span className="px-2.5 py-0.5 text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded-full uppercase">
+                  <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white tracking-tight">{selectedCandidate.jobSeekerProfile.fullName}</h2>
+                  <span className="px-2.5 py-0.5 text-[10px] font-bold bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20 rounded-full uppercase">
                     {selectedCandidate.status}
                   </span>
                 </div>
-                <p className="text-xs text-zinc-400">{selectedCandidate.jobSeekerProfile.email}</p>
+                <p className="text-xs text-[#86868b] font-medium">{selectedCandidate.jobSeekerProfile.email}</p>
                 {selectedCandidate.jobSeekerProfile.location && (
-                  <p className="text-[11px] text-zinc-500">{selectedCandidate.jobSeekerProfile.location}</p>
+                  <p className="text-[11px] text-[#86868b]">{selectedCandidate.jobSeekerProfile.location}</p>
                 )}
               </div>
             </div>
@@ -1369,82 +1382,82 @@ export default function CompanyWalkInKanbanPage() {
                 <div className="space-y-4">
                   {/* Gauge Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
-                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Overall Fit</div>
-                      <div className="text-2xl font-black text-emerald-400">{overall}%</div>
+                    <div className="bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06] text-center space-y-1">
+                      <div className="text-[10px] text-[#86868b] font-bold uppercase tracking-wider">Overall Fit</div>
+                      <div className="text-2xl font-bold text-[#248a3d] dark:text-[#30d158]">{overall}%</div>
                     </div>
-                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
-                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Skill Match</div>
-                      <div className="text-2xl font-black text-indigo-400">{skillScore}%</div>
+                    <div className="bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06] text-center space-y-1">
+                      <div className="text-[10px] text-[#86868b] font-bold uppercase tracking-wider">Skill Match</div>
+                      <div className="text-2xl font-bold text-[#0071e3]">{skillScore}%</div>
                     </div>
-                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
-                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Exp Match</div>
-                      <div className="text-2xl font-black text-purple-400">{expScore}%</div>
+                    <div className="bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06] text-center space-y-1">
+                      <div className="text-[10px] text-[#86868b] font-bold uppercase tracking-wider">Exp Match</div>
+                      <div className="text-2xl font-bold text-[#af52de]">{expScore}%</div>
                     </div>
-                    <div className="bg-zinc-900/70 p-3.5 rounded-xl border border-zinc-800 text-center space-y-1">
-                      <div className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Effective Priority</div>
-                      <div className="text-2xl font-black text-amber-400">{effectivePrio}</div>
+                    <div className="bg-[#f8f8fa] dark:bg-[#2c2c2e] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.06] text-center space-y-1">
+                      <div className="text-[10px] text-[#86868b] font-bold uppercase tracking-wider">Priority</div>
+                      <div className="text-2xl font-bold text-[#ff9500]">{effectivePrio}</div>
                     </div>
                   </div>
 
                   {/* Anti-Starvation Dynamic Aging Box */}
-                  <div className="p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-800/80 space-y-2">
+                  <div className="p-4 bg-[#f8f8fa] dark:bg-[#2c2c2e] rounded-2xl border border-black/[0.04] dark:border-white/[0.06] space-y-2.5">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-zinc-300 flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="font-bold text-[#1d1d1f] dark:text-white flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-[#ff9500]" />
                         <span>Dynamic Anti-Starvation Aging</span>
                       </span>
-                      <span className="text-[11px] text-amber-400 font-semibold">
+                      <span className="text-[11px] text-[#ff9500] font-semibold">
                         +0.75 pts / min waiting
                       </span>
                     </div>
-                    <div className="text-xs text-zinc-400 grid grid-cols-3 gap-2 text-center bg-black/40 p-2.5 rounded-lg border border-zinc-800/50">
+                    <div className="text-xs grid grid-cols-3 gap-2 text-center bg-white dark:bg-[#1c1c1e] p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.06]">
                       <div>
-                        <div className="text-[10px] text-zinc-500">Base Match</div>
-                        <div className="font-bold text-white">{overall} pts</div>
+                        <div className="text-[10px] text-[#86868b] font-medium">Base Match</div>
+                        <div className="font-bold text-[#1d1d1f] dark:text-white">{overall} pts</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-zinc-500">Waited ({minutes}m)</div>
-                        <div className="font-bold text-amber-400">+{Math.round(agingBonus)} pts boost</div>
+                        <div className="text-[10px] text-[#86868b] font-medium">Waited ({minutes}m)</div>
+                        <div className="font-bold text-[#ff9500]">+{Math.round(agingBonus)} pts</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-zinc-500">Queue Priority</div>
-                        <div className="font-bold text-emerald-400">{effectivePrio} pts</div>
+                        <div className="text-[10px] text-[#86868b] font-medium">Queue Priority</div>
+                        <div className="font-bold text-[#248a3d] dark:text-[#30d158]">{effectivePrio} pts</div>
                       </div>
                     </div>
                   </div>
 
                   {/* AI Executive Summary & Strengths/Gaps */}
                   {matrix && (
-                    <div className="space-y-3 bg-indigo-950/20 p-4 rounded-xl border border-indigo-500/20">
+                    <div className="space-y-3 bg-[#0071e3]/5 p-4 rounded-2xl border border-[#0071e3]/20">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                        <span className="text-xs font-bold text-[#0071e3] flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-[#0071e3]" />
                           <span>AI Screening Matrix</span>
                         </span>
                         {matrix.recommendation && (
-                          <span className="px-2 py-0.5 text-[10px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 rounded-md uppercase">
+                          <span className="px-2.5 py-0.5 text-[10px] font-bold bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/30 rounded-full uppercase">
                             {matrix.recommendation.replace('_', ' ')}
                           </span>
                         )}
                       </div>
 
                       {matrix.summary && (
-                        <p className="text-xs text-zinc-300 leading-relaxed italic bg-black/30 p-2.5 rounded-lg">
-                          "{matrix.summary}"
+                        <p className="text-xs text-[#1d1d1f] dark:text-[#f5f5f7] leading-relaxed italic bg-white dark:bg-[#1c1c1e] p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.06]">
+                          &ldquo;{matrix.summary}&rdquo;
                         </p>
                       )}
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         {matrix.strengths?.length > 0 && (
                           <div className="space-y-1.5">
-                            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                            <span className="text-[11px] font-bold text-[#248a3d] dark:text-[#30d158] uppercase tracking-wider flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3" /> Key Strengths
                             </span>
-                            <ul className="space-y-1 text-xs text-zinc-300">
+                            <ul className="space-y-1 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium">
                               {matrix.strengths.map((st, i) => (
                                 <li key={i} className="flex items-start gap-1.5">
-                                  <span className="text-emerald-400 shrink-0">•</span>
+                                  <span className="text-[#34c759] shrink-0">•</span>
                                   <span>{st}</span>
                                 </li>
                               ))}
@@ -1454,14 +1467,14 @@ export default function CompanyWalkInKanbanPage() {
 
                         {matrix.missingSkills?.length > 0 && (
                           <div className="space-y-1.5">
-                            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
-                              <AlertCircle className="w-3 h-3" /> Skills Gaps / Missing
+                            <span className="text-[11px] font-bold text-[#ff3b30] uppercase tracking-wider flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> Missing Target Skills
                             </span>
-                            <ul className="space-y-1 text-xs text-zinc-300">
-                              {matrix.missingSkills.map((ms, i) => (
+                            <ul className="space-y-1 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium">
+                              {matrix.missingSkills.map((sk, i) => (
                                 <li key={i} className="flex items-start gap-1.5">
-                                  <span className="text-amber-400 shrink-0">•</span>
-                                  <span>{ms}</span>
+                                  <span className="text-[#ff3b30] shrink-0">•</span>
+                                  <span>{sk}</span>
                                 </li>
                               ))}
                             </ul>
@@ -1474,43 +1487,43 @@ export default function CompanyWalkInKanbanPage() {
               );
             })()}
 
-            {/* Resume / CV Attachment Section */}
-            <div className="bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-400" />
-                  <span className="text-xs font-bold text-white">Candidate Resume / CV</span>
-                </div>
-                {(selectedCandidate.resume?.filePath || selectedCandidate.cvFileUrl) && (
+            {/* Resume Document Link */}
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-[#86868b] uppercase tracking-wider">Candidate Resume</div>
+              {selectedCandidate.resume?.filePath || selectedCandidate.cvFileUrl ? (
+                <div className="flex items-center justify-between p-3.5 bg-[#f8f8fa] dark:bg-[#2c2c2e] rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
+                  <div className="flex items-center gap-2.5">
+                    <FileText className="w-5 h-5 text-[#0071e3]" />
+                    <div>
+                      <div className="text-xs font-bold text-[#1d1d1f] dark:text-white">
+                        {selectedCandidate.resume?.name || 'Attached CV Document'}
+                      </div>
+                      <div className="text-[10px] text-[#86868b]">PDF / Document Attachment</div>
+                    </div>
+                  </div>
                   <a
                     href={selectedCandidate.resume?.filePath || selectedCandidate.cvFileUrl || '#'}
                     target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shadow-indigo-600/20"
+                    rel="noreferrer"
+                    className="px-3.5 py-1.5 bg-[#0071e3] hover:bg-[#0077ed] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-[0_4px_14px_rgba(0,113,227,0.25)]"
                   >
-                    <span>View / Open PDF</span>
+                    <span>View File</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
-                )}
-              </div>
-              {selectedCandidate.resume ? (
-                <div className="text-xs text-zinc-400 space-y-1">
-                  <div>Document: <strong className="text-zinc-200">{selectedCandidate.resume.name}</strong></div>
-                  <div>Submitted for Walk-In Evaluation</div>
                 </div>
               ) : (
-                <p className="text-xs text-zinc-500 italic">Profile skills & experience used for evaluation.</p>
+                <p className="text-xs text-[#86868b] italic">Profile skills &amp; experience used for evaluation.</p>
               )}
             </div>
 
             {/* Skills */}
             <div className="space-y-2">
-              <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Candidate Skills</div>
+              <div className="text-xs font-bold text-[#86868b] uppercase tracking-wider">Candidate Skills</div>
               <div className="flex flex-wrap gap-1.5">
                 {selectedCandidate.jobSeekerProfile.skills.map((s, idx) => (
                   <span
                     key={idx}
-                    className="px-2.5 py-1 text-xs bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg font-medium"
+                    className="px-3 py-1 text-xs bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-xl font-semibold"
                   >
                     {s.name}
                   </span>
@@ -1519,18 +1532,18 @@ export default function CompanyWalkInKanbanPage() {
             </div>
 
             {/* Evaluation Actions Footer */}
-            <div className="pt-4 border-t border-zinc-900 flex items-center justify-between gap-3 flex-wrap">
+            <div className="pt-4 border-t border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleMoveCandidateStatus(selectedCandidate.id, 'priority')}
-                  className="px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-[#ff9500]/10 hover:bg-[#ff9500]/20 border border-[#ff9500]/30 text-[#ff9500] rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Star className="w-3.5 h-3.5" />
                   <span>Prioritize</span>
                 </button>
                 <button
                   onClick={() => handleMoveCandidateStatus(selectedCandidate.id, 'accepted')}
-                  className="px-3 py-2 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 text-teal-400 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-[#30b0c7]/10 hover:bg-[#30b0c7]/20 border border-[#30b0c7]/30 text-[#30b0c7] rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Accept / OK</span>
@@ -1540,7 +1553,7 @@ export default function CompanyWalkInKanbanPage() {
                     setCandidateToReject(selectedCandidate);
                     setRejectModalOpen(true);
                   }}
-                  className="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-[#ff3b30]/10 hover:bg-[#ff3b30]/20 border border-[#ff3b30]/30 text-[#ff3b30] rounded-2xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <XCircle className="w-3.5 h-3.5" />
                   <span>Reject</span>
@@ -1552,7 +1565,7 @@ export default function CompanyWalkInKanbanPage() {
                   setCandidateDrawerOpen(false);
                   handleCallCandidate(selectedCandidate);
                 }}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all"
+                className="px-5 py-2.5 bg-[#34c759] hover:bg-[#30d158] text-white font-bold rounded-2xl text-xs flex items-center gap-2 shadow-[0_4px_14px_rgba(52,199,89,0.25)] transition-all cursor-pointer"
               >
                 <Video className="w-4 h-4" />
                 <span>Call to Video Interview</span>
@@ -1564,35 +1577,35 @@ export default function CompanyWalkInKanbanPage() {
 
       {/* ─── ROOM LIMIT & SETTINGS MODAL ─────────────────────────────── */}
       {settingsModalOpen && selectedRoom && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 sm:p-8 space-y-6 relative shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 relative shadow-2xl">
             <button
               onClick={() => setSettingsModalOpen(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-900"
+              className="absolute top-5 right-5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white p-1.5 rounded-xl hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="space-y-1">
-              <h2 className="text-xl font-bold text-white">Room Capacity & Settings</h2>
-              <p className="text-xs text-zinc-400">Configure participant limits and evaluation parameters</p>
+              <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white tracking-tight">Room Capacity &amp; Settings</h2>
+              <p className="text-xs text-[#86868b] font-medium">Configure participant limits and evaluation parameters</p>
             </div>
 
             <form onSubmit={handleSaveSettings} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Room Title</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Room Title</label>
                 <input
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   required
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-300">Participant Limit (Max Queue)</label>
+                  <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Participant Limit (Max Queue)</label>
                   <input
                     type="number"
                     value={editMaxQueue}
@@ -1600,51 +1613,51 @@ export default function CompanyWalkInKanbanPage() {
                     min={1}
                     max={200}
                     required
-                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                    className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-300">Priority Threshold (%)</label>
+                  <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Priority Threshold (%)</label>
                   <input
                     type="number"
                     value={editPriorityThreshold}
                     onChange={(e) => setEditPriorityThreshold(Number(e.target.value))}
                     min={30}
                     max={100}
-                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                    className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Minimum Experience Requirement</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Minimum Experience Requirement</label>
                 <input
                   type="text"
                   placeholder="e.g. 2+ years in frontend or fullstack"
                   value={editMinExperience}
                   onChange={(e) => setEditMinExperience(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Custom Evaluation Criteria (for AI)</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Custom Evaluation Criteria (for AI)</label>
                 <textarea
                   placeholder="e.g. Strong React/Next.js skills, practical experience building APIs and PostgreSQL databases..."
                   value={editEvaluationCriteria}
                   onChange={(e) => setEditEvaluationCriteria(e.target.value)}
                   rows={2}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none resize-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none resize-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Description</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Description</label>
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   rows={2}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none resize-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none resize-none"
                 />
               </div>
 
@@ -1652,14 +1665,14 @@ export default function CompanyWalkInKanbanPage() {
                 <button
                   type="button"
                   onClick={() => setSettingsModalOpen(false)}
-                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold"
+                  className="px-4 py-2.5 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white rounded-2xl text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingSettings}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20"
+                  className="px-6 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition-all cursor-pointer disabled:opacity-40"
                 >
                   {savingSettings ? 'Saving...' : 'Save Configuration'}
                 </button>
@@ -1671,82 +1684,82 @@ export default function CompanyWalkInKanbanPage() {
 
       {/* ─── CREATE ROOM MODAL ────────────────────────────────────────── */}
       {createModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 sm:p-8 space-y-6 relative shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 relative shadow-2xl">
             <button
               onClick={() => setCreateModalOpen(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-900"
+              className="absolute top-5 right-5 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white p-1.5 rounded-xl hover:bg-[#f2f2f7] dark:hover:bg-[#2c2c2e] cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             <div className="space-y-1">
-              <h2 className="text-xl font-bold text-white">Create New Walk-In Room</h2>
-              <p className="text-xs text-zinc-400">Launch an instant evaluation room with automated AI matching</p>
+              <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white tracking-tight">Create New Walk-In Room</h2>
+              <p className="text-xs text-[#86868b] font-medium">Launch an instant evaluation room with automated AI matching</p>
             </div>
 
             <form onSubmit={handleCreateRoom} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Room Title *</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Room Title *</label>
                 <input
                   type="text"
                   placeholder="e.g. Senior Fullstack Engineer Walk-In"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   required
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2.5 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-300">Participant Limit</label>
+                  <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Participant Limit</label>
                   <input
                     type="number"
                     value={maxQueue}
                     onChange={(e) => setMaxQueue(Number(e.target.value))}
                     min={1}
                     max={200}
-                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                    className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-300">Priority Threshold (%)</label>
+                  <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Priority Threshold (%)</label>
                   <input
                     type="number"
                     value={priorityThreshold}
                     onChange={(e) => setPriorityThreshold(Number(e.target.value))}
                     min={30}
                     max={100}
-                    className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                    className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Minimum Experience Level</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Minimum Experience Level</label>
                 <input
                   type="text"
                   placeholder="e.g. 2+ years / Mid-level"
                   value={minExperience}
                   onChange={(e) => setMinExperience(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Custom Evaluation Criteria (for AI)</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Custom Evaluation Criteria (for AI)</label>
                 <textarea
                   placeholder="e.g. Strong problem solving, production Next.js experience, Docker or cloud basics..."
                   value={evaluationCriteria}
                   onChange={(e) => setEvaluationCriteria(e.target.value)}
                   rows={2}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none resize-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none resize-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Required Skills for AI Scoring</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Required Skills for AI Scoring</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1762,7 +1775,7 @@ export default function CompanyWalkInKanbanPage() {
                         }
                       }
                     }}
-                    className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
+                    className="flex-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none"
                   />
                   <button
                     type="button"
@@ -1772,7 +1785,7 @@ export default function CompanyWalkInKanbanPage() {
                         setSkillInput('');
                       }
                     }}
-                    className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold"
+                    className="px-4 py-2 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-white rounded-2xl text-xs font-semibold cursor-pointer"
                   >
                     Add
                   </button>
@@ -1782,13 +1795,13 @@ export default function CompanyWalkInKanbanPage() {
                     {skills.map((s, idx) => (
                       <span
                         key={idx}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg text-xs"
+                        className="inline-flex items-center gap-1 px-3 py-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-xl text-xs font-medium"
                       >
                         <span>{s}</span>
                         <button
                           type="button"
                           onClick={() => setSkills(skills.filter((sk) => sk !== s))}
-                          className="text-zinc-500 hover:text-rose-400"
+                          className="text-[#86868b] hover:text-[#ff3b30] cursor-pointer"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1799,13 +1812,13 @@ export default function CompanyWalkInKanbanPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-zinc-300">Description (Optional)</label>
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">Description (Optional)</label>
                 <textarea
                   placeholder="Instructions or prerequisites for candidates..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={2}
-                  className="w-full bg-zinc-900 border border-zinc-800 focus:border-indigo-500 rounded-xl px-3.5 py-2 text-xs text-white outline-none resize-none"
+                  className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3] rounded-2xl px-4 py-2 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none resize-none"
                 />
               </div>
 
@@ -1813,14 +1826,14 @@ export default function CompanyWalkInKanbanPage() {
                 <button
                   type="button"
                   onClick={() => setCreateModalOpen(false)}
-                  className="px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 rounded-xl text-xs font-semibold"
+                  className="px-4 py-2.5 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white rounded-2xl text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creating}
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20"
+                  className="px-6 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold shadow-[0_4px_14px_rgba(0,113,227,0.25)] transition-all cursor-pointer disabled:opacity-40"
                 >
                   {creating ? 'Creating...' : 'Launch Walk-In Room'}
                 </button>
@@ -1832,12 +1845,12 @@ export default function CompanyWalkInKanbanPage() {
 
       {/* ─── REJECT / FEEDBACK MODAL ─────────────────────────────────── */}
       {rejectModalOpen && candidateToReject && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-4 relative shadow-2xl">
-            <h3 className="text-base font-bold text-white">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-md w-full p-6 sm:p-7 space-y-4 relative shadow-2xl">
+            <h3 className="text-base font-bold text-[#1d1d1f] dark:text-white">
               Reject / Skip {candidateToReject.jobSeekerProfile.fullName}?
             </h3>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-[#86868b] font-medium">
               Provide an optional evaluation note or feedback reason for this candidate.
             </p>
 
@@ -1846,7 +1859,7 @@ export default function CompanyWalkInKanbanPage() {
               value={rejectionNote}
               onChange={(e) => setRejectionNote(e.target.value)}
               rows={3}
-              className="w-full bg-zinc-900 border border-zinc-800 focus:border-rose-500 rounded-xl p-3 text-xs text-white outline-none resize-none"
+              className="w-full bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] focus:border-[#ff3b30] rounded-2xl p-3 text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium outline-none resize-none"
             />
 
             <div className="flex items-center justify-end gap-3 pt-2">
