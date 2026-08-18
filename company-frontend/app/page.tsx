@@ -4,6 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/app/contexts/AuthContext';
+import ThemeToggle from '@/app/components/ThemeToggle';
 import {
   Rocket, Building2, Kanban, Video, Bot,
   Zap, ShieldAlert, LineChart, Users, BarChart3,
@@ -91,10 +92,10 @@ export default function CompanyFrontPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#fafafa] dark:bg-[#000000] text-[#111827] dark:text-[#f5f5f7] font-sans antialiased selection:bg-[#0071e3]/20 selection:text-[#0071e3] flex flex-col">
+    <div className="min-h-screen bg-[#fafafa] dark:bg-[#000000] text-[#111827] dark:text-[#f5f5f7] font-sans antialiased selection:bg-[#0071e3]/20 selection:text-[#0071e3] flex flex-col transition-colors duration-300">
       
       {/* ── HEADER NAVBAR ─────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#111112]/80 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.08]">
+      <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#000000]/80 backdrop-blur-xl border-b border-black/[0.06] dark:border-white/[0.08]">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
           
           {/* Logo */}
@@ -106,7 +107,7 @@ export default function CompanyFrontPage() {
               <span className="font-bold text-base tracking-tight text-[#111827] dark:text-white group-hover:text-[#0071e3] transition-colors">
                 EasyApply <span className="text-xs font-semibold text-[#0071e3] ml-1">for Employers</span>
               </span>
-              <span className="text-[10px] font-semibold text-[#6b7280] -mt-1 hidden sm:inline">
+              <span className="text-[10px] font-semibold text-[#86868b] -mt-1 hidden sm:inline">
                 Hiring Intelligence &amp; Live Walk-In Suite
               </span>
             </div>
@@ -116,20 +117,20 @@ export default function CompanyFrontPage() {
           <nav className="hidden md:flex items-center gap-1 bg-[#f2f2f7]/80 dark:bg-[#1c1c1e]/80 p-1 rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
             <a
               href="#features"
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#6b7280] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#86868b] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all"
             >
               Features
             </a>
             <a
               href="#walkin"
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#6b7280] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all flex items-center gap-1.5"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#86868b] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all flex items-center gap-1.5"
             >
               <DoorOpen className="w-3.5 h-3.5 text-[#0071e3]" />
               <span>Walk-In Suite</span>
             </a>
             <a
               href="#how-it-works"
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#6b7280] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all"
+              className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#86868b] hover:text-[#111827] dark:hover:text-white hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all"
             >
               How It Works
             </a>
@@ -147,6 +148,8 @@ export default function CompanyFrontPage() {
 
           {/* Right Actions */}
           <div className="flex items-center gap-2.5">
+            <ThemeToggle />
+
             <button
               onClick={() => router.push('/login')}
               className="px-4 py-2 bg-transparent hover:bg-black/[0.04] dark:hover:bg-white/[0.06] text-[#111827] dark:text-white rounded-2xl text-xs font-bold transition cursor-pointer"
@@ -194,7 +197,7 @@ export default function CompanyFrontPage() {
             </h1>
 
             {/* Subtitle */}
-            <p className="text-base sm:text-lg text-[#6b7280] font-medium leading-relaxed max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg text-[#86868b] font-medium leading-relaxed max-w-2xl mx-auto">
               Automate candidate ranking with Groq semantic intelligence, host instant live video walk-in evaluation rooms, and manage team pipelines without friction.
             </p>
 
@@ -422,6 +425,9 @@ export default function CompanyFrontPage() {
               <p className="text-xs text-[#86868b] leading-relaxed font-medium">
                 End-to-end recruitment intelligence, automated ATS screening, and instant walk-in video interview rooms.
               </p>
+              <div className="pt-1">
+                <ThemeToggle />
+              </div>
             </div>
 
             <div className="space-y-3">
