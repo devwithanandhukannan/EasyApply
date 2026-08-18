@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Send, Mail, MessageSquare, Bell, CheckCircle } from 'lucide-react';
+import { X, Send, Mail, MessageSquare, Bell, CheckCircle, Loader2 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { useGlassToast } from './GlassToastContainer';
 
@@ -20,24 +20,24 @@ export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: 
   const channels = [
     { 
       id: 'email', 
-      label: 'Email', 
+      label: 'Email Dispatch', 
       icon: Mail, 
-      description: 'Send via SMTP with tracking pixel',
-      color: 'text-blue-400'
+      description: 'Official digital delivery with real-time open and view tracking',
+      color: 'text-[#0071e3]'
     },
     { 
       id: 'whatsapp', 
-      label: 'WhatsApp', 
+      label: 'WhatsApp Alert', 
       icon: MessageSquare, 
-      description: 'Send direct message (if number available)',
-      color: 'text-emerald-400'
+      description: 'Instant notification link sent to candidate phone number',
+      color: 'text-emerald-500'
     },
     { 
       id: 'inapp', 
-      label: 'In-App Notification', 
+      label: 'In-App Portal Notification', 
       icon: Bell, 
-      description: 'Push notification to candidate dashboard',
-      color: 'text-purple-400'
+      description: 'Interactive offer notification card in candidate dashboard',
+      color: 'text-purple-500'
     }
   ];
 
@@ -53,7 +53,7 @@ export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: 
     e.preventDefault();
 
     if (selectedChannels.length === 0) {
-      showToast('failed', 'Please select at least one delivery channel', 'danger');
+      showToast('Validation Error', 'Please select at least one delivery channel', 'danger');
       return;
     }
 
@@ -65,12 +65,13 @@ export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: 
       });
 
       if (response.data.success) {
+        showToast('Success', 'Offer letter sent successfully to candidate', 'success');
         onSuccess();
         onClose();
       }
     } catch (error: any) {
       console.error('Send offer error:', error);
-      showToast('failed', error.response?.data?.message || 'Failed to send offer', 'danger');
+      showToast('Dispatch Failed', error.response?.data?.message || 'Failed to send offer', 'danger');
     } finally {
       setIsSubmitting(false);
     }
@@ -79,69 +80,67 @@ export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-950 border border-zinc-900 rounded-xl max-w-lg w-full">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-md w-full shadow-2xl text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased overflow-hidden">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-zinc-900">
+        <div className="flex items-center justify-between p-6 border-b border-black/[0.06] dark:border-white/[0.08]">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center">
-              <Send className="w-4 h-4 text-emerald-400" />
+            <div className="w-9 h-9 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] rounded-2xl flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+              <Send className="w-5 h-5" />
             </div>
-            <h2 className="text-sm font-semibold text-white uppercase">Send Offer to Candidate</h2>
+            <div>
+              <h2 className="text-base font-bold text-[#1d1d1f] dark:text-white tracking-tight">Send Offer Letter</h2>
+              <p className="text-xs text-[#86868b] font-medium">Select candidate delivery channels</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-black/[0.04] dark:bg-white/[0.06] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           
-          <div className="space-y-3">
-            <label className="text-xs font-semibold text-zinc-400 uppercase">
-              Select Delivery Channels
+          <div className="space-y-2.5">
+            <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
+              Dispatch Delivery Channels
             </label>
-
+            
             <div className="space-y-2">
-              {channels.map(channel => {
-                const Icon = channel.icon;
+              {channels.map((channel) => {
                 const isSelected = selectedChannels.includes(channel.id);
+                const Icon = channel.icon;
 
                 return (
                   <button
                     key={channel.id}
                     type="button"
                     onClick={() => toggleChannel(channel.id)}
-                    className={`w-full p-4 border rounded-lg transition-all text-left ${
-                      isSelected 
-                        ? 'border-zinc-700 bg-zinc-900' 
-                        : 'border-zinc-900 bg-zinc-950 hover:border-zinc-800'
+                    className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                      isSelected
+                        ? 'border-[#0071e3] bg-[#0071e3]/10 dark:bg-[#0071e3]/20 shadow-xs'
+                        : 'border-black/[0.06] dark:border-white/[0.08] bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea]'
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
-                        isSelected ? 'bg-zinc-800' : 'bg-zinc-900'
-                      }`}>
-                        <Icon className={`w-5 h-5 ${isSelected ? channel.color : 'text-zinc-600'}`} />
+                    <div className={`p-2 rounded-xl bg-white dark:bg-[#1c1c1e] shadow-2xs ${channel.color}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-[#1d1d1f] dark:text-white">
+                          {channel.label}
+                        </span>
+                        {isSelected && (
+                          <CheckCircle className="w-4 h-4 text-[#0071e3]" />
+                        )}
                       </div>
-
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-sm font-semibold ${
-                            isSelected ? 'text-white' : 'text-zinc-400'
-                          }`}>
-                            {channel.label}
-                          </span>
-                          {isSelected && (
-                            <CheckCircle className="w-4 h-4 text-emerald-400" />
-                          )}
-                        </div>
-                        <p className="text-xs text-zinc-600">{channel.description}</p>
-                      </div>
+                      <p className="text-[11px] text-[#86868b] font-medium mt-0.5">
+                        {channel.description}
+                      </p>
                     </div>
                   </button>
                 );
@@ -149,47 +148,29 @@ export default function SendOfferModal({ isOpen, onClose, offerId, onSuccess }: 
             </div>
           </div>
 
-          {/* Preview Info */}
-          <div className="bg-blue-950/20 border border-blue-900/50 rounded-lg p-3 space-y-2">
-            <div className="flex items-start gap-2">
-              <Mail className="w-4 h-4 text-blue-400 mt-0.5 shrink-0" />
-              <div className="text-xs text-blue-400">
-                <p className="font-semibold mb-1">Email Tracking Enabled</p>
-                <p className="text-blue-500/80">
-                  You'll be notified when the candidate opens the email and views the offer letter.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Legal Notice */}
-          <div className="bg-zinc-900/50 border border-zinc-900 rounded-lg p-3">
-            <p className="text-xs text-zinc-500 leading-relaxed">
-              The candidate will receive a PDF copy and a web link to review and respond to the offer. 
-              They can accept, decline, or request negotiation directly from their dashboard.
-            </p>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-3 pt-2">
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-sm font-medium transition-colors"
+              className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white rounded-2xl text-xs font-semibold hover:bg-[#e5e5ea] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting || selectedChannels.length === 0}
-              className="flex-1 px-4 py-2 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="px-5 py-2 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white rounded-2xl text-xs font-bold shadow-md shadow-blue-500/25 cursor-pointer hover:opacity-95 flex items-center gap-1.5 disabled:opacity-50"
             >
               {isSubmitting ? (
-                'Sending...'
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Dispatching...</span>
+                </>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  Send Offer Letter
+                  <span>Send Offer Now</span>
                 </>
               )}
             </button>

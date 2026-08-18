@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { X, Signature, Check, Upload } from 'lucide-react';
+import { X, FileSignature, Check, Upload, Trash2, Loader2, Sparkles } from 'lucide-react';
 import api from '@/app/lib/axios';
 import SignatureCanvas from 'react-signature-canvas';
 import { useGlassToast } from './GlassToastContainer';
@@ -11,7 +11,6 @@ interface Props {
   onClose: () => void;
   offerId: string;
   onSuccess: () => void;
-  // Optional parameters to catch negotiation revision states passed from the details page
   action?: 'accept_negotiation' | 'reject_negotiation';
   updatedSalary?: string;
   updatedStartDate?: string;
@@ -32,16 +31,17 @@ export default function SignOfferModal({
   const [signatureMethod, setSignatureMethod] = useState<'draw' | 'upload'>('draw');
   const [uploadedSignature, setUploadedSignature] = useState<string | null>(null);
   const signatureRef = useRef<any>(null);
+  const { showToast } = useGlassToast();
 
   const handleClear = () => {
     signatureRef.current?.clear();
   };
-  const { showToast } = useGlassToast();
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        showToast('failed', 'Please upload a valid image file', 'danger');
+        showToast('Validation Error', 'Please upload a valid PNG or JPG image file', 'danger');
         return;
       }
       
@@ -60,49 +60,49 @@ export default function SignOfferModal({
 
     if (signatureMethod === 'draw') {
       if (signatureRef.current?.isEmpty()) {
-        showToast('failed', 'Please provide your signature', 'danger'
-
-        );
+        showToast('Validation Error', 'Please draw your authorized signature on the canvas', 'danger');
         return;
       }
-      signatureData = signatureRef.current.toDataURL('image/png');
+      signatureData = signatureRef.current?.getTrimmedCanvas().toDataURL('image/png');
     } else {
       if (!uploadedSignature) {
-        showToast('failed', 'Please upload a signature image', 'danger');
+        showToast('Validation Error', 'Please upload an authorized signature image asset', 'danger');
         return;
       }
       signatureData = uploadedSignature;
+    }
+
+    if (!signatureData) {
+      showToast('Validation Error', 'Authorized signature image asset required', 'danger');
+      return;
     }
 
     setIsSubmitting(true);
 
     try {
       let response;
-      
-      // If triggered contextually via the negotiation stream, forward to the verification handler
       if (action) {
         response = await api.post(`/company/offers/${offerId}/respond-negotiation`, {
           action,
           updatedSalary: action === 'accept_negotiation' ? updatedSalary : undefined,
           updatedStartDate: action === 'accept_negotiation' ? updatedStartDate : undefined,
           responseNote,
-          signature: signatureData // Appends signature metadata payload directly to revisions
+          signature: signatureData
         });
       } else {
-        // Fallback fallback mechanism if it's an unmodified standalone pending signature action
         response = await api.post(`/company/offers/${offerId}/sign`, {
           signature: signatureData
         });
       }
 
       if (response.data.success) {
-        showToast('success', response.data.message || 'Offer successfully processed and signed.', 'success');
+        showToast('Success', response.data.message || 'Offer successfully signed & verified.', 'success');
         onSuccess();
         onClose();
       }
     } catch (error: any) {
-      console.error('Sign offer pipeline execution error:', error);
-      showToast('failed', error.response?.data?.message || 'Failed to submit authorization payload', 'danger');
+      console.error('Sign offer error:', error);
+      showToast('Signing Failed', error.response?.data?.message || 'Failed to submit signature payload', 'danger');
     } finally {
       setIsSubmitting(false);
     }
@@ -111,117 +111,116 @@ export default function SignOfferModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-950 border border-zinc-900 rounded-xl max-w-lg w-full">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-lg w-full shadow-2xl text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased overflow-hidden">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-zinc-900">
+        <div className="flex items-center justify-between p-6 border-b border-black/[0.06] dark:border-white/[0.08]">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
-              <Signature className="w-4 h-4 text-purple-400" />
+            <div className="w-9 h-9 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] rounded-2xl flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+              <FileSignature className="w-5 h-5" />
             </div>
-            <h2 className="text-sm font-semibold text-white uppercase">Sign Offer Letter</h2>
+            <div>
+              <h2 className="text-base font-bold text-[#1d1d1f] dark:text-white tracking-tight">Sign Offer Letter</h2>
+              <p className="text-xs text-[#86868b] font-medium">Affix your corporate digital e-signature</p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-black/[0.04] dark:bg-white/[0.06] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-5">
+        {/* Form Content */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           
           {/* Signature Method Toggle */}
-          <div className="flex items-center gap-2 p-1 bg-zinc-900 rounded-lg">
+          <div className="flex items-center gap-2 p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-2xl border border-black/[0.04] dark:border-white/[0.06]">
             <button
               type="button"
               onClick={() => setSignatureMethod('draw')}
-              className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 signatureMethod === 'draw'
-                  ? 'bg-purple-500 text-black'
-                  : 'text-zinc-500 hover:text-zinc-300'
+                  ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] shadow-xs'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
               }`}
             >
-              <Signature className="w-3.5 h-3.5" />
+              <FileSignature className="w-3.5 h-3.5" />
               Draw Signature
             </button>
             <button
               type="button"
               onClick={() => setSignatureMethod('upload')}
-              className={`flex-1 px-3 py-2 rounded-md text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 signatureMethod === 'upload'
-                  ? 'bg-purple-500 text-black'
-                  : 'text-zinc-500 hover:text-zinc-300'
+                  ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] shadow-xs'
+                  : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
               }`}
             >
               <Upload className="w-3.5 h-3.5" />
-              Upload PNG
+              Upload Image
             </button>
           </div>
 
-          {/* Draw Signature Canvas Element */}
+          {/* Draw Signature Canvas */}
           {signatureMethod === 'draw' && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                  Draw Your Signature
+                <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
+                  Draw Signature Here
                 </label>
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="text-xs font-bold text-[#0071e3] hover:underline cursor-pointer flex items-center gap-1"
                 >
-                  Clear
+                  <Trash2 className="w-3 h-3" />
+                  <span>Clear</span>
                 </button>
               </div>
 
-              <div className="border-2 border-dashed border-zinc-800 rounded-lg bg-white overflow-hidden">
+              <div className="border-2 border-dashed border-black/[0.1] dark:border-white/[0.15] rounded-2xl bg-white overflow-hidden shadow-inner">
                 <SignatureCanvas
                   ref={signatureRef}
-                  canvasProps={{
-                    className: 'w-full h-48 cursor-crosshair',
-                    style: { touchAction: 'none' }
-                  }}
-                  backgroundColor="#ffffff"
                   penColor="#000000"
+                  canvasProps={{
+                    className: 'w-full h-36 cursor-crosshair'
+                  }}
                 />
               </div>
-
-              <p className="text-xs text-zinc-600 italic">
-                Draw your signature above using mouse or touch input
-              </p>
             </div>
           )}
 
-          {/* Upload Signature Asset Box */}
+          {/* Upload Signature Image */}
           {signatureMethod === 'upload' && (
-            <div className="space-y-3">
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Upload Signature Image (PNG)
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-[#86868b] uppercase tracking-wider">
+                Upload Signature Image (PNG/JPG)
               </label>
 
-              <div className="border-2 border-dashed border-zinc-800 rounded-lg bg-black p-8">
+              <div className="border-2 border-dashed border-black/[0.1] dark:border-white/[0.15] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] p-6 text-center">
                 {uploadedSignature ? (
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <img 
                       src={uploadedSignature} 
-                      alt="Uploaded signature graphic asset"
-                      className="w-full h-32 object-contain bg-white rounded border border-zinc-800"
+                      alt="Uploaded signature"
+                      className="w-full h-28 object-contain bg-white rounded-xl border border-black/[0.06] p-2"
                     />
                     <button
                       type="button"
                       onClick={() => setUploadedSignature(null)}
-                      className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                      className="text-xs font-bold text-red-500 hover:underline cursor-pointer"
                     >
-                      Remove & upload different image
+                      Remove &amp; upload different image
                     </button>
                   </div>
                 ) : (
-                  <label className="cursor-pointer block text-center">
-                    <Upload className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
-                    <p className="text-xs text-zinc-500">Click to upload PNG image</p>
+                  <label className="cursor-pointer block">
+                    <Upload className="w-8 h-8 text-[#0071e3] mx-auto mb-2" />
+                    <p className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">Click to select signature file</p>
+                    <p className="text-[11px] text-[#86868b] mt-0.5">PNG or JPG up to 2MB</p>
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/jpg"
@@ -231,41 +230,39 @@ export default function SignOfferModal({
                   </label>
                 )}
               </div>
-
-              <p className="text-xs text-zinc-600 italic">
-                Upload a PNG/JPG image of your signature (max 2MB)
-              </p>
             </div>
           )}
 
-          {/* Verification Legal Notice */}
-          <div className="bg-zinc-900/50 border border-zinc-900 rounded-lg p-3 space-y-2">
-            <p className="text-xs text-zinc-500 leading-relaxed font-sans">
-              By executing this digital document signature, you confirm authority to issue corporate deployment 
-              parameters and explicitly authorize updating this configuration on your system records.
+          {/* Legal Notice */}
+          <div className="bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] rounded-2xl p-3.5">
+            <p className="text-[11px] text-[#86868b] leading-relaxed font-medium">
+              By applying your digital signature, you confirm authority on behalf of the company to issue formal offer terms and execute legal document dispatch.
             </p>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-3 pt-2 font-mono">
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-sm font-medium transition-colors"
+              className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white rounded-2xl text-xs font-semibold hover:bg-[#e5e5ea] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-400 text-black font-semibold rounded-lg text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              className="px-5 py-2 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white rounded-2xl text-xs font-bold shadow-md shadow-blue-500/25 cursor-pointer hover:opacity-95 flex items-center gap-1.5 disabled:opacity-50"
             >
               {isSubmitting ? (
-                'Signing...'
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Signing...</span>
+                </>
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  Sign & Finalize
+                  <span>Sign &amp; Finalize</span>
                 </>
               )}
             </button>

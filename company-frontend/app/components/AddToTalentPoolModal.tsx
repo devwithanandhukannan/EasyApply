@@ -108,25 +108,33 @@ export default function AddToTalentPoolModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-mono text-white">
-      <div className="w-full max-w-md border border-zinc-800 bg-zinc-950 rounded-xl overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md p-4 text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased">
+      <div className="w-full max-w-md border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1c1c1e] rounded-3xl overflow-hidden shadow-2xl">
         
         {/* Header Block */}
-        <div className="flex items-center justify-between border-b border-zinc-900 p-4 bg-zinc-900/20">
-          <div className="flex items-center gap-2 text-zinc-400">
-            <FolderOpen className="w-4 h-4 text-blue-400" />
-            <span className="text-xs font-bold uppercase tracking-wider">Talent Pool Assignment</span>
+        <div className="flex items-center justify-between border-b border-black/[0.06] dark:border-white/[0.08] p-5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center">
+              <FolderOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white">Talent Pool Assignment</h3>
+              <p className="text-[11px] text-[#86868b]">Add candidate to an organizational folder</p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-white transition-colors">
+          <button 
+            onClick={onClose} 
+            className="w-7 h-7 rounded-full bg-black/[0.04] dark:bg-white/[0.06] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+          >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Inner Context Wrap */}
         <div className="p-5 space-y-4">
-          <div>
-            <p className="text-xs text-zinc-400">Assigning candidate:</p>
-            <h3 className="text-sm font-bold text-white uppercase mt-0.5">{candidateName}</h3>
+          <div className="bg-[#fbfbfd] dark:bg-[#18181a] p-3 rounded-2xl border border-black/[0.04] dark:border-white/[0.04]">
+            <p className="text-[11px] text-[#86868b] font-medium">Assigning candidate:</p>
+            <h4 className="text-xs font-bold text-[#1d1d1f] dark:text-white mt-0.5">{candidateName}</h4>
           </div>
 
           {statusMessage && (

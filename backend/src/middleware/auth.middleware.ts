@@ -27,6 +27,7 @@ declare global {
         companyId: string;
         companyRoles: number;
         companyName: string;
+        permissions?: any;
       };
     }
   }
@@ -140,6 +141,7 @@ export const authenticateCompany = async (req: Request, res: Response, next: Nex
       companyId: teamMembership.company.id,
       companyRoles: teamMembership.roles,
       companyName: teamMembership.company.name,
+      permissions: teamMembership.permissions,
     };
 
     return next();

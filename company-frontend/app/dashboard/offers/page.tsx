@@ -17,7 +17,12 @@ import {
   MessageSquare,
   Bell,
   Edit,
-  Signature
+  FileSignature,
+  Loader2,
+  Calendar,
+  DollarSign,
+  Building2,
+  User,
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import Link from 'next/link';
@@ -26,6 +31,7 @@ import SignOfferModal from '@/app/components/SignOfferModal';
 import SendOfferModal from '@/app/components/SendOfferModal';
 import EditOfferModal from '@/app/components/EditOfferModal';
 import { useAuth } from '@/app/contexts/AuthContext';
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
 
 interface OfferLetter {
   id: string;
@@ -53,10 +59,8 @@ interface OfferLetter {
   };
 }
 
-import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
-
 export default function OffersPage() {
-  const { isAdmin, isHR, hasFeature } = useAuth();
+  const { isAdmin, isHR, hasFeature, can } = useAuth();
   const [offers, setOffers] = useState<OfferLetter[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,7 +83,6 @@ export default function OffersPage() {
       />
     );
   }
-
 
   const fetchOffers = async () => {
     try {
@@ -128,132 +131,159 @@ export default function OffersPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const badges: Record<string, { label: string; color: string }> = {
-      draft: { label: 'Draft', color: 'bg-zinc-900 border-zinc-800 text-zinc-500' },
-      pending: { label: 'Pending', color: 'bg-blue-950/40 border-blue-900 text-blue-400' },
-      sent: { label: 'Sent', color: 'bg-purple-950/40 border-purple-900 text-purple-400' },
-      viewed: { label: 'Viewed', color: 'bg-cyan-950/40 border-cyan-900 text-cyan-400' },
-      accepted: { label: 'Accepted', color: 'bg-emerald-950/40 border-emerald-900 text-emerald-400' },
-      declined: { label: 'Declined', color: 'bg-red-950/40 border-red-900 text-red-400' },
-      negotiating: { label: 'Negotiating', color: 'bg-amber-950/40 border-amber-900 text-amber-400' },
-      expired: { label: 'Expired', color: 'bg-zinc-900 border-zinc-800 text-zinc-600' },
-      withdrawn: { label: 'Withdrawn', color: 'bg-zinc-900 border-zinc-800 text-zinc-600' }
+    const badges: Record<string, { label: string; bg: string; text: string; border: string }> = {
+      draft: { label: 'Draft', bg: 'bg-[#f2f2f7] dark:bg-[#2c2c2e]', text: 'text-[#86868b]', border: 'border-black/[0.06] dark:border-white/[0.08]' },
+      pending: { label: 'Pending Signature', bg: 'bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-500/20' },
+      sent: { label: 'Sent', bg: 'bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-500/20' },
+      viewed: { label: 'Viewed', bg: 'bg-cyan-500/10', text: 'text-cyan-600 dark:text-cyan-400', border: 'border-cyan-500/20' },
+      accepted: { label: 'Accepted', bg: 'bg-emerald-500/10', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/20' },
+      declined: { label: 'Declined', bg: 'bg-red-500/10', text: 'text-red-600 dark:text-red-400', border: 'border-red-500/20' },
+      negotiating: { label: 'Negotiating', bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/20' },
+      expired: { label: 'Expired', bg: 'bg-[#f2f2f7] dark:bg-[#2c2c2e]', text: 'text-[#86868b]', border: 'border-black/[0.06] dark:border-white/[0.08]' },
+      withdrawn: { label: 'Withdrawn', bg: 'bg-[#f2f2f7] dark:bg-[#2c2c2e]', text: 'text-[#86868b]', border: 'border-black/[0.06] dark:border-white/[0.08]' }
     };
     
     const badge = badges[status] || badges.draft;
     return (
-      <span className={`px-2 py-1 border rounded-lg text-xs font-semibold uppercase ${badge.color}`}>
+      <span className={`px-2.5 py-0.5 border rounded-full text-[10px] font-bold uppercase tracking-wider ${badge.bg} ${badge.text} ${badge.border}`}>
         {badge.label}
       </span>
     );
   };
 
   const filteredOffers = offers.filter(offer => {
-    const matchesSearch = 
-      offer.application.jobSeekerProfile.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      offer.position.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      offer.application.jobSeekerProfile.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const candidateName = offer.application?.jobSeekerProfile?.fullName || '';
+    const position = offer.position || '';
+    const email = offer.application?.jobSeekerProfile?.email || '';
+    const query = searchQuery.toLowerCase();
     
-    return matchesSearch;
+    return candidateName.toLowerCase().includes(query) ||
+      position.toLowerCase().includes(query) ||
+      email.toLowerCase().includes(query);
   });
 
   if (isLoading) {
     return (
-      <div className="flex h-[60vh] items-center justify-center bg-black">
-        <p className="text-xs text-zinc-500 animate-pulse font-mono">Loading offer pipeline...</p>
+      <div className="flex h-[60vh] items-center justify-center">
+        <Loader2 className="h-7 w-7 animate-spin text-[#0071e3]" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 text-white font-mono max-w-6xl mx-auto w-full p-4">
+    <div className="space-y-6 max-w-7xl mx-auto p-1 text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased">
       
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-900 pb-5">
+      {/* ── HEADER ─────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight text-white uppercase">Offer Letter Pipeline</h1>
-          <p className="text-xs text-zinc-500 mt-1">Manage digital offer generation, signatures, and candidate responses.</p>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+              <FileText className="w-4.5 h-4.5" />
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#1d1d1f] dark:text-white">
+              Offer Letter Pipeline
+            </h1>
+          </div>
+          <p className="text-xs sm:text-sm text-[#86868b] dark:text-slate-400 mt-1 font-medium">
+            Manage digital offer generation, e-signatures, compensation packages, and candidate responses.
+          </p>
         </div>
-        {(isAdmin || isHR) && (
+
+        {(isAdmin || isHR || can('offers', 'create')) && (
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-colors flex items-center gap-2 text-xs"
+            className="px-4 py-2 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] hover:from-[#0062c4] hover:to-[#1d4ed8] text-white text-xs font-bold rounded-2xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
           >
             <Plus className="w-4 h-4" />
-            Generate Offer Letter
+            <span>Generate Offer Letter</span>
           </button>
         )}
       </div>
 
-      {/* Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-950 p-3 border border-zinc-900 rounded-xl">
+      {/* ── FILTERS & SEARCH ───────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="sm:col-span-2 relative flex items-center">
-          <Search className="absolute left-3 w-3.5 h-3.5 text-zinc-600" />
+          <Search className="absolute left-3.5 w-4 h-4 text-[#86868b]" />
           <input 
             type="text"
             placeholder="Search candidates, positions, or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-black border border-zinc-900 rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-300 placeholder-zinc-600 focus:border-zinc-700 outline-none transition-colors"
+            className="w-full bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl pl-10 pr-4 py-2.5 text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:border-[#0071e3] outline-none transition-colors shadow-xs"
           />
         </div>
         <div className="relative flex items-center">
-          <SlidersHorizontal className="absolute left-3 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+          <SlidersHorizontal className="absolute left-3.5 w-3.5 h-3.5 text-[#86868b] pointer-events-none" />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full bg-black border border-zinc-900 rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-400 uppercase focus:border-zinc-700 outline-none appearance-none cursor-pointer"
+            className="w-full bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl pl-10 pr-8 py-2.5 text-xs font-semibold text-[#1d1d1f] dark:text-[#f5f5f7] focus:border-[#0071e3] outline-none appearance-none cursor-pointer shadow-xs"
           >
             <option value="all">All Statuses</option>
             <option value="draft">Draft</option>
-            <option value="pending">Pending</option>
+            <option value="pending">Pending Signature</option>
             <option value="sent">Sent</option>
             <option value="viewed">Viewed</option>
             <option value="accepted">Accepted</option>
             <option value="declined">Declined</option>
             <option value="negotiating">Negotiating</option>
           </select>
-          <ChevronDown className="absolute right-3 w-3.5 h-3.5 text-zinc-600 pointer-events-none" />
+          <ChevronDown className="absolute right-3.5 w-4 h-4 text-[#86868b] pointer-events-none" />
         </div>
       </div>
 
-      {/* Offers List */}
+      {/* ── OFFERS LIST ────────────────────────────────────────────── */}
       {filteredOffers.length === 0 ? (
-        <div className="border border-dashed border-zinc-900 bg-zinc-950 p-12 rounded-xl text-center text-xs text-zinc-500">
-          No offers found matching your criteria.
+        <div className="border border-dashed border-black/[0.08] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-12 rounded-3xl text-center space-y-3 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center mx-auto">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white">No Offers Found</h3>
+            <p className="text-xs text-[#86868b] mt-0.5">No offer letters matching your filter criteria.</p>
+          </div>
+          {(isAdmin || isHR || can('offers', 'create')) && (
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] text-[#0071e3] text-xs font-bold rounded-2xl transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Create First Offer Letter</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
           {filteredOffers.map((offer) => (
             <div 
               key={offer.id}
-              className="border border-zinc-900 bg-zinc-950 p-5 rounded-xl space-y-4 hover:border-zinc-800 transition-all"
+              className="border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#1c1c1e] p-5 sm:p-6 rounded-3xl space-y-4 hover:shadow-md transition-all"
             >
               
               {/* Header Row */}
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  {offer.application.jobSeekerProfile.profilePhotoUrl ? (
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                <div className="flex items-start gap-3.5">
+                  {offer.application?.jobSeekerProfile?.profilePhotoUrl ? (
                     <img 
                       src={offer.application.jobSeekerProfile.profilePhotoUrl}
                       alt={offer.application.jobSeekerProfile.fullName}
-                      className="w-10 h-10 rounded-full border border-zinc-800"
+                      className="w-11 h-11 rounded-2xl object-cover border border-black/[0.06] dark:border-white/[0.08]"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
-                      <FileText className="w-5 h-5 text-zinc-600" />
+                    <div className="w-11 h-11 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] flex items-center justify-center text-[#0071e3] font-bold text-sm">
+                      {offer.application?.jobSeekerProfile?.fullName?.charAt(0).toUpperCase() || 'C'}
                     </div>
                   )}
                   
-                  <div className="space-y-1">
-                    <h3 className="text-sm font-semibold text-white">
-                      {offer.application.jobSeekerProfile.fullName}
+                  <div className="space-y-0.5">
+                    <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white">
+                      {offer.application?.jobSeekerProfile?.fullName || 'Candidate'}
                     </h3>
-                    <p className="text-xs text-zinc-500">
-                      {offer.position} • {offer.application.jobPosting.department}
+                    <p className="text-xs text-[#86868b] font-medium">
+                      {offer.position} &bull; {offer.application?.jobPosting?.department || 'Department'}
                     </p>
-                    <p className="text-[11px] text-zinc-600 font-mono">
-                      {offer.application.jobSeekerProfile.email}
+                    <p className="text-[11px] text-[#86868b]">
+                      {offer.application?.jobSeekerProfile?.email}
                     </p>
                   </div>
                 </div>
@@ -264,127 +294,126 @@ export default function OffersPage() {
               </div>
 
               {/* Details Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="space-y-1">
-                  <p className="text-zinc-600 uppercase text-[10px] font-bold">Salary Package</p>
-                  <p className="text-zinc-300 font-semibold">{offer.salary}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#fbfbfd] dark:bg-[#18181a] p-3.5 rounded-2xl border border-black/[0.04] dark:border-white/[0.04] text-xs">
+                <div className="space-y-0.5">
+                  <p className="text-[#86868b] uppercase text-[10px] font-bold tracking-wider">Salary Package</p>
+                  <p className="text-[#1d1d1f] dark:text-[#f5f5f7] font-bold">{offer.salary}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-zinc-600 uppercase text-[10px] font-bold">Start Date</p>
-                  <p className="text-zinc-300">{new Date(offer.startDate).toLocaleDateString()}</p>
+                <div className="space-y-0.5">
+                  <p className="text-[#86868b] uppercase text-[10px] font-bold tracking-wider">Start Date</p>
+                  <p className="text-[#1d1d1f] dark:text-[#f5f5f7] font-semibold">{new Date(offer.startDate).toLocaleDateString()}</p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-zinc-600 uppercase text-[10px] font-bold">Sent</p>
-                  <p className="text-zinc-300">
+                <div className="space-y-0.5">
+                  <p className="text-[#86868b] uppercase text-[10px] font-bold tracking-wider">Sent Date</p>
+                  <p className="text-[#1d1d1f] dark:text-[#f5f5f7] font-medium">
                     {offer.sentAt ? new Date(offer.sentAt).toLocaleDateString() : '—'}
                   </p>
                 </div>
-                <div className="space-y-1">
-                  <p className="text-zinc-600 uppercase text-[10px] font-bold">Email Opens</p>
-                  <p className="text-zinc-300">{offer.emailOpenCount}x</p>
+                <div className="space-y-0.5">
+                  <p className="text-[#86868b] uppercase text-[10px] font-bold tracking-wider">Email Opens</p>
+                  <p className="text-[#1d1d1f] dark:text-[#f5f5f7] font-medium">{offer.emailOpenCount || 0}x</p>
                 </div>
               </div>
 
-              {/* Tracking Icons */}
+              {/* Tracking Status Timeline */}
               {offer.status !== 'draft' && (
-                <div className="flex items-center gap-4 pt-2 border-t border-zinc-900/50">
-                  <div className={`flex items-center gap-1.5 text-xs ${offer.sentAt ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                <div className="flex flex-wrap items-center gap-4 pt-1 text-xs">
+                  <div className={`flex items-center gap-1.5 ${offer.sentAt ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-[#86868b]'}`}>
                     <Mail className="w-3.5 h-3.5" />
                     <span>Email {offer.sentAt ? '✓' : '—'}</span>
                   </div>
-                  <div className={`flex items-center gap-1.5 text-xs ${offer.viewedAt ? 'text-cyan-400' : 'text-zinc-600'}`}>
+                  <div className={`flex items-center gap-1.5 ${offer.viewedAt ? 'text-cyan-600 dark:text-cyan-400 font-semibold' : 'text-[#86868b]'}`}>
                     <Eye className="w-3.5 h-3.5" />
                     <span>Viewed {offer.viewedAt ? '✓' : '—'}</span>
                   </div>
-                  <div className={`flex items-center gap-1.5 text-xs ${offer.companySignature ? 'text-purple-400' : 'text-zinc-600'}`}>
-                    <Signature className="w-3.5 h-3.5" />
-                    <span>Company {offer.companySignature ? '✓' : '—'}</span>
+                  <div className={`flex items-center gap-1.5 ${offer.companySignature ? 'text-purple-600 dark:text-purple-400 font-semibold' : 'text-[#86868b]'}`}>
+                    <FileSignature className="w-3.5 h-3.5" />
+                    <span>Company Signed {offer.companySignature ? '✓' : '—'}</span>
                   </div>
-                  <div className={`flex items-center gap-1.5 text-xs ${offer.candidateSignature ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                  <div className={`flex items-center gap-1.5 ${offer.candidateSignature ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-[#86868b]'}`}>
                     <CheckCircle className="w-3.5 h-3.5" />
-                    <span>Candidate {offer.candidateSignature ? '✓' : '—'}</span>
+                    <span>Candidate Signed {offer.candidateSignature ? '✓' : '—'}</span>
                   </div>
                 </div>
               )}
 
               {/* Negotiation Note */}
               {offer.status === 'negotiating' && offer.candidateResponse && (
-                <div className="bg-amber-950/20 border border-amber-900/50 p-3 rounded-lg text-xs text-amber-500">
-                  <p className="font-bold uppercase text-[10px] mb-1">Negotiation Request:</p>
-                  <p className="text-amber-400/80 italic">"{offer.candidateResponse}"</p>
+                <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-xs text-amber-700 dark:text-amber-300 space-y-1">
+                  <p className="font-bold uppercase text-[10px] tracking-wider">Candidate Negotiation Request:</p>
+                  <p className="italic">"{offer.candidateResponse}"</p>
                 </div>
               )}
 
-              {/* Actions */}
-{/* Actions */}
-<div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-900/50">
-  
-  {/* DRAFT STATUS - Edit + Sign */}
-  {(isAdmin || isHR) && offer.status === 'draft' && (
-    <>
-      <button
-        onClick={() => {
-          setSelectedOfferId(offer.id);
-          setIsEditModalOpen(true);
-        }}
-        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-      >
-        <Edit className="w-3.5 h-3.5" />
-        Edit Offer
-      </button>
-      
-      <button
-        onClick={() => handleSign(offer.id)}
-        className="px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-      >
-        <Signature className="w-3.5 h-3.5" />
-        Sign Document
-      </button>
-    </>
-  )}
+              {/* Actions Row */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-black/[0.04] dark:border-white/[0.04]">
+                
+                {/* DRAFT STATUS - Edit + Sign */}
+                {(isAdmin || isHR || can('offers', 'edit')) && offer.status === 'draft' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setSelectedOfferId(offer.id);
+                        setIsEditModalOpen(true);
+                      }}
+                      className="px-3.5 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Edit className="w-3.5 h-3.5 text-[#0071e3]" />
+                      <span>Edit Offer</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleSign(offer.id)}
+                      className="px-3.5 py-1.5 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <FileSignature className="w-3.5 h-3.5" />
+                      <span>Sign Document</span>
+                    </button>
+                  </>
+                )}
 
-  {/* ✅ NEW: PENDING STATUS WITHOUT SIGNATURE - Show Sign Button */}
-  {(isAdmin || isHR) && offer.status === 'pending' && !offer.companySignature && (
-    <button
-      onClick={() => handleSign(offer.id)}
-      className="px-3 py-1.5 bg-purple-500 hover:bg-purple-400 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-    >
-      <Signature className="w-3.5 h-3.5" />
-      Sign Updated Offer
-    </button>
-  )}
+                {/* PENDING STATUS WITHOUT SIGNATURE */}
+                {(isAdmin || isHR || can('offers', 'edit')) && offer.status === 'pending' && !offer.companySignature && (
+                  <button
+                    onClick={() => handleSign(offer.id)}
+                    className="px-3.5 py-1.5 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <FileSignature className="w-3.5 h-3.5" />
+                    <span>Sign Updated Offer</span>
+                  </button>
+                )}
 
-  {/* PENDING STATUS WITH SIGNATURE - Send to Candidate */}
-  {(isAdmin || isHR) && offer.status === 'pending' && offer.companySignature && (
-    <button
-      onClick={() => handleSend(offer.id)}
-      className="px-3 py-1.5 bg-white hover:bg-zinc-200 text-black font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-    >
-      <Send className="w-3.5 h-3.5" />
-      Send to Candidate
-    </button>
-  )}
+                {/* PENDING STATUS WITH SIGNATURE - Send to Candidate */}
+                {(isAdmin || isHR || can('offers', 'send')) && offer.status === 'pending' && offer.companySignature && (
+                  <button
+                    onClick={() => handleSend(offer.id)}
+                    className="px-3.5 py-1.5 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send to Candidate</span>
+                  </button>
+                )}
 
-  {/* SENT/VIEWED/ACCEPTED - Download PDF */}
-  {(offer.status === 'sent' || offer.status === 'viewed' || offer.status === 'accepted' || offer.status === 'declined' || offer.status === 'negotiating') && (
-    <button
-      onClick={() => handleDownload(offer.id)}
-      className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors flex items-center gap-1.5"
-    >
-      <Download className="w-3.5 h-3.5" />
-      Download PDF
-    </button>
-  )}
+                {/* DOWNLOAD PDF */}
+                {(offer.status === 'sent' || offer.status === 'viewed' || offer.status === 'accepted' || offer.status === 'declined' || offer.status === 'negotiating') && (
+                  <button
+                    onClick={() => handleDownload(offer.id)}
+                    className="px-3.5 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-[#0071e3]" />
+                    <span>Download PDF</span>
+                  </button>
+                )}
 
-  {/* ALWAYS VISIBLE - View Details */}
-  <Link
-    href={`/dashboard/offers/${offer.id}`}
-    className="px-3 py-1.5 border border-zinc-800 hover:border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white rounded-lg text-xs transition-colors flex items-center gap-1.5"
-  >
-    <Eye className="w-3.5 h-3.5" />
-    View Details
-  </Link>
-</div>
+                {/* VIEW DETAILS */}
+                <Link
+                  href={`/dashboard/offers/${offer.id}`}
+                  className="px-3.5 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 ml-auto"
+                >
+                  <Eye className="w-3.5 h-3.5 text-[#86868b]" />
+                  <span>View Details</span>
+                </Link>
+              </div>
 
             </div>
           ))}
@@ -397,17 +426,19 @@ export default function OffersPage() {
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={fetchOffers}
       />
-    {selectedOfferId && (
-  <EditOfferModal
-    isOpen={isEditModalOpen}
-    onClose={() => {
-      setIsEditModalOpen(false);
-      setSelectedOfferId(null);
-    }}
-    offerId={selectedOfferId}
-    onSuccess={fetchOffers}
-  />
-)}
+      
+      {selectedOfferId && (
+        <EditOfferModal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setSelectedOfferId(null);
+          }}
+          offerId={selectedOfferId}
+          onSuccess={fetchOffers}
+        />
+      )}
+
       {selectedOfferId && (
         <>
           <SignOfferModal

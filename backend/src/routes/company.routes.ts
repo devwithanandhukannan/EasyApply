@@ -36,6 +36,7 @@ import {
   authenticateCompany, 
   requireCompanyRole 
 } from '../middleware/auth.middleware.ts';
+import { requirePermission } from '../middleware/permission.middleware.ts';
 import { ROLES } from '../constants/roles.ts';
 
 // Router mounts
@@ -73,43 +74,43 @@ router.use(authenticateCompany);
 router.get('/dashboard', getCompanyDashboard);
 
 // ─── 1. MOUNTED SUB-ROUTERS ──────────────────────────────────────────────
-router.use('/offers', offerRoutes);
+router.use('/offers', requirePermission('offers', 'read'), offerRoutes);
 router.use('/selection', selectionRoutes);
 router.use('/interviews-v2', interviewRouter);
-router.use('/crm', crmRouter);
+router.use('/crm', requirePermission('talent_pool', 'read'), crmRouter);
 router.use('/kanban', kanbanRouter);
 
 // ─── 2. INTERVIEW MANAGEMENT ───────────────────────────────────────────
-router.post('/interviews/bulk-schedule', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), scheduleBulkInterviews);
-router.get('/interviews/list', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getCompanyInterviewsList);
-router.post('/interviews/:id/respond-reschedule', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), respondToReschedule);
-router.post('/interviews/:id/update-status', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER), updateInterviewStatus);
+router.post('/interviews/bulk-schedule', requirePermission('interviews', 'schedule'), scheduleBulkInterviews);
+router.get('/interviews/list', requirePermission('interviews', 'read'), getCompanyInterviewsList);
+router.post('/interviews/:id/respond-reschedule', requirePermission('interviews', 'schedule'), respondToReschedule);
+router.post('/interviews/:id/update-status', requirePermission('interviews', 'conduct'), updateInterviewStatus);
 
 // ─── 3. TEAM MANAGEMENT ──────────────────────────────────────────────────
-router.post('/team/invite', requireCompanyRole(ROLES.COMPANY_ADMIN), inviteTeamMember);
-router.get('/team', listTeamMembers);
-router.put('/team/:memberId/role', requireCompanyRole(ROLES.COMPANY_ADMIN), updateMemberRole);
-router.delete('/team/:memberId', requireCompanyRole(ROLES.COMPANY_ADMIN), removeTeamMember);
+router.post('/team/invite', requirePermission('team', 'invite'), inviteTeamMember);
+router.get('/team', requirePermission('team', 'read'), listTeamMembers);
+router.put('/team/:memberId/role', requirePermission('team', 'edit'), updateMemberRole);
+router.delete('/team/:memberId', requirePermission('team', 'delete'), removeTeamMember);
 
 // ─── 4. APPLICATION SELECTION SPECIFICS ──────────────────────────────────
-router.get('/applications/:applicationId', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getCandidateDetail);
-router.patch('/applications/:applicationId/status', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateApplicationStatus);
-router.get('/applications/:id/detail', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getApplicationDetailById);
-router.post('/notification/send', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), sendNotificationToUser);
+router.get('/applications/:applicationId', requirePermission('jobs', 'read'), getCandidateDetail);
+router.patch('/applications/:applicationId/status', requirePermission('jobs', 'edit'), updateApplicationStatus);
+router.get('/applications/:id/detail', requirePermission('jobs', 'read'), getApplicationDetailById);
+router.post('/notification/send', requirePermission('jobs', 'edit'), sendNotificationToUser);
 
 // ─── 5. JOB OPERATIONS & EXPLICIT PATHS FIRST ────────────────────────────
-router.post('/jobs/generate-description', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), generateAIDescription);
-router.post('/jobs', requireCompanyRole(ROLES.COMPANY_ADMIN), createJob);
-router.get('/jobs', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getAllCompanyJobs);
+router.post('/jobs/generate-description', requirePermission('jobs', 'create'), generateAIDescription);
+router.post('/jobs', requirePermission('jobs', 'create'), createJob);
+router.get('/jobs', requirePermission('jobs', 'read'), getAllCompanyJobs);
 
 // Explicit sub-resource routes must sit ABOVE dynamic dynamic wildcards
-router.get('/jobs/:jobId/applications', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getJobApplications);
-router.post('/jobs/:jobId/ai-filter', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), aiFilterCandidates);
+router.get('/jobs/:jobId/applications', requirePermission('jobs', 'read'), getJobApplications);
+router.post('/jobs/:jobId/ai-filter', requirePermission('jobs', 'edit'), aiFilterCandidates);
 
 // Dynamic wildcards placed at bottom of the Job block
-router.get('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getJobDetails);
-router.put('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateJob);
-router.delete('/jobs/:id', requireCompanyRole(ROLES.COMPANY_ADMIN), deleteJob);
+router.get('/jobs/:id', requirePermission('jobs', 'read'), getJobDetails);
+router.put('/jobs/:id', requirePermission('jobs', 'edit'), updateJob);
+router.delete('/jobs/:id', requirePermission('jobs', 'delete'), deleteJob);
 
 // ─── 6. PROFILE MANAGEMENT ───────────────────────────────────────────────
 router.get('/me', getMyCompanyProfile);

@@ -48,6 +48,7 @@ interface UserProfile {
   rolesMask: number;
   globalRolesMask: number;
   status: string;
+  permissions?: Record<string, string[]> | null;
   allWorkspaces: WorkspaceSummary[];
 }
 
@@ -62,6 +63,7 @@ interface AuthContextType {
   isViewer: boolean;
   features: Record<string, boolean>;
   hasFeature: (key: string) => boolean;
+  can: (moduleName: string, action?: string) => boolean;
   login: (payload: any) => void;
   logout: () => void;
 }
@@ -121,6 +123,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return Boolean((features as Record<string, boolean>)[key]);
   };
 
+  const can = (moduleName: string, action: string = 'read'): boolean => {
+    if (isAdmin) return true; // Admins have full access
+    const userPerms = user?.permissions;
+
+    if (!userPerms) {
+      // Fallback matching system role
+      if (isHR) {
+        if (['jobs', 'walkin', 'interviews', 'talent_pool', 'discovery', 'offers', 'spot_jobs', 'team'].includes(moduleName)) {
+          return true;
+        }
+      }
+      if (isInterviewer) {
+        if (['interviews', 'walkin', 'talent_pool'].includes(moduleName)) {
+          if (['read', 'conduct', 'feedback', 'manage'].includes(action)) return true;
+        }
+        return action === 'read';
+      }
+      return action === 'read';
+    }
+
+    if (userPerms['*']?.includes('*') || userPerms[moduleName]?.includes('*')) {
+      return true;
+    }
+
+    const actions = userPerms[moduleName];
+    if (!Array.isArray(actions)) return false;
+    if (actions.includes('manage')) return true;
+    return actions.includes(action);
+  };
+
   // Session initialization - runs once on mount
   useEffect(() => {
     const initializeAuth = async () => {
@@ -129,7 +161,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (response.data.success) {
           setIsAuthenticated(true);
 
-          // Construct explicit profile properties mapping safely from team member payload structures
           setUser({
             id: response.data.user.id,
             userId: response.data.user.id,
@@ -139,13 +170,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             rolesMask: response.data.user.companyRoles,
             globalRolesMask: response.data.user.globalRoles,
             status: 'active',
-            allWorkspaces: response.data.user.allWorkspaces || [] // <-- Hydrate the array here
+            permissions: response.data.user.permissions || null,
+            allWorkspaces: response.data.user.allWorkspaces || []
           });
 
           setCompany(response.data.company);
         }
       } catch (error: any) {
-        // 401 is normal when visitor is not logged in yet
         if (error?.response?.status !== 401) {
           console.error('Auth initialization error:', error);
         }
@@ -189,11 +220,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         rolesMask: loginPayload.user.rolesMask || loginPayload.user.roles || loginPayload.user.companyRoles || 16,
         globalRolesMask: loginPayload.user.globalRolesMask || loginPayload.user.globalRoles || 1,
         status: loginPayload.user.status || 'active',
+        permissions: loginPayload.user.permissions || null,
         allWorkspaces: loginPayload.user.allWorkspaces || []
       });
       setCompany(loginPayload.company);
     } else {
-      // Fallback alignment for plain assignments
       setUser(loginPayload);
     }
     setIsAuthenticated(true);
@@ -225,8 +256,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isViewer,
       features,
       hasFeature,
+      can,
       login,
-      logout
+      logout,
     }}>
       {children}
     </AuthContext.Provider>

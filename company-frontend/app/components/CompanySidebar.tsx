@@ -43,7 +43,7 @@ export default function CompanySidebar({
   setIsMobileOpen 
 }: SidebarProps) {
   const pathname = usePathname();
-  const { user, company: authCompany, isAdmin, isHR, isInterviewer, isViewer, isLoading, logout, features } = useAuth();
+  const { user, company: authCompany, isAdmin, isHR, isInterviewer, isViewer, isLoading, logout, features, can } = useAuth();
   const company = propCompany || authCompany;
   const [isMounted, setIsMounted] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
@@ -75,77 +75,77 @@ export default function CompanySidebar({
         name: 'Job Postings', 
         href: '/dashboard/jobs', 
         icon: Briefcase, 
-        visible: hasAccess && (isAdmin || isHR || isViewer),
+        visible: hasAccess && can('jobs', 'read'),
         isLocked: !features.jobPostings,
       },
       { 
         name: 'Walk-In Rooms', 
         href: '/dashboard/walkin', 
         icon: DoorOpen, 
-        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer),
+        visible: hasAccess && can('walkin', 'read'),
         isLocked: !features.walkinInterview,
       },
       { 
         name: 'Seeker Discovery', 
         href: '/dashboard/discovery', 
         icon: Search, 
-        visible: hasAccess && (isAdmin || isHR || isViewer),
+        visible: hasAccess && can('discovery', 'read'),
         isLocked: !features.seekerDiscovery,
       },
       { 
         name: 'Company Talent Pool', 
         href: '/dashboard/talent-pool', 
         icon: UserCheck,
-        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer),
+        visible: hasAccess && can('talent_pool', 'read'),
         isLocked: !features.crmTalentPool,
       },
       { 
         name: 'Calendar & Schedule', 
         href: '/dashboard/calendar', 
         icon: CalendarDays, 
-        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer),
+        visible: hasAccess,
         isLocked: false,
       },
       { 
         name: 'Live Interviews', 
         href: '/dashboard/interviews', 
         icon: Video, 
-        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer),
+        visible: hasAccess && can('interviews', 'read'),
         isLocked: !features.interviewScheduling,
       },
       { 
         name: 'Spot Jobs', 
         href: '/dashboard/spot-jobs', 
         icon: Zap,
-        visible: hasAccess && (isAdmin || isHR),
+        visible: hasAccess && can('spot_jobs', 'read'),
         isLocked: !features.spotJobs,
       },
       { 
         name: 'Offers', 
         href: '/dashboard/offers', 
         icon: FileText, 
-        visible: hasAccess && (isAdmin || isHR || isViewer),
+        visible: hasAccess && can('offers', 'read'),
         isLocked: !features.offerLetters,
       },
       { 
         name: 'Templates', 
         href: '/dashboard/offer-templates', 
-        icon: ScrollText,
-        visible: hasAccess && (isAdmin || isHR),
+        icon: ScrollText, 
+        visible: hasAccess && can('offers', 'read'),
         isLocked: !features.offerLetters,
       },
       { 
         name: 'Team Workspace', 
         href: '/dashboard/team', 
         icon: Users, 
-        visible: hasAccess && (isAdmin),
+        visible: hasAccess && (isAdmin || can('team', 'read')),
         isLocked: !features.teamWorkspace && (company?.subscription?.plan?.maxTeamMembers ?? 1) <= 1,
       },
       { 
         name: 'Company Profile', 
         href: '/dashboard/profile', 
         icon: Building2, 
-        visible: hasAccess && (isAdmin || isHR || isViewer),
+        visible: hasAccess,
         isLocked: false,
       },
       { 

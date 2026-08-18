@@ -427,6 +427,20 @@ export const checkCompanySession = async (req: Request, res: Response) => {
       }
     }
 
+    const isAdmin = (activeMembership.roles & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN;
+    let resolvedPermissions = activeMembership.permissions;
+    if (!resolvedPermissions) {
+      if (isAdmin) {
+        resolvedPermissions = { '*': ['*'] };
+      } else if ((activeMembership.roles & ROLES.COMPANY_HR) === ROLES.COMPANY_HR) {
+        resolvedPermissions = { jobs: ['read', 'create', 'edit'], walkin: ['read', 'create', 'manage'], interviews: ['read', 'schedule', 'conduct', 'feedback'], talent_pool: ['read', 'create', 'edit'], discovery: ['read', 'contact'], offers: ['read', 'create', 'edit', 'send'], spot_jobs: ['read', 'create', 'manage'], team: ['read'], settings: ['read'] };
+      } else if ((activeMembership.roles & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER) {
+        resolvedPermissions = { jobs: ['read'], walkin: ['read', 'manage'], interviews: ['read', 'conduct', 'feedback'], talent_pool: ['read'], discovery: ['read'], offers: ['read'], spot_jobs: ['read'], team: ['read'], settings: ['read'] };
+      } else {
+        resolvedPermissions = { jobs: ['read'], walkin: ['read'], interviews: ['read'], talent_pool: ['read'], discovery: ['read'], offers: ['read'], spot_jobs: ['read'], team: ['read'], settings: ['read'] };
+      }
+    }
+
     return res.status(200).json({
       success: true,
       isAuthenticated: true,
@@ -434,6 +448,7 @@ export const checkCompanySession = async (req: Request, res: Response) => {
         id: user.id, 
         globalRoles: user.globalRoles, 
         companyRoles: activeMembership.roles, // Active working context mask
+        permissions: resolvedPermissions,
         allWorkspaces: allRolesSummary,        // Collection array containing all memberships
         email: user.jobSeekerProfile?.email || (user.mobileNumber.includes('@') ? user.mobileNumber : activeMembership.company.email),
         name: user.jobSeekerProfile?.fullName || (user.mobileNumber.includes('@') ? user.mobileNumber.split('@')[0] : 'Admin')

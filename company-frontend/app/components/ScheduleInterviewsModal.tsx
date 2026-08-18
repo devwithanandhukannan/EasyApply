@@ -154,19 +154,23 @@ export default function ScheduleInterviewsModal({
   const targetLabel = targetStatus === 'hr_round' ? 'HR Round' : 'Technical Round';
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-zinc-950 border border-zinc-900 w-full max-w-md rounded-xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 font-mono text-xs">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 font-sans text-xs text-[#1d1d1f] dark:text-[#f5f5f7]">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-900">
+        <div className="flex items-center justify-between px-6 py-4.5 border-b border-black/[0.06] dark:border-white/[0.08]">
           <div>
-            <h3 className="text-sm font-semibold text-white">Batch Interview Config</h3>
-            <p className="text-[11px] text-zinc-500 mt-0.5">
-              Configuring <span className="text-white font-medium">{targetLabel}</span> for{' '}
+            <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white">Batch Interview Config</h3>
+            <p className="text-[11px] text-[#86868b] mt-0.5">
+              Configuring <span className="font-semibold text-[#0071e3]">{targetLabel}</span> for{' '}
               {selectedApplicationIds.length} candidate{selectedApplicationIds.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button onClick={onClose} className="p-1 text-zinc-500 hover:text-white rounded-lg transition-colors" type="button">
+          <button 
+            onClick={onClose} 
+            className="w-7 h-7 rounded-full bg-black/[0.04] dark:bg-white/[0.06] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer" 
+            type="button"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

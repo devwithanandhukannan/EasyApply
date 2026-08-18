@@ -17,6 +17,8 @@ const isCompanyAdmin = async (userId: string, companyId: string): Promise<boolea
   return (member.roles & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN;
 };
 
+import { DEFAULT_ROLE_PRESETS } from '../utils/permissionRules.ts';
+
 // ─────────────────────────────────────────────────────────────
 // 1. Invite a new team member
 // ─────────────────────────────────────────────────────────────
@@ -34,7 +36,7 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Forbidden: Admin access verification failed.' });
     }
 
-    const { email, roleType } = req.body;
+    const { email, roleType, permissions } = req.body;
     if (!email || !roleType) {
       return res.status(400).json({ success: false, message: 'Email and roleType parameters are mandatory.' });
     }
@@ -42,9 +44,23 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
     const normalizedEmail = email.toLowerCase().trim();
     
     let bitwiseRoleValue = ROLES.COMPANY_VIEWER;
-    if (roleType === 'hr') bitwiseRoleValue = ROLES.COMPANY_HR;
-    else if (roleType === 'interviewer') bitwiseRoleValue = ROLES.COMPANY_INTERVIEWER;
-    else if (roleType === 'admin') bitwiseRoleValue = ROLES.COMPANY_ADMIN;
+    let resolvedPermissions = permissions;
+
+    if (roleType === 'admin') {
+      bitwiseRoleValue = ROLES.COMPANY_ADMIN;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_ADMIN.permissions;
+    } else if (roleType === 'hr') {
+      bitwiseRoleValue = ROLES.COMPANY_HR;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_HR.permissions;
+    } else if (roleType === 'interviewer') {
+      bitwiseRoleValue = ROLES.COMPANY_INTERVIEWER;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_INTERVIEWER.permissions;
+    } else if (roleType === 'recruiter') {
+      bitwiseRoleValue = ROLES.COMPANY_HR;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_RECRUITER.permissions;
+    } else {
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_VIEWER.permissions;
+    }
 
     let user = await prisma.user.findFirst({
       where: { mobileNumber: normalizedEmail }
@@ -60,7 +76,13 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
     }
 
     const inviteToken = jwt.sign(
-      { email: normalizedEmail, companyId, targetRoles: bitwiseRoleValue, invitedBy: currentUserId },
+      { 
+        email: normalizedEmail, 
+        companyId, 
+        targetRoles: bitwiseRoleValue, 
+        targetPermissions: resolvedPermissions,
+        invitedBy: currentUserId 
+      },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -121,6 +143,7 @@ export const listTeamMembers = async (req: Request, res: Response) => {
       name: m.user.jobSeekerProfile?.fullName || m.user.mobileNumber,
       email: m.user.jobSeekerProfile?.email || m.user.mobileNumber,
       rolesMask: m.roles,
+      permissions: m.permissions,
       globalRolesMask: m.user.globalRoles,
       status: m.status,
       joinedAt: m.createdAt,
@@ -142,7 +165,7 @@ export const updateMemberRole = async (req: Request, res: Response) => {
     const companyId = req.company?.companyId;
     const currentUserId = req.user?.userId;
     const { memberId } = req.params;
-    const { newRolesMask } = req.body;
+    const { newRolesMask, permissions } = req.body;
 
     if (!companyId || !currentUserId) {
       return res.status(401).json({ success: false, message: 'Unauthorized structural setup context.' });
@@ -163,11 +186,14 @@ export const updateMemberRole = async (req: Request, res: Response) => {
     await prisma.$transaction(async (tx) => {
       await tx.teamMember.update({
         where: { id: memberId },
-        data: { roles: newRolesMask }
+        data: { 
+          ...(newRolesMask !== undefined ? { roles: newRolesMask } : {}),
+          ...(permissions !== undefined ? { permissions } : {})
+        }
       });
 
       const targetUser = await tx.user.findUnique({ where: { id: member.userId } });
-      if (targetUser) {
+      if (targetUser && newRolesMask !== undefined) {
         let updatedGlobal = targetUser.globalRoles & ~ALL_COMPANY_BITS;
         updatedGlobal |= newRolesMask;
 
@@ -304,7 +330,7 @@ export const setTeamMemberPassword = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid or expired invitation validation token context.' });
     }
 
-    const { email, companyId, targetRoles } = decoded;
+    const { email, companyId, targetRoles, targetPermissions } = decoded;
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -331,8 +357,20 @@ export const setTeamMemberPassword = async (req: Request, res: Response) => {
       // Sync workspace profile registration entries mask mappings with password assignment appended safely
       const updatedMember = await tx.teamMember.upsert({
         where: { companyId_userId: { companyId, userId: user.id } },
-        update: { roles: targetRoles, status: 'active', password: hashedPassword },
-        create: { userId: user.id, companyId, roles: targetRoles, status: 'active', password: hashedPassword }
+        update: { 
+          roles: targetRoles, 
+          status: 'active', 
+          password: hashedPassword,
+          ...(targetPermissions ? { permissions: targetPermissions } : {})
+        },
+        create: { 
+          userId: user.id, 
+          companyId, 
+          roles: targetRoles, 
+          permissions: targetPermissions || null,
+          status: 'active', 
+          password: hashedPassword 
+        }
       });
 
       // Overlay user's global structural permissions bits mapping safely
@@ -507,7 +545,8 @@ export const teamMemberLogin = async (req: Request, res: Response) => {
         globalRoles: user.globalRoles,
         rolesMask: memberProfile.roles,
         companyRoles: memberProfile.roles,
-        roles: memberProfile.roles 
+        roles: memberProfile.roles,
+        permissions: memberProfile.permissions || null,
       },
       company: { 
         id: memberProfile.company.id, 
