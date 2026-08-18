@@ -8,15 +8,55 @@ export const getCompanyDashboard = async (req: Request, res: Response) => {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(401).json({ success: false, message: 'Unauthorized: Company context missing.' });
 
+    // 1. Fetch All Company Jobs with Applications
     const jobs = await prisma.jobPosting.findMany({
       where: { companyId },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { applications: true } },
-        applications: { select: { status: true } },
+        applications: {
+          select: {
+            id: true,
+            status: true,
+            appliedAt: true,
+            jobSeekerProfile: { select: { fullName: true, email: true } },
+          },
+        },
       },
     });
 
+    const pipelineStages = {
+      applied: 0,
+      shortlisted: 0,
+      interviewing: 0,
+      offered: 0,
+      hired: 0,
+      rejected: 0,
+    };
+
+    // 2. Aggregate Pipeline Stages
+    jobs.forEach((job) => {
+      job.applications.forEach((app) => {
+        const s = (app.status || '').toLowerCase();
+        if (s === 'applied' || s === 'submitted' || s === 'under_review' || s === 'screening') {
+          pipelineStages.applied++;
+        } else if (s === 'shortlisted') {
+          pipelineStages.shortlisted++;
+        } else if (s === 'interview_scheduled' || s === 'interviewing' || s === 'interviewed') {
+          pipelineStages.interviewing++;
+        } else if (s === 'offered' || s === 'offer_sent') {
+          pipelineStages.offered++;
+        } else if (s === 'hired' || s === 'accepted') {
+          pipelineStages.hired++;
+        } else if (s === 'rejected') {
+          pipelineStages.rejected++;
+        } else {
+          pipelineStages.applied++;
+        }
+      });
+    });
+
+    // 3. Format Jobs
     const formattedJobs = jobs.map((job) => {
       const statusCounts = job.applications.reduce((acc, app) => {
         acc[app.status] = (acc[app.status] || 0) + 1;
@@ -39,13 +79,116 @@ export const getCompanyDashboard = async (req: Request, res: Response) => {
       };
     });
 
+    // 4. Calculate 7-Day Application Trends
+    const daysMap: Record<string, number> = {};
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const now = new Date();
+    
+    // Initialize last 7 days with 0
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dateKey = d.toISOString().split('T')[0]!;
+      daysMap[dateKey] = 0;
+    }
+
+    // Populate actual counts
+    jobs.forEach((job) => {
+      job.applications.forEach((app) => {
+        const appDateKey = new Date(app.appliedAt).toISOString().split('T')[0]!;
+        if (daysMap[appDateKey] !== undefined) {
+          daysMap[appDateKey]++;
+        }
+      });
+    });
+
+    const applicationTrends = Object.entries(daysMap).map(([dateStr, count]) => {
+      const d = new Date(dateStr);
+      return {
+        date: dateStr,
+        day: dayNames[d.getDay()] || '',
+        count,
+      };
+    });
+
+    // 5. Fetch Upcoming Interviews
+    const upcomingInterviewsRaw = await prisma.interview.findMany({
+      where: {
+        application: { jobPosting: { companyId } },
+        status: { in: ['scheduled', 'in_progress'] },
+        scheduledTime: { gte: new Date(Date.now() - 4 * 60 * 60 * 1000) },
+      },
+      orderBy: { scheduledTime: 'asc' },
+      take: 4,
+      include: {
+        application: {
+          select: {
+            jobPosting: { select: { title: true } },
+            jobSeekerProfile: { select: { fullName: true, email: true } },
+          },
+        },
+      },
+    });
+
+    const upcomingInterviews = upcomingInterviewsRaw.map((it) => ({
+      id: it.id,
+      candidateName: it.application?.jobSeekerProfile?.fullName || 'Candidate',
+      candidateEmail: it.application?.jobSeekerProfile?.email || '',
+      jobTitle: it.application?.jobPosting?.title || 'Position',
+      scheduledTime: it.scheduledTime,
+      format: it.format,
+      livekitRoomName: it.livekitRoomName,
+      status: it.status,
+    }));
+
+    // 6. Fetch Active Walk-In Rooms
+    const activeWalkInRoomsRaw = await prisma.walkInRoom.findMany({
+      where: { companyId, status: { in: ['OPEN', 'PAUSED'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      include: {
+        _count: {
+          select: {
+            queue: { where: { status: { in: ['waiting', 'priority', 'interviewing'] } } },
+          },
+        },
+      },
+    });
+
+    const activeWalkInRooms = activeWalkInRoomsRaw.map((room) => ({
+      id: room.id,
+      roomCode: room.roomCode,
+      title: room.title,
+      status: room.status,
+      waitingCount: room._count.queue,
+      livekitRoom: room.livekitRoom,
+    }));
+
+    // 7. Fetch Pending Offers Count
+    const pendingOffers = await prisma.offerLetter.count({
+      where: {
+        application: { jobPosting: { companyId } },
+        status: { in: ['draft', 'pending', 'sent', 'viewed', 'negotiating'] },
+      },
+    });
+
     const totalJobs = jobs.length;
     const totalApplications = jobs.reduce((sum, j) => sum + j._count.applications, 0);
     const activeJobs = jobs.filter((j) => j.status === 'active').length;
 
     return res.status(200).json({
       success: true,
-      summary: { totalJobs, activeJobs, totalApplications },
+      summary: { 
+        totalJobs, 
+        activeJobs, 
+        totalApplications,
+        interviewsScheduled: upcomingInterviews.length,
+        pendingOffers,
+      },
+      pipelineStages,
+      applicationTrends,
+      upcomingInterviews,
+      activeWalkInRooms,
       jobs: formattedJobs,
     });
   } catch (error) {

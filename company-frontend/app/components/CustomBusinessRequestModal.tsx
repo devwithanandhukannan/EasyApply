@@ -1,7 +1,8 @@
+// app/components/CustomBusinessRequestModal.tsx
 'use client';
 
 import { useState } from 'react';
-import { X, Sparkles, Check, Send, Loader2, Building2, ShieldAlert } from 'lucide-react';
+import { X, Sparkles, Check, Send, Loader2 } from 'lucide-react';
 import api from '@/app/lib/axios';
 import { useGlassToast } from './GlassToastContainer';
 
@@ -75,29 +76,29 @@ export default function CustomBusinessRequestModal({ isOpen, onClose, initialFea
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-gray-200 relative overflow-hidden max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-[#18181b] rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-zinc-200 dark:border-white/[0.1] relative overflow-hidden max-h-[90vh] flex flex-col">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+          className="absolute top-5 right-5 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-700 dark:hover:text-white transition-colors cursor-pointer"
         >
           <X size={18} />
         </button>
 
         {submitted ? (
           <div className="py-12 text-center space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto text-emerald-600">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto text-emerald-500">
               <Check size={28} strokeWidth={2.5} />
             </div>
-            <h2 className="text-xl font-bold text-gray-900">Custom Package Requested!</h2>
-            <p className="text-sm text-gray-600 max-w-md mx-auto leading-relaxed">
-              Our administrator team has received your feature requirements. We will configure your company's custom subscription package and update your workspace within 24 hours.
+            <h2 className="text-xl font-bold text-zinc-900 dark:text-white">Custom Package Requested!</h2>
+            <p className="text-sm text-zinc-500 dark:text-[#86868b] max-w-md mx-auto leading-relaxed">
+              Our administrator team has received your feature requirements. We will configure your company&apos;s custom subscription package and update your workspace within 24 hours.
             </p>
             <div className="pt-4">
               <button
                 onClick={onClose}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-full shadow-sm transition-all"
+                className="px-6 py-2.5 bg-[#0071e3] hover:bg-[#0062c4] text-white font-semibold text-xs rounded-full shadow-sm transition-all cursor-pointer"
               >
                 Return to Workspace
               </button>
@@ -107,21 +108,21 @@ export default function CustomBusinessRequestModal({ isOpen, onClose, initialFea
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
             {/* Header */}
             <div className="mb-5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-blue-600 text-xs font-semibold mb-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-[#0071e3] text-xs font-semibold mb-2">
                 <Sparkles size={13} />
                 <span>Enterprise Custom Plan</span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 tracking-tight">
+              <h2 className="text-xl font-bold text-zinc-900 dark:text-white tracking-tight">
                 Request Custom Business Features
               </h2>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-zinc-500 dark:text-[#86868b] mt-1 leading-relaxed">
                 Select the specific modules and capacities your hiring team needs. EasyApply administrators will create a tailored subscription package for your company.
               </p>
             </div>
 
             {/* Modules Checkbox Matrix */}
             <div className="flex-1 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar mb-5">
-              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block">
+              <label className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider block">
                 Select Modules to Unlock:
               </label>
               {AVAILABLE_MODULES.map((m) => {
@@ -132,20 +133,20 @@ export default function CustomBusinessRequestModal({ isOpen, onClose, initialFea
                     onClick={() => toggleFeature(m.key)}
                     className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
                       checked
-                        ? 'bg-blue-50/50 border-blue-200 shadow-xs'
-                        : 'bg-gray-50/50 border-gray-200 hover:bg-gray-50'
+                        ? 'bg-blue-500/10 border-blue-500/30 dark:border-blue-500/40 shadow-xs'
+                        : 'bg-zinc-50/80 dark:bg-[#121214] border-zinc-200/80 dark:border-white/[0.06] hover:bg-zinc-100 dark:hover:bg-[#1c1c1e]'
                     }`}
                   >
                     <div className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
                       checked
-                        ? 'bg-blue-600 border-blue-600 text-white'
-                        : 'border-gray-300 bg-white'
+                        ? 'bg-[#0071e3] border-[#0071e3] text-white'
+                        : 'border-zinc-300 dark:border-zinc-700 bg-white dark:bg-[#18181b]'
                     }`}>
                       {checked && <Check size={12} strokeWidth={3} />}
                     </div>
                     <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-gray-900">{m.label}</h4>
-                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{m.desc}</p>
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-white">{m.label}</h4>
+                      <p className="text-[11px] text-zinc-500 dark:text-[#86868b] mt-0.5 leading-relaxed">{m.desc}</p>
                     </div>
                   </div>
                 );
@@ -154,7 +155,7 @@ export default function CustomBusinessRequestModal({ isOpen, onClose, initialFea
               {/* Custom Message & Budget */}
               <div className="space-y-3 pt-2">
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 block mb-1">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                     Special Requirements or Hiring Volume Notes
                   </label>
                   <textarea
@@ -162,12 +163,12 @@ export default function CustomBusinessRequestModal({ isOpen, onClose, initialFea
                     placeholder="e.g. Need unlimited walk-in rooms for our upcoming tech hiring drive with 100+ candidates..."
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    className="w-full text-xs p-3 bg-white border border-gray-200 rounded-xl focus:border-blue-500 outline-none text-gray-900 placeholder:text-gray-400 resize-none"
+                    className="w-full text-xs p-3 bg-zinc-50 dark:bg-[#121214] border border-zinc-200 dark:border-white/[0.08] rounded-xl focus:border-[#0071e3] outline-none text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-600 resize-none"
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-gray-700 block mb-1">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 block mb-1">
                     Expected Monthly Budget (Optional)
                   </label>
                   <input
@@ -175,25 +176,25 @@ export default function CustomBusinessRequestModal({ isOpen, onClose, initialFea
                     placeholder="e.g. ₹5,000 - ₹15,000 / month"
                     value={budgetRange}
                     onChange={(e) => setBudgetRange(e.target.value)}
-                    className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-xl focus:border-blue-500 outline-none text-gray-900 placeholder:text-gray-400"
+                    className="w-full text-xs p-2.5 bg-zinc-50 dark:bg-[#121214] border border-zinc-200 dark:border-white/[0.08] rounded-xl focus:border-[#0071e3] outline-none text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
                   />
                 </div>
               </div>
             </div>
 
             {/* Footer Actions */}
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-3 shrink-0">
+            <div className="pt-3 border-t border-zinc-100 dark:border-white/[0.08] flex items-center justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:text-gray-900"
+                className="px-4 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-full shadow-sm flex items-center gap-2 transition-all"
+                className="px-6 py-2.5 bg-[#0071e3] hover:bg-[#0062c4] disabled:opacity-50 text-white font-bold text-xs rounded-full shadow-sm flex items-center gap-2 transition-all cursor-pointer"
               >
                 {isSubmitting ? (
                   <>
