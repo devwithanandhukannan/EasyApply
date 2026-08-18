@@ -101,7 +101,7 @@ export default function CompanyFrontPage() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white flex items-center justify-center shadow-[0_2px_10px_rgba(0,113,227,0.35)] group-hover:scale-105 transition-transform">
-              <Building2 className="w-5 h-5" />
+              <Rocket className="w-5 h-5 -rotate-12 fill-white/20" />
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-base tracking-tight text-[#111827] dark:text-white group-hover:text-[#0071e3] transition-colors">
@@ -416,7 +416,7 @@ export default function CompanyFrontPage() {
             <div className="space-y-3 md:col-span-1">
               <div className="flex items-center gap-2 group">
                 <div className="w-7 h-7 rounded-xl bg-[#0071e3] text-white flex items-center justify-center shadow-xs">
-                  <Building2 className="w-4 h-4" />
+                  <Rocket className="w-4 h-4 -rotate-12 fill-white/20" />
                 </div>
                 <span className="font-bold text-base tracking-tight text-[#111827] dark:text-white">
                   EasyApply for Employers

@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Tag,
   Sparkles,
+  Rocket,
   Video,
   Copy,
   Check,
@@ -363,12 +364,12 @@ function CompaniesDirectoryContent() {
           {/* Logo */}
           <button
             onClick={() => router.push('/')}
-            className="flex items-center gap-2.5 bg-transparent border-0 cursor-pointer p-0 text-left"
+            className="flex items-center gap-2.5 bg-transparent border-0 cursor-pointer p-0 text-left group"
           >
-            <div className="w-8 h-8 rounded-xl bg-[#0071e3] flex items-center justify-center text-white shadow-sm">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0071e3] to-[#2563eb] flex items-center justify-center text-white shadow-sm group-hover:scale-105 transition-transform">
+              <Rocket className="w-4 h-4 -rotate-12 fill-white/20" />
             </div>
-            <span className="text-base font-bold tracking-tight text-[#1d1d1f] dark:text-white">
+            <span className="text-base font-bold tracking-tight text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors">
               EasyApply <span className="text-[#86868b] font-normal text-xs">for Seekers</span>
             </span>
           </button>
@@ -1309,8 +1310,8 @@ function CompaniesDirectoryContent() {
       <footer className="py-8 border-t border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#111112] mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-6 h-6 rounded-lg bg-[#0071e3] flex items-center justify-center text-white">
-              <Sparkles className="w-3 h-3" />
+            <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-[#0071e3] to-[#2563eb] flex items-center justify-center text-white shadow-xs">
+              <Rocket className="w-3.5 h-3.5 -rotate-12 fill-white/20" />
             </div>
             <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">EasyApply Ecosystem</span>
           </div>
