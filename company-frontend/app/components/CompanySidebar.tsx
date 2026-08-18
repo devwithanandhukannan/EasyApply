@@ -23,6 +23,7 @@ import {
   Sparkles,
   Globe,
   ExternalLink,
+  CalendarDays,
 } from 'lucide-react';
 import CustomBusinessRequestModal from './CustomBusinessRequestModal';
 
@@ -97,6 +98,13 @@ export default function CompanySidebar({
         icon: UserCheck,
         visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer),
         isLocked: !features.crmTalentPool,
+      },
+      { 
+        name: 'Calendar & Schedule', 
+        href: '/dashboard/calendar', 
+        icon: CalendarDays, 
+        visible: hasAccess && (isAdmin || isHR || isInterviewer || isViewer),
+        isLocked: false,
       },
       { 
         name: 'Live Interviews', 
