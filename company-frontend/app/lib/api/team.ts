@@ -15,16 +15,17 @@ export interface TeamMember {
   joinedAt: string;
   avatar: string | null;
   permissions?: GranularPermissions | null;
+  tags?: string[];
 }
 
 export const teamApi = {
   list: () => 
-    axios.get<{ success: boolean; team: TeamMember[] }>('/company/team'),
+    axios.get<{ success: boolean; team: TeamMember[]; tags?: string[] }>('/company/team'),
     
-  invite: (data: { email: string; roleType: string; permissions?: GranularPermissions }) =>
+  invite: (data: { email: string; roleType: string; permissions?: GranularPermissions; tags?: string[] }) =>
     axios.post<{ success: boolean; message: string }>('/company/team/invite', data),
     
-  updateRole: (memberId: string, payload: { newRolesMask?: number; permissions?: GranularPermissions }) =>
+  updateRole: (memberId: string, payload: { newRolesMask?: number; permissions?: GranularPermissions; tags?: string[] }) =>
     axios.put<{ success: boolean; message: string }>(`/company/team/${memberId}/role`, payload),
     
   remove: (memberId: string) => 

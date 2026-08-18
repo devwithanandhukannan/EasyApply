@@ -148,7 +148,7 @@ const PERMISSION_MODULES: ModuleConfig[] = [
 // Preset Templates
 const PRESET_TEMPLATES: Record<string, { label: string; roleType: string; bitwise: number; permissions: GranularPermissions }> = {
   admin: {
-    label: 'Company Admin',
+    label: 'Company Administrator',
     roleType: 'admin',
     bitwise: ROLES.COMPANY_ADMIN,
     permissions: {
@@ -163,18 +163,18 @@ const PRESET_TEMPLATES: Record<string, { label: string; roleType: string; bitwis
     },
   },
   hr: {
-    label: 'HR Manager',
+    label: 'HR & Talent Manager',
     roleType: 'hr',
     bitwise: ROLES.COMPANY_HR,
     permissions: {
       jobs: ['read', 'create', 'edit'],
-      walkin: ['read', 'create', 'manage'],
+      walkin: ['read', 'manage'],
       interviews: ['read', 'schedule', 'conduct', 'feedback'],
       talent_pool: ['read', 'create', 'edit'],
       discovery: ['read', 'contact'],
       offers: ['read', 'create', 'edit', 'send'],
       spot_jobs: ['read', 'create', 'manage'],
-      team: ['read'],
+      team: ['read', 'invite'],
     },
   },
   interviewer: {
@@ -183,7 +183,7 @@ const PRESET_TEMPLATES: Record<string, { label: string; roleType: string; bitwis
     bitwise: ROLES.COMPANY_INTERVIEWER,
     permissions: {
       jobs: ['read'],
-      walkin: ['read', 'manage'],
+      walkin: ['read'],
       interviews: ['read', 'conduct', 'feedback'],
       talent_pool: ['read'],
       discovery: ['read'],
@@ -239,17 +239,58 @@ const PRESET_TEMPLATES: Record<string, { label: string; roleType: string; bitwis
   },
 };
 
+// ─── COLOR PALETTE FOR CUSTOM TAGS ──────────────────────────────────────────
+const TAG_COLOR_PALETTES = [
+  { bg: 'bg-blue-500/10 dark:bg-blue-500/15', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-500/25', dot: 'bg-blue-500' },
+  { bg: 'bg-purple-500/10 dark:bg-purple-500/15', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-500/25', dot: 'bg-purple-500' },
+  { bg: 'bg-emerald-500/10 dark:bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-500/25', dot: 'bg-emerald-500' },
+  { bg: 'bg-amber-500/10 dark:bg-amber-500/15', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-500/25', dot: 'bg-amber-500' },
+  { bg: 'bg-rose-500/10 dark:bg-rose-500/15', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-500/25', dot: 'bg-rose-500' },
+  { bg: 'bg-cyan-500/10 dark:bg-cyan-500/15', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-500/25', dot: 'bg-cyan-500' },
+  { bg: 'bg-indigo-500/10 dark:bg-indigo-500/15', text: 'text-indigo-700 dark:text-indigo-300', border: 'border-indigo-500/25', dot: 'bg-indigo-500' },
+  { bg: 'bg-teal-500/10 dark:bg-teal-500/15', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-500/25', dot: 'bg-teal-500' },
+];
+
+function getTagStyle(tag: string) {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % TAG_COLOR_PALETTES.length;
+  return TAG_COLOR_PALETTES[index];
+}
+
+const DEFAULT_STARTER_TAGS = [
+  'Engineering',
+  'Frontend',
+  'Backend',
+  'Design',
+  'Product',
+  'HR & Talent',
+  'Leadership',
+  'Operations',
+  'Recruiting Squad',
+  'APAC Team',
+];
+
 export default function TeamPage() {
   const { showToast } = useGlassToast();
   const { user, company, isAdmin } = useAuth();
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [companyTags, setCompanyTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
+
+  // Filter & Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
   // Invite & Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [formEmail, setFormEmail] = useState('');
+  const [formTags, setFormTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [selectedPreset, setSelectedPreset] = useState<string>('hr');
   const [customPermissions, setCustomPermissions] = useState<GranularPermissions>(
     PRESET_TEMPLATES.hr.permissions
@@ -262,7 +303,14 @@ export default function TeamPage() {
   const fetchTeam = async () => {
     try {
       const res = await teamApi.list();
-      setMembers(res.data?.team || []);
+      const teamList = res.data?.team || [];
+      setMembers(teamList);
+      
+      // Aggregate tags from response or from list
+      const aggregatedTags = res.data?.tags && res.data.tags.length > 0 
+        ? res.data.tags 
+        : Array.from(new Set(teamList.flatMap((m) => m.tags || [])));
+      setCompanyTags(aggregatedTags);
     } catch (error) {
       console.error(error);
     } finally {
@@ -273,6 +321,41 @@ export default function TeamPage() {
   useEffect(() => {
     fetchTeam();
   }, []);
+
+  // Compute all available tags (existing in company + starter defaults)
+  const availableSuggestionTags = useMemo(() => {
+    const combined = Array.from(new Set([...companyTags, ...DEFAULT_STARTER_TAGS]));
+    return combined.filter((t) => !formTags.includes(t));
+  }, [companyTags, formTags]);
+
+  // Filtered members list based on search and active tag filter
+  const filteredMembers = useMemo(() => {
+    return members.filter((m) => {
+      // Search match
+      const query = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !query ||
+        m.name?.toLowerCase().includes(query) ||
+        m.email.toLowerCase().includes(query) ||
+        (m.tags && m.tags.some((t) => t.toLowerCase().includes(query)));
+
+      // Tag filter match
+      const matchesTag = !activeTagFilter || (m.tags && m.tags.includes(activeTagFilter));
+
+      return matchesSearch && matchesTag;
+    });
+  }, [members, searchQuery, activeTagFilter]);
+
+  // Compute tag counts for the filter bar
+  const tagCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    members.forEach((m) => {
+      (m.tags || []).forEach((tag) => {
+        counts[tag] = (counts[tag] || 0) + 1;
+      });
+    });
+    return counts;
+  }, [members]);
 
   // Handle opening Invite Modal
   const handleOpenInvite = () => {
@@ -287,6 +370,8 @@ export default function TeamPage() {
     }
     setEditingMember(null);
     setFormEmail('');
+    setFormTags([]);
+    setTagInput('');
     setSelectedPreset('hr');
     setCustomPermissions(PRESET_TEMPLATES.hr.permissions);
     setIsModalOpen(true);
@@ -296,6 +381,8 @@ export default function TeamPage() {
   const handleOpenEdit = (member: TeamMember) => {
     setEditingMember(member);
     setFormEmail(member.email);
+    setFormTags(member.tags || []);
+    setTagInput('');
 
     // Determine matching preset or custom
     let presetKey = 'custom';
@@ -316,6 +403,27 @@ export default function TeamPage() {
     setSelectedPreset(presetKey);
     setCustomPermissions(member.permissions || PRESET_TEMPLATES[presetKey]?.permissions || PRESET_TEMPLATES.hr.permissions);
     setIsModalOpen(true);
+  };
+
+  // Tag manipulation helpers
+  const handleAddTag = (rawTag: string) => {
+    const clean = rawTag.trim().replace(/^#/, '');
+    if (!clean) return;
+    if (!formTags.includes(clean)) {
+      setFormTags((prev) => [...prev, clean]);
+    }
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setFormTags((prev) => prev.filter((t) => t !== tagToRemove));
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    }
   };
 
   // Handle preset change
@@ -357,7 +465,7 @@ export default function TeamPage() {
     });
   };
 
-  // Save permissions (Invite or Update)
+  // Save permissions & tags (Invite or Update)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMember && !formEmail.trim()) {
@@ -370,27 +478,29 @@ export default function TeamPage() {
       let bitwiseMask = PRESET_TEMPLATES[selectedPreset]?.bitwise || ROLES.COMPANY_HR;
 
       if (editingMember) {
-        // Update existing member permissions
+        // Update existing member permissions & tags
         await teamApi.updateRole(editingMember.id, {
           newRolesMask: bitwiseMask,
           permissions: customPermissions,
+          tags: formTags,
         });
-        showToast('Success', `Permissions updated for ${editingMember.name || editingMember.email}`, 'success');
+        showToast('Success', `Updated details for ${editingMember.name || editingMember.email}`, 'success');
       } else {
-        // Invite new member with dynamic permissions
+        // Invite new member with dynamic permissions & tags
         const roleTypeToSend = PRESET_TEMPLATES[selectedPreset]?.roleType || 'hr';
         await teamApi.invite({
           email: formEmail.trim(),
           roleType: roleTypeToSend,
           permissions: customPermissions,
+          tags: formTags,
         });
-        showToast('Success', `Invitation email sent to ${formEmail} with assigned permissions`, 'success');
+        showToast('Success', `Invitation email sent to ${formEmail}`, 'success');
       }
 
       setIsModalOpen(false);
       fetchTeam();
     } catch (error: any) {
-      showToast('Operation Failed', error.response?.data?.message || 'Failed to update member permissions', 'danger');
+      showToast('Operation Failed', error.response?.data?.message || 'Failed to update member', 'danger');
     } finally {
       setSubmitting(false);
     }
@@ -456,6 +566,8 @@ export default function TeamPage() {
     );
   }
 
+  const allAvailableTags = Object.keys(tagCounts);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-1 text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased">
       {/* ── HEADER ─────────────────────────────────────────────────── */}
@@ -470,7 +582,7 @@ export default function TeamPage() {
             </h1>
           </div>
           <p className="text-xs sm:text-sm text-[#86868b] dark:text-slate-400 mt-1 font-medium">
-            Assign dynamic module permissions (Read, Write, Manage, Delete) to team members. UI and backend API adapt automatically.
+            Organize team members with custom tags, assign role permissions, and manage granular workspace access.
           </p>
         </div>
 
@@ -492,6 +604,76 @@ export default function TeamPage() {
         </div>
       </div>
 
+      {/* ── FILTER & TAGS TOOLBAR ───────────────────────────────────── */}
+      <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          {/* Search Box */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={15} />
+            <input
+              type="text"
+              placeholder="Search member, email, or custom tag..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86868b] hover:text-zinc-900 dark:hover:text-white"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
+
+          <div className="text-xs text-[#86868b] font-medium flex items-center gap-2 shrink-0">
+            <span>Showing {filteredMembers.length} of {members.length} team members</span>
+          </div>
+        </div>
+
+        {/* Tag Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-none flex-wrap">
+          <button
+            onClick={() => setActiveTagFilter(null)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTagFilter === null
+                ? 'bg-[#0071e3] text-white shadow-xs'
+                : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border border-black/[0.04] dark:border-white/[0.06]'
+            }`}
+          >
+            <span>All Members</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTagFilter === null ? 'bg-white/20 text-white' : 'bg-black/[0.06] dark:bg-white/10'}`}>
+              {members.length}
+            </span>
+          </button>
+
+          {allAvailableTags.map((tag) => {
+            const style = getTagStyle(tag);
+            const isSelected = activeTagFilter === tag;
+            const count = tagCounts[tag] || 0;
+
+            return (
+              <button
+                key={tag}
+                onClick={() => setActiveTagFilter(isSelected ? null : tag)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                  isSelected
+                    ? `${style.bg} ${style.border} ${style.text} shadow-xs ring-2 ring-blue-500/30`
+                    : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border-black/[0.04] dark:border-white/[0.06]'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                <span>{tag}</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/[0.06] dark:bg-white/10 font-semibold">
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ── TEAM MEMBER LIST TABLE ─────────────────────────────────── */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -500,79 +682,129 @@ export default function TeamPage() {
               <tr className="border-b border-black/[0.06] dark:border-white/[0.08] bg-[#fbfbfd] dark:bg-[#18181a] text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
                 <th className="px-6 py-3.5">Workspace Member</th>
                 <th className="px-6 py-3.5">Assigned Role &amp; Capabilities</th>
+                <th className="px-6 py-3.5">Team / Custom Tags</th>
                 <th className="px-6 py-3.5">Joined Date</th>
                 <th className="px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
-              {members.map((member) => (
-                <tr key={member.id} className="hover:bg-black/[0.015] dark:hover:bg-white/[0.015] transition-colors">
-                  <td className="px-6 py-4 flex items-center gap-3">
-                    <div className="h-10 w-10 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex-shrink-0 flex items-center justify-center overflow-hidden">
-                      {member.avatar ? (
-                        <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="text-[#0071e3] text-sm font-bold">
-                          {member.name ? member.name.charAt(0).toUpperCase() : 'U'}
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
-                        {member.name || 'Team Member'}
-                      </div>
-                      <div className="text-[11px] text-[#86868b]">{member.email}</div>
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-4 align-middle">
-                    {getRoleBadge(member)}
-                  </td>
-
-                  <td className="px-6 py-4 text-xs text-[#86868b] align-middle font-medium">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5 text-[#0071e3]" />
-                      <span>
-                        {member.joinedAt
-                          ? new Date(member.joinedAt).toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })
-                          : 'Pending'}
-                      </span>
-                    </div>
-                  </td>
-
-                  <td className="px-6 py-4 text-right align-middle">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleOpenEdit(member)}
-                        className="px-3 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <SlidersHorizontal size={13} className="text-[#0071e3]" />
-                        <span>Edit Permissions</span>
-                      </button>
-
-                      {isAdmin && (
+              {filteredMembers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-xs text-[#86868b]">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Users size={28} className="text-[#86868b]/40" />
+                      <p className="font-semibold">No team members match the selected filter or search.</p>
+                      {activeTagFilter && (
                         <button
-                          onClick={() => handleRemove(member.id, member.name || member.email)}
-                          className="p-1.5 text-[#86868b] hover:text-red-500 rounded-xl transition-colors cursor-pointer"
-                          title="Revoke access"
+                          onClick={() => setActiveTagFilter(null)}
+                          className="text-[#0071e3] hover:underline font-bold mt-1 cursor-pointer"
                         >
-                          <Trash2 size={15} />
+                          Clear tag filter
                         </button>
                       )}
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredMembers.map((member) => (
+                  <tr key={member.id} className="hover:bg-black/[0.015] dark:hover:bg-white/[0.015] transition-colors">
+                    <td className="px-6 py-4 flex items-center gap-3">
+                      <div className="h-10 w-10 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex-shrink-0 flex items-center justify-center overflow-hidden">
+                        {member.avatar ? (
+                          <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="text-[#0071e3] text-sm font-bold">
+                            {member.name ? member.name.charAt(0).toUpperCase() : 'U'}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                          {member.name || 'Team Member'}
+                        </div>
+                        <div className="text-[11px] text-[#86868b]">{member.email}</div>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 align-middle">
+                      {getRoleBadge(member)}
+                    </td>
+
+                    {/* Custom Tags Column */}
+                    <td className="px-6 py-4 align-middle">
+                      <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+                        {member.tags && member.tags.length > 0 ? (
+                          member.tags.map((tag) => {
+                            const style = getTagStyle(tag);
+                            return (
+                              <button
+                                key={tag}
+                                onClick={() => setActiveTagFilter(tag)}
+                                title={`Filter by ${tag}`}
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 hover:scale-105 ${style.bg} ${style.text} ${style.border}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                                <span>{tag}</span>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <button
+                            onClick={() => handleOpenEdit(member)}
+                            className="text-[11px] text-[#86868b] hover:text-[#0071e3] flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                          >
+                            <Plus size={12} />
+                            <span>Add Tag</span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 text-xs text-[#86868b] align-middle font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-[#0071e3]" />
+                        <span>
+                          {member.joinedAt
+                            ? new Date(member.joinedAt).toLocaleDateString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })
+                            : 'Pending'}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-6 py-4 text-right align-middle">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleOpenEdit(member)}
+                          className="px-3 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <SlidersHorizontal size={13} className="text-[#0071e3]" />
+                          <span>Edit</span>
+                        </button>
+
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleRemove(member.id, member.name || member.email)}
+                            className="p-1.5 text-[#86868b] hover:text-red-500 rounded-xl transition-colors cursor-pointer"
+                            title="Revoke access"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* ── GRANULAR PERMISSION MATRIX MODAL (INVITE & EDIT) ────────── */}
+      {/* ── GRANULAR PERMISSION & TAG MATRIX MODAL (INVITE & EDIT) ────────── */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-5 max-h-[90vh] flex flex-col">
@@ -584,10 +816,10 @@ export default function TeamPage() {
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-[#1d1d1f] dark:text-white">
-                    {editingMember ? `Edit Permissions: ${editingMember.name || editingMember.email}` : 'Invite Member & Assign Access Permissions'}
+                    {editingMember ? `Edit Member: ${editingMember.name || editingMember.email}` : 'Invite Member & Assign Access Permissions'}
                   </h3>
                   <p className="text-xs text-[#86868b]">
-                    Customize granular read, create, and manage rights for each module.
+                    Set custom team tags, assign presets, and configure granular permissions.
                   </p>
                 </div>
               </div>
@@ -616,6 +848,92 @@ export default function TeamPage() {
                   />
                 </div>
               )}
+
+              {/* ── CUSTOM TAGS & TEAM GROUPING SECTION ── */}
+              <div className="p-4 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#1d1d1f] dark:text-white uppercase tracking-wider">
+                    Custom Tags &amp; Team Grouping
+                  </label>
+                  <span className="text-[11px] text-[#86868b]">
+                    e.g. Engineering, APAC Hiring, Core Team
+                  </span>
+                </div>
+
+                {/* Active Selected Tags */}
+                {formTags.length > 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {formTags.map((tag) => {
+                      const style = getTagStyle(tag);
+                      return (
+                        <span
+                          key={tag}
+                          className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 shadow-xs ${style.bg} ${style.text} ${style.border}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                          <span>{tag}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTag(tag)}
+                            className="hover:text-red-500 transition-colors ml-0.5 cursor-pointer"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Input with Add button */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder="Type a custom tag name and press Enter..."
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={handleTagKeyDown}
+                      className="w-full px-4 py-2 bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs font-medium text-[#1d1d1f] dark:text-[#f5f5f7] focus:outline-none focus:border-[#0071e3]"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleAddTag(tagInput)}
+                    disabled={!tagInput.trim()}
+                    className="px-3.5 py-2 bg-[#0071e3] hover:bg-[#0062c4] disabled:opacity-40 text-white rounded-2xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus size={14} />
+                    <span>Add Tag</span>
+                  </button>
+                </div>
+
+                {/* Workspace Tag Suggestions (Reusable tags) */}
+                {availableSuggestionTags.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[11px] font-semibold text-[#86868b] flex items-center gap-1">
+                      <Sparkles size={12} className="text-[#0071e3]" />
+                      <span>Click to reuse existing / suggested tags:</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {availableSuggestionTags.map((tag) => {
+                        const style = getTagStyle(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => handleAddTag(tag)}
+                            className="px-2.5 py-1 rounded-xl text-[11px] font-semibold bg-white dark:bg-[#1c1c1e] hover:bg-black/[0.04] dark:hover:bg-white/10 text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border border-black/[0.06] dark:border-white/[0.08] transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus size={11} className="text-[#0071e3]" />
+                            <span>{tag}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Role Preset Selector */}
               <div>
@@ -744,7 +1062,7 @@ export default function TeamPage() {
                   className="px-5 py-2 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white rounded-2xl text-xs font-bold shadow-md shadow-blue-500/25 cursor-pointer hover:opacity-95 flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {submitting && <Loader2 size={13} className="animate-spin" />}
-                  <span>{editingMember ? 'Save Permissions' : 'Dispatch Invite'}</span>
+                  <span>{editingMember ? 'Save Permissions & Tags' : 'Dispatch Invite'}</span>
                 </button>
               </div>
             </form>

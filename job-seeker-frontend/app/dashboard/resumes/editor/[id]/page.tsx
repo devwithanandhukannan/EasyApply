@@ -23,7 +23,7 @@ import {
   ZoomIn, ZoomOut, Sparkles, History,
   ChevronDown, RotateCcw, X, Zap, Minus,
   Wand2, SpellCheck, RefreshCw, CheckCircle, ChevronRight,
-  MessageSquare, Lightbulb, Eye,
+  MessageSquare, Lightbulb, Eye, FileText,
 } from 'lucide-react';
 import {
   getResume, updateResume, convertToEditable, optimizeForJD,
@@ -165,16 +165,16 @@ interface SelectionToolbar {
 // ══════════════════════════════════════════════════════════════════════════
 // Toolbar Helpers
 // ══════════════════════════════════════════════════════════════════════════
-function Divider() { return <div className="w-px h-5 bg-[#2a2a2a] mx-0.5 flex-shrink-0" />; }
+function Divider() { return <div className="w-px h-5 bg-zinc-200 dark:bg-[#2a2a2a] mx-1 flex-shrink-0" />; }
 
 function Btn({ onClick, active = false, title, disabled = false, children }: {
   onClick: () => void; active?: boolean; title?: string; disabled?: boolean; children: React.ReactNode;
 }) {
   return (
     <button type="button" title={title} disabled={disabled} onClick={onClick}
-      className={`w-7 h-7 flex items-center justify-center rounded text-sm transition-colors flex-shrink-0
-        ${active ? 'bg-white/15 text-white' : 'text-gray-400 hover:bg-white/10 hover:text-white'}
-        ${disabled ? 'opacity-25 cursor-not-allowed' : ''}`}
+      className={`w-7 h-7 flex items-center justify-center rounded-lg text-sm transition-colors flex-shrink-0 cursor-pointer
+        ${active ? 'bg-zinc-200 text-zinc-900 dark:bg-white/15 dark:text-white font-bold' : 'text-zinc-600 dark:text-gray-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/10 dark:hover:text-white'}
+        ${disabled ? 'opacity-30 cursor-not-allowed' : ''}`}
     >{children}</button>
   );
 }
@@ -204,17 +204,17 @@ function ColorPicker({ label, onSelect, currentColor, icon: Icon }: { label: str
   return (
     <div ref={ref} className="relative">
       <button type="button" title={label} onClick={() => setOpen(o => !o)}
-        className="h-7 px-1.5 flex flex-col items-center justify-center rounded hover:bg-white/10 transition-colors">
-        <Icon size={13} className="text-gray-400" />
+        className="h-7 px-1.5 flex flex-col items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors cursor-pointer">
+        <Icon size={13} className="text-zinc-600 dark:text-gray-400" />
         <div className="w-3.5 h-0.5 rounded-sm mt-0.5" style={{ backgroundColor: currentColor }} />
       </button>
       {open && (
-        <div className="absolute top-9 left-0 z-50 bg-[#1a1a1a] border border-[#333] rounded-xl p-3 shadow-2xl w-40">
-          <p className="text-gray-500 text-xs mb-2">{label}</p>
+        <div className="absolute top-9 left-0 z-50 bg-white dark:bg-[#1a1a1a] border border-zinc-200 dark:border-[#333] rounded-xl p-3 shadow-2xl w-40">
+          <p className="text-zinc-500 text-xs mb-2">{label}</p>
           <div className="grid grid-cols-4 gap-1.5 mb-2">
             {COLORS.map(c => (
               <button key={c} type="button" onClick={() => { onSelect(c); setOpen(false); }}
-                className="w-6 h-6 rounded border border-[#333] hover:scale-110 transition-transform"
+                className="w-6 h-6 rounded border border-zinc-200 dark:border-[#333] hover:scale-110 transition-transform cursor-pointer"
                 style={{ backgroundColor: c }} />
             ))}
           </div>
@@ -229,7 +229,7 @@ function ColorPicker({ label, onSelect, currentColor, icon: Icon }: { label: str
 function ToolSelect({ value, onChange, options, width = 'w-32' }: { value: string; onChange: (v: string) => void; options: { label: string; value: string }[]; width?: string }) {
   return (
     <select value={value} onChange={e => onChange(e.target.value)}
-      className={`${width} h-7 bg-[#111] border border-[#2a2a2a] text-white text-xs rounded px-1.5 focus:outline-none focus:border-white cursor-pointer`}>
+      className={`${width} h-7 bg-zinc-50 dark:bg-[#111] border border-zinc-200 dark:border-[#2a2a2a] text-zinc-900 dark:text-white text-xs rounded-lg px-1.5 focus:outline-none focus:border-[#0071e3] cursor-pointer`}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );
@@ -250,7 +250,7 @@ function Toolbar({ editor }: { editor: Editor }) {
   }, [editor]);
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 px-3 py-2 bg-[#141414] border-b border-[#222] z-20">
+    <div className="flex flex-wrap items-center gap-0.5 px-3 py-2 bg-white dark:bg-[#141414] border-b border-zinc-200 dark:border-[#222] z-20">
       <Btn onClick={() => editor.chain().focus().undo().run()} title="Undo" disabled={!editor.can().undo()}><Undo2 size={14} /></Btn>
       <Btn onClick={() => editor.chain().focus().redo().run()} title="Redo" disabled={!editor.can().redo()}><Redo2 size={14} /></Btn>
       <Divider />
@@ -316,16 +316,16 @@ function HorizontalRuler({ width, marginLeft, marginRight, onMarginChange }: {
   }, [dragging, handleMouseMove]);
   const ticks = Array.from({ length: Math.floor(width / 10) }, (_, i) => i * 10);
   return (
-    <div ref={rulerRef} className="relative select-none" style={{ width, height: 24, backgroundColor: '#1a1a1a', borderBottom: '1px solid #2a2a2a', flexShrink: 0 }}>
-      {ticks.map(x => (<div key={x} style={{ position: 'absolute', left: x, top: x % 50 === 0 ? 10 : x % 20 === 0 ? 14 : 17, width: 1, height: x % 50 === 0 ? 14 : x % 20 === 0 ? 10 : 7, backgroundColor: '#444' }} />))}
-      {ticks.filter(x => x % 100 === 0 && x > 0).map(x => (<span key={x} style={{ position: 'absolute', left: x + 2, top: 2, fontSize: 8, color: '#666', fontFamily: 'monospace' }}>{Math.round(x * 0.265)}</span>))}
-      <div style={{ position: 'absolute', left: 0, top: 0, width: marginLeft, height: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
-      <div style={{ position: 'absolute', right: 0, top: 0, width: marginRight, height: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
+    <div ref={rulerRef} className="relative select-none bg-zinc-100 dark:bg-[#1a1a1a] border-b border-zinc-200 dark:border-[#2a2a2a] shrink-0" style={{ width, height: 24 }}>
+      {ticks.map(x => (<div key={x} className="bg-zinc-300 dark:bg-[#444]" style={{ position: 'absolute', left: x, top: x % 50 === 0 ? 10 : x % 20 === 0 ? 14 : 17, width: 1, height: x % 50 === 0 ? 14 : x % 20 === 0 ? 10 : 7 }} />))}
+      {ticks.filter(x => x % 100 === 0 && x > 0).map(x => (<span key={x} className="text-zinc-500 dark:text-[#666]" style={{ position: 'absolute', left: x + 2, top: 2, fontSize: 8, fontFamily: 'monospace' }}>{Math.round(x * 0.265)}</span>))}
+      <div style={{ position: 'absolute', left: 0, top: 0, width: marginLeft, height: '100%', backgroundColor: 'rgba(59,130,246,0.12)' }} />
+      <div style={{ position: 'absolute', right: 0, top: 0, width: marginRight, height: '100%', backgroundColor: 'rgba(59,130,246,0.12)' }} />
       <div onMouseDown={() => setDragging('left')} style={{ position: 'absolute', left: marginLeft - 4, top: 0, width: 8, height: '100%', cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-        <div style={{ width: 2, height: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
+        <div style={{ width: 2, height: 16, backgroundColor: '#0071e3', borderRadius: 1 }} />
       </div>
       <div onMouseDown={() => setDragging('right')} style={{ position: 'absolute', right: marginRight - 4, top: 0, width: 8, height: '100%', cursor: 'col-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-        <div style={{ width: 2, height: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
+        <div style={{ width: 2, height: 16, backgroundColor: '#0071e3', borderRadius: 1 }} />
       </div>
     </div>
   );
@@ -351,16 +351,16 @@ function VerticalRuler({ height, marginTop, marginBottom, onMarginChange }: {
   }, [dragging, handleMouseMove]);
   const ticks = Array.from({ length: Math.floor(height / 10) }, (_, i) => i * 10);
   return (
-    <div ref={rulerRef} className="relative select-none" style={{ width: 24, height, backgroundColor: '#1a1a1a', borderRight: '1px solid #2a2a2a', flexShrink: 0 }}>
-      {ticks.map(y => (<div key={y} style={{ position: 'absolute', top: y, left: y % 50 === 0 ? 10 : y % 20 === 0 ? 14 : 17, height: 1, width: y % 50 === 0 ? 14 : y % 20 === 0 ? 10 : 7, backgroundColor: '#444' }} />))}
-      {ticks.filter(y => y % 100 === 0 && y > 0).map(y => (<span key={y} style={{ position: 'absolute', top: y + 2, left: 2, fontSize: 8, color: '#666', fontFamily: 'monospace', transform: 'rotate(-90deg)', transformOrigin: 'left top', width: 20 }}>{Math.round(y * 0.265)}</span>))}
-      <div style={{ position: 'absolute', left: 0, top: 0, height: marginTop, width: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
-      <div style={{ position: 'absolute', left: 0, bottom: 0, height: marginBottom, width: '100%', backgroundColor: 'rgba(59,130,246,0.08)' }} />
+    <div ref={rulerRef} className="relative select-none bg-zinc-100 dark:bg-[#1a1a1a] border-r border-zinc-200 dark:border-[#2a2a2a] shrink-0" style={{ width: 24, height }}>
+      {ticks.map(y => (<div key={y} className="bg-zinc-300 dark:bg-[#444]" style={{ position: 'absolute', top: y, left: y % 50 === 0 ? 10 : y % 20 === 0 ? 14 : 17, height: 1, width: y % 50 === 0 ? 14 : y % 20 === 0 ? 10 : 7 }} />))}
+      {ticks.filter(y => y % 100 === 0 && y > 0).map(y => (<span key={y} className="text-zinc-500 dark:text-[#666]" style={{ position: 'absolute', top: y + 2, left: 2, fontSize: 8, fontFamily: 'monospace', transform: 'rotate(-90deg)', transformOrigin: 'left top', width: 20 }}>{Math.round(y * 0.265)}</span>))}
+      <div style={{ position: 'absolute', left: 0, top: 0, height: marginTop, width: '100%', backgroundColor: 'rgba(59,130,246,0.12)' }} />
+      <div style={{ position: 'absolute', left: 0, bottom: 0, height: marginBottom, width: '100%', backgroundColor: 'rgba(59,130,246,0.12)' }} />
       <div onMouseDown={() => setDragging('top')} style={{ position: 'absolute', top: marginTop - 4, left: 0, height: 8, width: '100%', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-        <div style={{ height: 2, width: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
+        <div style={{ height: 2, width: 16, backgroundColor: '#0071e3', borderRadius: 1 }} />
       </div>
       <div onMouseDown={() => setDragging('bottom')} style={{ position: 'absolute', bottom: marginBottom - 4, left: 0, height: 8, width: '100%', cursor: 'row-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
-        <div style={{ height: 2, width: 16, backgroundColor: '#3b82f6', borderRadius: 1 }} />
+        <div style={{ height: 2, width: 16, backgroundColor: '#0071e3', borderRadius: 1 }} />
       </div>
     </div>
   );
@@ -608,19 +608,19 @@ function AIPanel({ resumeId, keywordGaps, onKeywordInsert, onJDOptimize }: {
     <div className="p-4 space-y-4">
       <div>
         <div className="flex items-center justify-between mb-2.5">
-          <p className="text-gray-400 text-xs font-medium">ATS Keywords</p>
+          <p className="text-zinc-500 dark:text-gray-400 text-xs font-semibold">ATS Keywords</p>
           <button onClick={handleFetchKeywords} disabled={fetchingKW}
-            className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 flex items-center gap-1">
+            className="text-xs text-[#0071e3] hover:underline disabled:opacity-50 flex items-center gap-1 cursor-pointer">
             {fetchingKW ? <Loader2 size={11} className="animate-spin" /> : <Zap size={11} />} Refresh
           </button>
         </div>
         {liveKeywords.length === 0 ? (
-          <p className="text-gray-600 text-xs">No gaps found.</p>
+          <p className="text-zinc-400 dark:text-gray-500 text-xs">No gaps found.</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {liveKeywords.map((kw, i) => (
               <button key={i} onClick={() => onKeywordInsert(kw)}
-                className="bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs px-2.5 py-1 rounded-full hover:bg-blue-500/25 transition-colors">
+                className="bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] dark:text-blue-300 text-xs px-2.5 py-1 rounded-full hover:bg-[#0071e3]/20 transition-colors cursor-pointer">
                 + {kw}
               </button>
             ))}
@@ -628,19 +628,19 @@ function AIPanel({ resumeId, keywordGaps, onKeywordInsert, onJDOptimize }: {
         )}
       </div>
 
-      <div className="border-t border-[#222] pt-4">
+      <div className="border-t border-zinc-200 dark:border-[#222] pt-4">
         <button onClick={() => setShowJD(v => !v)}
-          className="flex items-center justify-between w-full text-gray-400 text-xs font-medium hover:text-white transition-colors mb-2">
-          <span className="flex items-center gap-1.5"><Zap size={12} />Optimise for JD</span>
+          className="flex items-center justify-between w-full text-zinc-600 dark:text-gray-400 text-xs font-medium hover:text-zinc-900 dark:hover:text-white transition-colors mb-2 cursor-pointer">
+          <span className="flex items-center gap-1.5"><Zap size={12} className="text-[#0071e3]" />Optimise for JD</span>
           <ChevronDown size={12} className={showJD ? 'rotate-180' : ''} />
         </button>
         {showJD && (
           <div className="space-y-2">
             <textarea value={jd} onChange={e => setJd(e.target.value)} rows={5}
               placeholder="Paste job description…"
-              className="w-full bg-[#111] border border-[#222] rounded-lg px-3 py-2 text-white text-xs placeholder-gray-600 focus:outline-none focus:border-white/40 resize-none" />
+              className="w-full bg-zinc-50 dark:bg-[#111] border border-zinc-200 dark:border-[#222] rounded-xl px-3 py-2 text-zinc-900 dark:text-white text-xs placeholder:text-zinc-400 focus:outline-none focus:border-[#0071e3] resize-none" />
             <button onClick={handleJDOptimize} disabled={!jd.trim() || loadingJD}
-              className="w-full bg-white text-black text-xs py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5">
+              className="w-full bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-black text-xs py-2 rounded-xl font-semibold dark:hover:bg-gray-100 transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5 cursor-pointer shadow-xs">
               {loadingJD ? <><Loader2 size={12} className="animate-spin" />Optimising…</> : <><Sparkles size={12} />Optimise Resume</>}
             </button>
           </div>
@@ -661,21 +661,21 @@ function SuggestionsPanel({ resumeId, suggestions, loading, onFetch, onAccept, o
   const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
   const sorted = [...suggestions].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
   const typeColors: Record<string, string> = {
-    strengthen: 'text-blue-300 bg-blue-500/10 border-blue-500/20',
-    quantify: 'text-green-300 bg-green-500/10 border-green-500/20',
-    keyword: 'text-purple-300 bg-purple-500/10 border-purple-500/20',
-    grammar: 'text-yellow-300 bg-yellow-500/10 border-yellow-500/20',
-    impact: 'text-orange-300 bg-orange-500/10 border-orange-500/20',
+    strengthen: 'text-blue-500 dark:text-blue-300 bg-blue-500/10 border-blue-500/20',
+    quantify: 'text-emerald-500 dark:text-green-300 bg-emerald-500/10 border-emerald-500/20',
+    keyword: 'text-purple-500 dark:text-purple-300 bg-purple-500/10 border-purple-500/20',
+    grammar: 'text-amber-500 dark:text-yellow-300 bg-amber-500/10 border-amber-500/20',
+    impact: 'text-orange-500 dark:text-orange-300 bg-orange-500/10 border-orange-500/20',
   };
 
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-gray-400 text-xs font-medium">
+        <p className="text-zinc-500 dark:text-gray-400 text-xs font-semibold">
           {suggestions.length > 0 ? `${suggestions.length} suggestion${suggestions.length !== 1 ? 's' : ''}` : 'AI Suggestions'}
         </p>
         <button onClick={onFetch} disabled={loading}
-          className="text-xs text-blue-400 hover:text-blue-300 disabled:opacity-50 flex items-center gap-1">
+          className="text-xs text-[#0071e3] hover:underline disabled:opacity-50 flex items-center gap-1 cursor-pointer">
           {loading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
           {loading ? 'Analysing…' : 'Analyse'}
         </button>
@@ -683,42 +683,42 @@ function SuggestionsPanel({ resumeId, suggestions, loading, onFetch, onAccept, o
 
       {suggestions.length === 0 && !loading && (
         <div className="text-center py-6">
-          <Lightbulb size={24} className="text-gray-700 mx-auto mb-2" />
-          <p className="text-gray-600 text-xs">Click "Analyse" to get AI suggestions for improving your resume.</p>
+          <Lightbulb size={24} className="text-zinc-300 dark:text-gray-700 mx-auto mb-2" />
+          <p className="text-zinc-400 dark:text-gray-500 text-xs">Click "Analyse" to get AI suggestions for improving your resume.</p>
         </div>
       )}
 
       {loading && (
         <div className="flex flex-col items-center py-8 gap-3">
-          <Loader2 size={20} className="text-blue-400 animate-spin" />
-          <p className="text-gray-500 text-xs">Scanning resume…</p>
+          <Loader2 size={20} className="text-[#0071e3] animate-spin" />
+          <p className="text-zinc-500 dark:text-gray-400 text-xs">Scanning resume…</p>
         </div>
       )}
 
       <div className="space-y-3">
         {sorted.map(s => (
-          <div key={s.id} className="bg-[#111] border border-[#222] rounded-xl overflow-hidden">
-            <div className="px-3 py-2.5 flex items-center justify-between border-b border-[#1e1e1e]">
+          <div key={s.id} className="bg-white dark:bg-[#111] border border-zinc-200 dark:border-[#222] rounded-xl overflow-hidden shadow-xs">
+            <div className="px-3 py-2.5 flex items-center justify-between border-b border-zinc-100 dark:border-[#1e1e1e]">
               <div className="flex items-center gap-2">
                 <span className={`text-xs px-2 py-0.5 rounded-full border capitalize ${typeColors[s.type]}`}>{s.type}</span>
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.priority === 'high' ? 'bg-red-400' : s.priority === 'medium' ? 'bg-yellow-400' : 'bg-green-400'}`} />
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.priority === 'high' ? 'bg-red-500' : s.priority === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
               </div>
-              <button onClick={() => onDismiss(s.id)} className="text-gray-700 hover:text-gray-400 transition-colors"><X size={12} /></button>
+              <button onClick={() => onDismiss(s.id)} className="text-zinc-400 hover:text-zinc-700 dark:hover:text-gray-300 transition-colors cursor-pointer"><X size={12} /></button>
             </div>
 
             <div className="p-3 space-y-2">
-              <p className="text-gray-400 text-xs line-through opacity-60 line-clamp-1">{s.originalSnippet}</p>
-              <p className="text-white text-xs leading-relaxed">{s.replacement}</p>
-              <p className="text-gray-500 text-xs">{s.suggestion}</p>
+              <p className="text-zinc-400 dark:text-gray-400 text-xs line-through opacity-60 line-clamp-1">{s.originalSnippet}</p>
+              <p className="text-zinc-900 dark:text-white text-xs leading-relaxed font-medium">{s.replacement}</p>
+              <p className="text-zinc-500 dark:text-gray-400 text-xs">{s.suggestion}</p>
             </div>
 
             <div className="flex gap-2 px-3 pb-3">
               <button onClick={() => onAccept(s.id)}
-                className="flex-1 bg-blue-500/15 border border-blue-500/25 text-blue-300 text-xs py-1.5 rounded-lg hover:bg-blue-500/25 transition-colors font-medium flex items-center justify-center gap-1">
+                className="flex-1 bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] text-xs py-1.5 rounded-lg hover:bg-[#0071e3]/20 transition-colors font-semibold flex items-center justify-center gap-1 cursor-pointer">
                 <CheckCircle size={11} />Apply
               </button>
               <button onClick={() => onDismiss(s.id)}
-                className="px-3 bg-[#0a0a0a] border border-[#222] text-gray-500 hover:text-white text-xs py-1.5 rounded-lg transition-colors">
+                className="px-3 bg-zinc-100 dark:bg-[#0a0a0a] border border-zinc-200 dark:border-[#222] text-zinc-500 hover:text-zinc-800 dark:hover:text-white text-xs py-1.5 rounded-lg transition-colors cursor-pointer">
                 Skip
               </button>
             </div>
@@ -732,18 +732,18 @@ function SuggestionsPanel({ resumeId, suggestions, loading, onFetch, onAccept, o
 function VersionsPanel({ versions, onRestore }: { versions: ResumeVersion[]; onRestore: (v: ResumeVersion) => void }) {
   return (
     <div className="p-4 space-y-2">
-      <p className="text-gray-600 text-xs mb-3">{versions.length} version{versions.length !== 1 ? 's' : ''} saved</p>
+      <p className="text-zinc-400 dark:text-gray-500 text-xs mb-3 font-semibold">{versions.length} version{versions.length !== 1 ? 's' : ''} saved</p>
       {versions.length === 0 ? (
         <div className="text-center py-6">
-          <History size={24} className="text-gray-700 mx-auto mb-2" />
-          <p className="text-gray-600 text-xs">No versions yet. Edit and save to create versions.</p>
+          <History size={24} className="text-zinc-300 dark:text-gray-700 mx-auto mb-2" />
+          <p className="text-zinc-400 dark:text-gray-500 text-xs">No versions yet. Edit and save to create versions.</p>
         </div>
       ) : [...versions].reverse().map(v => (
-        <div key={v.id} className="bg-[#111] border border-[#222] rounded-xl p-3">
-          <p className="text-white text-xs font-medium mb-0.5">{v.label}</p>
-          <p className="text-gray-600 text-xs">{new Date(v.savedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+        <div key={v.id} className="bg-white dark:bg-[#111] border border-zinc-200 dark:border-[#222] rounded-xl p-3 shadow-xs">
+          <p className="text-zinc-900 dark:text-white text-xs font-semibold mb-0.5">{v.label}</p>
+          <p className="text-zinc-400 dark:text-gray-500 text-xs">{new Date(v.savedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
           <button onClick={() => onRestore(v)}
-            className="mt-2 flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            className="mt-2 flex items-center gap-1 text-xs text-[#0071e3] hover:underline transition-colors cursor-pointer">
             <RotateCcw size={11} />Restore
           </button>
         </div>
@@ -808,6 +808,7 @@ export default function ResumeEditorPage() {
   const [zoom, setZoom] = useState(100);
   const [margins, setMargins] = useState({ top: 48, right: 48, bottom: 48, left: 48 });
   const [activePanel, setActivePanel] = useState<LeftPanel>(null);
+  const [isUploadedPdf, setIsUploadedPdf] = useState(false);
   const [keywordGaps, setKeywordGaps] = useState<string[]>([]);
   const [versions, setVersions] = useState<ResumeVersion[]>([]);
 
@@ -1072,6 +1073,13 @@ export default function ResumeEditorPage() {
     try {
       let res = await getResume(id);
       let data = res.data.data;
+
+      if (data.source === 'uploaded') {
+        setIsUploadedPdf(true);
+        setResumeName(data.name);
+        setLoading(false);
+        return;
+      }
 
       if (!data.content?.htmlContent) {
         setConverting(true);
@@ -1355,28 +1363,78 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
     .animate-in { animation: slideDown 0.15s ease; }
   `;
 
+  if (isUploadedPdf) {
+    return (
+      <div className="flex flex-col h-screen bg-zinc-100 dark:bg-[#0a0a0a] overflow-hidden text-zinc-900 dark:text-zinc-100 font-sans">
+        <header className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#111] border-b border-zinc-200 dark:border-[#1e1e1e] z-40">
+          <button onClick={() => router.push('/dashboard/resumes')}
+            className="flex items-center gap-1.5 text-zinc-600 hover:text-zinc-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm font-medium cursor-pointer">
+            <ChevronLeft size={16} />Back to My Resumes
+          </button>
+          <div className="w-px h-4 bg-zinc-200 dark:bg-[#2a2a2a]" />
+          <span className="text-sm font-bold truncate text-zinc-900 dark:text-white">{resumeName || 'Uploaded PDF Resume'}</span>
+        </header>
+
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto space-y-5">
+          <div className="w-16 h-16 rounded-3xl bg-blue-500/10 border border-blue-500/20 text-[#0071e3] flex items-center justify-center shadow-xs">
+            <FileText size={32} />
+          </div>
+
+          <div className="space-y-1.5">
+            <span className="px-3 py-1 text-xs font-bold rounded-full bg-zinc-200/80 dark:bg-white/10 text-zinc-700 dark:text-zinc-300">
+              Original PDF Document · Read-Only
+            </span>
+            <h2 className="text-2xl font-black tracking-tight text-zinc-900 dark:text-white pt-2">
+              Uploaded PDF Cannot Be Edited
+            </h2>
+            <p className="text-xs text-zinc-500 dark:text-[#86868b] leading-relaxed">
+              This document was uploaded as a raw PDF file. To preserve original formatting, fonts, and layout fidelity, uploaded PDFs are saved directly and cannot be modified in the rich-text visual editor.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 w-full pt-2">
+            <button
+              onClick={() => window.open(`http://localhost:8000/api/jobseeker/resumes/${id}/download-uploaded`, '_blank')}
+              className="w-full sm:flex-1 bg-[#0071e3] hover:bg-[#0062c4] text-white font-bold py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+            >
+              <Eye size={15} />
+              <span>View Original PDF</span>
+            </button>
+
+            <button
+              onClick={() => router.push('/dashboard/resumes')}
+              className="w-full sm:flex-1 bg-white dark:bg-[#1c1c1e] hover:bg-zinc-100 dark:hover:bg-[#2c2c2e] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white font-bold py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <span>Back to Resume Hub</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-[#0a0a0a] overflow-hidden" style={{ fontFamily: '"Inter", sans-serif' }}>
+    <div className="flex flex-col h-screen bg-zinc-100 dark:bg-[#0a0a0a] overflow-hidden text-zinc-900 dark:text-zinc-100 font-sans">
 
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 py-2.5 bg-[#111] border-b border-[#1e1e1e] z-40 flex-shrink-0">
+      <header className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-[#111] border-b border-zinc-200 dark:border-[#1e1e1e] z-40 flex-shrink-0">
         <button onClick={() => router.push('/dashboard/resumes')}
-          className="flex items-center gap-1.5 text-gray-400 hover:text-white transition-colors text-sm flex-shrink-0">
+          className="flex items-center gap-1.5 text-zinc-600 hover:text-zinc-900 dark:text-gray-400 dark:hover:text-white transition-colors text-sm flex-shrink-0 font-medium cursor-pointer">
           <ChevronLeft size={16} />Back
         </button>
-        <div className="w-px h-4 bg-[#2a2a2a]" />
+        <div className="w-px h-4 bg-zinc-200 dark:bg-[#2a2a2a]" />
         <input value={resumeName} onChange={e => setResumeName(e.target.value)}
-          className="flex-1 bg-transparent text-white text-sm focus:outline-none placeholder-gray-600 min-w-0"
+          className="flex-1 bg-transparent text-zinc-900 dark:text-white text-sm font-semibold focus:outline-none placeholder:text-zinc-400 dark:placeholder-gray-600 min-w-0"
           placeholder="Untitled Resume" />
 
         {/* Analyse button */}
         <div className="flex items-center gap-1">
           <button onClick={fetchInlineSuggestions} disabled={loadingSuggestions || loading}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-blue-500/15 border border-blue-500/25 text-blue-300 rounded-lg hover:bg-blue-500/25 transition-colors disabled:opacity-40 flex-shrink-0">
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] dark:text-blue-300 rounded-xl hover:bg-[#0071e3]/20 transition-colors disabled:opacity-40 flex-shrink-0 font-semibold cursor-pointer">
             {loadingSuggestions ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             {loadingSuggestions ? 'Analysing…' : 'Analyse'}
             {inlineSuggestions.length > 0 && (
-              <span className="bg-blue-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-semibold">
+              <span className="bg-[#0071e3] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">
                 {inlineSuggestions.length}
               </span>
             )}
@@ -1384,29 +1442,29 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
           
           {inlineSuggestions.length > 0 && (
             <button onClick={clearInlineSuggestions} title="Clear AI Suggestions"
-              className="p-1.5 text-gray-400 hover:text-red-400 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg transition-colors">
+              className="p-1.5 text-zinc-400 hover:text-rose-500 bg-zinc-100 dark:bg-[#1a1a1a] border border-zinc-200 dark:border-[#2a2a2a] rounded-xl transition-colors cursor-pointer">
               <X size={14} />
             </button>
           )}
         </div>
 
         {/* Zoom */}
-        <div className="flex items-center gap-1 bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-1 py-1">
-          <button onClick={() => setZoom(z => Math.max(50, z - 25))} className="text-gray-400 hover:text-white p-1 transition-colors"><ZoomOut size={13} /></button>
+        <div className="flex items-center gap-1 bg-zinc-100 dark:bg-[#1a1a1a] border border-zinc-200 dark:border-[#2a2a2a] rounded-xl px-1.5 py-1">
+          <button onClick={() => setZoom(z => Math.max(50, z - 25))} className="text-zinc-600 hover:text-zinc-900 dark:text-gray-400 dark:hover:text-white p-1 transition-colors cursor-pointer"><ZoomOut size={13} /></button>
           <select value={zoom} onChange={e => setZoom(Number(e.target.value))}
-            className="bg-transparent text-white text-xs w-14 text-center focus:outline-none cursor-pointer">
-            {[50, 75, 100, 125, 150].map(z => <option key={z} value={z}>{z}%</option>)}
+            className="bg-transparent text-zinc-900 dark:text-white text-xs w-14 text-center focus:outline-none cursor-pointer font-medium">
+            {[50, 75, 100, 125, 150].map(z => <option key={z} value={z} className="bg-white dark:bg-[#1c1c1e] text-zinc-900 dark:text-white">{z}%</option>)}
           </select>
-          <button onClick={() => setZoom(z => Math.min(200, z + 25))} className="text-gray-400 hover:text-white p-1 transition-colors"><ZoomIn size={13} /></button>
+          <button onClick={() => setZoom(z => Math.min(200, z + 25))} className="text-zinc-600 hover:text-zinc-900 dark:text-gray-400 dark:hover:text-white p-1 transition-colors cursor-pointer"><ZoomIn size={13} /></button>
         </div>
 
         <div className="flex items-center gap-2">
           <button onClick={() => handleSave('Manual save')} disabled={saveState === 'saving'}
-            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all flex-shrink-0 ${saveClass}`}>
+            className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl border transition-all flex-shrink-0 font-medium cursor-pointer shadow-xs ${saveClass}`}>
             <SaveIcon size={12} className={saveState === 'saving' ? 'animate-spin' : ''} />{saveLabel}
           </button>
           <button onClick={handleExport}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-white text-black rounded-lg hover:bg-gray-100 transition-colors font-semibold flex-shrink-0">
+            className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-black rounded-xl dark:hover:bg-gray-100 transition-colors font-bold flex-shrink-0 cursor-pointer shadow-xs">
             <Download size={12} />Export
           </button>
         </div>
@@ -1419,14 +1477,18 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
       <div className="flex flex-1 overflow-hidden">
 
         {/* Left tabs */}
-        <div className="flex flex-col border-r border-[#1e1e1e] bg-[#0d0d0d] flex-shrink-0">
+        <div className="flex flex-col border-r border-zinc-200 dark:border-[#1e1e1e] bg-white dark:bg-[#0d0d0d] flex-shrink-0">
           {PANEL_TABS.map(({ key, icon: Icon, label, badge }) => (
             <button key={String(key)} title={label ?? ''} onClick={() => setActivePanel(p => p === key ? null : key)}
-              className={`relative p-3 flex flex-col items-center gap-1 transition-colors text-xs ${activePanel === key ? 'text-white bg-white/8' : 'text-gray-600 hover:text-white hover:bg-white/5'}`}>
+              className={`relative p-3 flex flex-col items-center gap-1 transition-colors text-xs cursor-pointer ${
+                activePanel === key
+                  ? 'text-zinc-900 dark:text-white bg-zinc-100 dark:bg-white/8 font-bold'
+                  : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50 dark:text-gray-600 dark:hover:text-white dark:hover:bg-white/5'
+              }`}>
               <Icon size={15} />
               <span className="text-[9px]">{label}</span>
               {badge && badge > 0 && (
-                <span className="absolute top-1.5 right-1.5 bg-blue-500 text-white text-xs rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold text-[8px]">{badge}</span>
+                <span className="absolute top-1.5 right-1.5 bg-[#0071e3] text-white text-xs rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold text-[8px]">{badge}</span>
               )}
             </button>
           ))}
@@ -1434,12 +1496,12 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
 
         {/* Left expandable panel */}
         {activePanel && (
-          <div className="w-60 border-r border-[#1e1e1e] bg-[#0d0d0d] flex-shrink-0 flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e1e] flex-shrink-0">
-              <span className="text-white text-xs font-semibold">
+          <div className="w-64 border-r border-zinc-200 dark:border-[#1e1e1e] bg-zinc-50/80 dark:bg-[#0d0d0d] flex-shrink-0 flex flex-col shadow-xs">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-[#1e1e1e] flex-shrink-0 bg-white dark:bg-[#0d0d0d]">
+              <span className="text-zinc-900 dark:text-white text-xs font-bold">
                 {{ ai: 'AI Tools', suggestions: 'Suggestions', versions: 'History' }[activePanel]}
               </span>
-              <button onClick={() => setActivePanel(null)} className="text-gray-600 hover:text-white transition-colors"><X size={13} /></button>
+              <button onClick={() => setActivePanel(null)} className="text-zinc-400 hover:text-zinc-700 dark:hover:text-white transition-colors cursor-pointer"><X size={13} /></button>
             </div>
             <div className="flex-1 overflow-y-auto">
               {activePanel === 'ai' && (
@@ -1461,7 +1523,7 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
         )}
 
         {/* Canvas */}
-        <div ref={canvasRef} className="flex-1 overflow-auto bg-[#161616]">
+        <div ref={canvasRef} className="flex-1 overflow-auto bg-zinc-200/70 dark:bg-[#161616]">
           {loading || converting ? (
             <div className="flex flex-col items-center justify-center h-full gap-4">
               <div className="relative">
@@ -1473,10 +1535,10 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
                   ))}
                 </div>
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 size={28} className="text-white/60 animate-spin" />
+                  <Loader2 size={28} className="text-[#0071e3] animate-spin" />
                 </div>
               </div>
-              <p className="text-gray-500 text-sm">{converting ? 'Converting to editable format…' : 'Loading resume…'}</p>
+              <p className="text-zinc-500 dark:text-gray-400 text-xs font-medium">{converting ? 'Converting to editable format…' : 'Loading resume…'}</p>
             </div>
           ) : (
             <div className="flex py-8" style={{ minHeight: '100%', justifyContent: 'center' }}>
@@ -1515,7 +1577,7 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
                           width: PAGE_W,
                           height: PAGE_H,
                           backgroundColor: '#ffffff',
-                          boxShadow: '0 8px 60px rgba(0,0,0,0.15)',
+                          boxShadow: '0 4px 30px rgba(0,0,0,0.1)',
                           boxSizing: 'border-box'
                         }}>
                           <div style={{ position: 'absolute', top: margins.top, left: 0, right: 0, height: 1, background: 'linear-gradient(to right, transparent, rgba(59,130,246,0.25) 10%, rgba(59,130,246,0.25) 90%, transparent)' }} />

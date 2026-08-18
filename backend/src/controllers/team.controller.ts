@@ -36,7 +36,7 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: 'Forbidden: Admin access verification failed.' });
     }
 
-    const { email, roleType, permissions } = req.body;
+    const { email, roleType, permissions, tags } = req.body;
     if (!email || !roleType) {
       return res.status(400).json({ success: false, message: 'Email and roleType parameters are mandatory.' });
     }
@@ -75,12 +75,15 @@ export const inviteTeamMember = async (req: Request, res: Response) => {
       }
     }
 
+    const cleanTags = Array.isArray(tags) ? tags.map((t: any) => String(t).trim()).filter(Boolean) : [];
+
     const inviteToken = jwt.sign(
       { 
         email: normalizedEmail, 
         companyId, 
         targetRoles: bitwiseRoleValue, 
         targetPermissions: resolvedPermissions,
+        targetTags: cleanTags,
         invitedBy: currentUserId 
       },
       JWT_SECRET,
@@ -144,13 +147,16 @@ export const listTeamMembers = async (req: Request, res: Response) => {
       email: m.user.jobSeekerProfile?.email || m.user.mobileNumber,
       rolesMask: m.roles,
       permissions: m.permissions,
+      tags: m.tags || [],
       globalRolesMask: m.user.globalRoles,
       status: m.status,
       joinedAt: m.createdAt,
       avatar: m.user.jobSeekerProfile?.profilePhotoUrl || null
     }));
 
-    return res.status(200).json({ success: true, team: formatted });
+    const allTags = Array.from(new Set(members.flatMap(m => m.tags || [])));
+
+    return res.status(200).json({ success: true, team: formatted, tags: allTags });
   } catch (error) {
     console.error('List team compilation fault:', error);
     return res.status(500).json({ success: false, message: 'Failed to extract team members layout.' });
@@ -158,14 +164,14 @@ export const listTeamMembers = async (req: Request, res: Response) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// 3. Update team member roles
+// 3. Update team member roles & tags
 // ─────────────────────────────────────────────────────────────
 export const updateMemberRole = async (req: Request, res: Response) => {
   try {
     const companyId = req.company?.companyId;
     const currentUserId = req.user?.userId;
     const { memberId } = req.params;
-    const { newRolesMask, permissions } = req.body;
+    const { newRolesMask, permissions, tags } = req.body;
 
     if (!companyId || !currentUserId) {
       return res.status(401).json({ success: false, message: 'Unauthorized structural setup context.' });
@@ -183,12 +189,17 @@ export const updateMemberRole = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: 'Target workspace reference member could not be tracked.' });
     }
 
+    const cleanTags = tags !== undefined
+      ? (Array.isArray(tags) ? tags.map((t: any) => String(t).trim()).filter(Boolean) : [])
+      : undefined;
+
     await prisma.$transaction(async (tx) => {
       await tx.teamMember.update({
         where: { id: memberId },
         data: { 
           ...(newRolesMask !== undefined ? { roles: newRolesMask } : {}),
-          ...(permissions !== undefined ? { permissions } : {})
+          ...(permissions !== undefined ? { permissions } : {}),
+          ...(cleanTags !== undefined ? { tags: cleanTags } : {})
         }
       });
 
@@ -204,7 +215,7 @@ export const updateMemberRole = async (req: Request, res: Response) => {
       }
     });
 
-    return res.status(200).json({ success: true, message: 'Roles synced successfully.' });
+    return res.status(200).json({ success: true, message: 'Roles and tags synced successfully.' });
   } catch (error) {
     console.error('Update role fault handling processing trace:', error);
     return res.status(500).json({ success: false, message: 'Failed to assign target role modifications.' });
@@ -330,7 +341,7 @@ export const setTeamMemberPassword = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Invalid or expired invitation validation token context.' });
     }
 
-    const { email, companyId, targetRoles, targetPermissions } = decoded;
+    const { email, companyId, targetRoles, targetPermissions, targetTags } = decoded;
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
@@ -361,13 +372,15 @@ export const setTeamMemberPassword = async (req: Request, res: Response) => {
           roles: targetRoles, 
           status: 'active', 
           password: hashedPassword,
-          ...(targetPermissions ? { permissions: targetPermissions } : {})
+          ...(targetPermissions ? { permissions: targetPermissions } : {}),
+          ...(targetTags && Array.isArray(targetTags) ? { tags: targetTags } : {})
         },
         create: { 
           userId: user.id, 
           companyId, 
           roles: targetRoles, 
           permissions: targetPermissions || null,
+          tags: targetTags && Array.isArray(targetTags) ? targetTags : [],
           status: 'active', 
           password: hashedPassword 
         }

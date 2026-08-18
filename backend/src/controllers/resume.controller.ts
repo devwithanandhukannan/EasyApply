@@ -374,12 +374,19 @@ export const downloadUploadedPDF = async (req: Request, res: Response) => {
 
     const safeDocumentName = resume.name.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume';
     const clientSideFilename = `${safeDocumentName}.pdf`;
+    const isView = req.query.view === 'true' || req.path.includes('view');
 
     // ─── CASE 1: PHYSICAL STORAGE ATTACHMENT (UPLOADED FILE) ───────────
     if (resume.filePath) {
       const absoluteDiskPath = path.resolve(resume.filePath);
 
       if (fs.existsSync(absoluteDiskPath)) {
+        if (isView) {
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${clientSideFilename}"`);
+          return fs.createReadStream(absoluteDiskPath).pipe(res);
+        }
+
         return res.download(absoluteDiskPath, clientSideFilename, (err) => {
           if (err && !res.headersSent) {
             return res.status(500).json({ success: false, message: 'File transfer pipe interrupted.' });
@@ -417,7 +424,7 @@ export const downloadUploadedPDF = async (req: Request, res: Response) => {
     };
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${clientSideFilename}"`);
+    res.setHeader('Content-Disposition', `${isView ? 'inline' : 'attachment'}; filename="${clientSideFilename}"`);
 
     htmlPdf.generatePdf({ content: htmlContent }, pdfOptions)
       .then((pdfBuffer: Buffer) => {

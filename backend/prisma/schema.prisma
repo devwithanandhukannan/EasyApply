@@ -390,6 +390,7 @@ model TeamMember {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   roles       Int      @default(8)
   permissions Json?
+  tags        String[] @default([])
   status      String   @default("active")
   password    String?
   createdAt   DateTime @default(now())

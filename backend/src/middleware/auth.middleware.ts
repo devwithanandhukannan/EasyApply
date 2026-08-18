@@ -11,6 +11,9 @@ const extractToken = (req: Request): string | undefined => {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     return authHeader.substring(7);
   }
+  if (req.query?.token && typeof req.query.token === 'string') {
+    return req.query.token;
+  }
   return req.cookies?.accessToken;
 };
 
