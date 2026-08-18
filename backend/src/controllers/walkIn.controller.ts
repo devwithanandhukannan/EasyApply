@@ -373,7 +373,7 @@ export const callNextCandidate = async (req: Request, res: Response) => {
     if (!companyId) return res.status(403).json({ success: false, message: 'Company context required' });
 
     const { code } = req.params;
-    const { entryId } = req.body || {};
+    const { entryId, previousStatus } = req.body || {};
 
     const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
     if (!room) return res.status(404).json({ success: false, message: 'Room not found' });
@@ -398,6 +398,19 @@ export const callNextCandidate = async (req: Request, res: Response) => {
 
     if (!targetEntry) return res.status(404).json({ success: false, message: 'No candidates available to call' });
 
+    // Transition any prior active interviewing candidate in this room
+    const prevStatusToSet = previousStatus || 'done';
+    await prisma.walkInQueueEntry.updateMany({
+      where: {
+        roomId: room.id,
+        status: 'interviewing',
+        id: { not: targetEntry.id }
+      },
+      data: {
+        status: prevStatusToSet
+      }
+    });
+
     const livekitToken = await generateLiveKitToken(
       room.livekitRoom,
       `seeker-${targetEntry.jobSeekerProfileId}`,
@@ -412,7 +425,10 @@ export const callNextCandidate = async (req: Request, res: Response) => {
 
     const updated = await prisma.walkInQueueEntry.update({
       where: { id: targetEntry.id },
-      data: { status: 'interviewing', livekitToken }
+      data: { 
+        status: 'interviewing', 
+        livekitToken 
+      }
     });
 
     return res.json({

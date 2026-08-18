@@ -490,8 +490,14 @@ export default function MeetPage() {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     }
+    if (typeof interviewId === 'string' && interviewId.startsWith('walkin-')) {
+      const match = interviewId.match(/^walkin-([A-Za-z0-9]+)/);
+      const code = match ? match[1] : '';
+      router.replace(code ? `/walkin/${code}` : '/dashboard/walkin');
+      return;
+    }
     router.replace('/dashboard/interviews');
-  }, [router]);
+  }, [interviewId, router]);
 
   // Code execution
   const executeCompilePipeline = async () => {
