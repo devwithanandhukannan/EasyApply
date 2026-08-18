@@ -95,7 +95,11 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
         orderBy: { sentAt: 'desc' }
       }),
       prisma.resume.findFirst({
-        where: { jobSeekerProfileId: profileId, isPrimary: true },
+        where: { jobSeekerProfileId: profileId },
+        orderBy: [
+          { isPrimary: 'desc' },
+          { updatedAt: 'desc' }
+        ],
         select: { id: true, name: true, atsScore: true, updatedAt: true }
       }),
       prisma.application.findMany({

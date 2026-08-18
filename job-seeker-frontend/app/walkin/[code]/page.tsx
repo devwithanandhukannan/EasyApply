@@ -394,9 +394,9 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
                 <div>
                   <h3 className="text-base font-bold text-white">
                     {entry.status === 'interviewing'
-                      ? '🎉 You are being called!'
+                      ? 'You Are Being Called'
                       : entry.status === 'accepted' || entry.status === 'done'
-                      ? '🎉 Application Shortlisted!'
+                      ? 'Application Shortlisted'
                       : entry.status === 'rejected' || entry.status === 'skipped'
                       ? 'Application Status Updated'
                       : 'You Have Applied (In Queue)'}

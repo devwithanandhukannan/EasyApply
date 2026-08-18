@@ -171,7 +171,7 @@ export default function DashboardPage() {
                   href="/dashboard/walkin"
                   className="px-5 py-2.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(0,113,227,0.25)] shrink-0 cursor-pointer"
                 >
-                  <span>{walkInQueues[0].status === 'interviewing' ? '🎉 Join Interview Room' : 'View Live Queue'}</span>
+                  <span>{walkInQueues[0].status === 'interviewing' ? 'Join Interview Room' : 'View Live Queue'}</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>

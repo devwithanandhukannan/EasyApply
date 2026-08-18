@@ -73,6 +73,10 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
 
     const atsScore = analysis.scores?.ats ?? null;
 
+    const hasPrimary = await prisma.resume.findFirst({
+      where: { jobSeekerProfileId: profileId, isPrimary: true },
+    });
+
     const resume = await prisma.resume.create({
       data: {
         jobSeekerProfileId: profileId,
@@ -82,7 +86,7 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
         atsScore,
         content: contentData,
         aiSuggestions: aiData,
-        isPrimary: false,
+        isPrimary: !hasPrimary,
       },
     });
 
@@ -302,6 +306,10 @@ export const generateCV = async (req: Request, res: Response) => {
 
     const atsScore = generated.scores?.ats ?? null;
 
+    const hasPrimary = await prisma.resume.findFirst({
+      where: { jobSeekerProfileId: profile.id, isPrimary: true },
+    });
+
     const resume = await prisma.resume.create({
       data: {
         jobSeekerProfileId: profile.id,
@@ -310,7 +318,7 @@ export const generateCV = async (req: Request, res: Response) => {
         atsScore,
         content: contentData,
         aiSuggestions: aiData,
-        isPrimary: false,
+        isPrimary: !hasPrimary,
       },
     });
 
@@ -767,6 +775,10 @@ export const generateRegionalCV = async (req: Request, res: Response) => {
       keywordGaps: [],
     };
 
+    const hasPrimary = await prisma.resume.findFirst({
+      where: { jobSeekerProfileId: profile.id, isPrimary: true },
+    });
+
     const resume = await prisma.resume.create({
       data: {
         jobSeekerProfileId: profile.id,
@@ -775,7 +787,7 @@ export const generateRegionalCV = async (req: Request, res: Response) => {
         atsScore: result.scores?.ats ?? null,
         content: contentData,
         aiSuggestions: aiData,
-        isPrimary: false,
+        isPrimary: !hasPrimary,
       },
     });
 
