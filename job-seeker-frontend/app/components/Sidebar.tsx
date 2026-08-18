@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { 
   FileText, 
   Briefcase, 
-  Calendar, 
+  Calendar,
+  CalendarDays, 
   Menu,
   X,
   User,
@@ -46,6 +47,7 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
     { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' },
     { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
     { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
+    { icon: CalendarDays, label: 'Calendar', href: '/dashboard/calendar' },
     { icon: Calendar, label: 'Interviews', href: '/dashboard/interviews' },
     { icon: Video, label: 'Walk-In Rooms', href: '/dashboard/walkin' },
     { icon: User, label: 'Profile Workspace', href: '/dashboard/profile' },
