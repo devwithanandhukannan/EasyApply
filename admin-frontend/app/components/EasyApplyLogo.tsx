@@ -29,14 +29,14 @@ export default function EasyApplyLogo({
 
   const content = (
     <div className={`flex items-center gap-2.5 select-none ${className}`}>
-      <div className={`${box} bg-gradient-to-tr from-[#6366f1] to-[#8b5cf6] text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0`}>
+      <div className={`${box} bg-gradient-to-tr from-[#0071e3] to-[#2563eb] text-white flex items-center justify-center shadow-md shadow-blue-500/25 shrink-0`}>
         <Rocket className={`${icon} -rotate-12 fill-white/20`} />
       </div>
-      <span className={`${text} text-white tracking-tight font-sans`}>
+      <span className={`${text} text-[#1d1d1f] dark:text-white tracking-tight font-sans`}>
         EasyApply
       </span>
       {badge && (
-        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] dark:bg-[#0071e3]/20 dark:text-[#2997ff] border border-[#0071e3]/20 dark:border-[#0071e3]/30">
           {badge}
         </span>
       )}
@@ -53,4 +53,5 @@ export default function EasyApplyLogo({
 
   return content;
 }
+
 

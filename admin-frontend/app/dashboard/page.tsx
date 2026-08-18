@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import Link from 'next/link';
@@ -17,6 +18,7 @@ import {
   Activity,
   ArrowRight,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 
 interface Stats {
@@ -51,45 +53,56 @@ export default function DashboardPage() {
   };
 
   const statItems = [
-    { title: 'Total Companies', value: stats?.companies ?? 0, icon: Building2, href: '/dashboard/companies', iconColor: 'text-indigo-400', iconBg: 'rgba(99, 102, 241, 0.15)' },
-    { title: 'Registered Job Seekers', value: stats?.seekers ?? 0, icon: Users, href: '/dashboard/seekers', iconColor: 'text-purple-400', iconBg: 'rgba(168, 85, 247, 0.15)' },
-    { title: 'Total Applications', value: stats?.applications ?? 0, icon: FileText, href: '/dashboard/ats', iconColor: 'text-emerald-400', iconBg: 'rgba(16, 185, 129, 0.15)' },
-    { title: 'Active Subscriptions', value: stats?.subscriptions ?? 0, icon: CreditCard, href: '/dashboard/subscriptions', iconColor: 'text-amber-400', iconBg: 'rgba(245, 158, 11, 0.15)' },
-    { title: 'Active Job Postings', value: stats?.activeJobs ?? 0, icon: Briefcase, href: '/dashboard/companies', iconColor: 'text-cyan-400', iconBg: 'rgba(6, 182, 212, 0.15)' },
-    { title: 'Live Walk-in Rooms', value: stats?.openWalkInRooms ?? 0, icon: Video, href: '/dashboard/companies', iconColor: 'text-rose-400', iconBg: 'rgba(244, 63, 94, 0.15)' },
+    { title: 'Total Companies', value: stats?.companies ?? 0, icon: Building2, href: '/dashboard/companies', iconColor: 'text-[#0071e3]', iconBg: 'bg-blue-500/10' },
+    { title: 'Registered Job Seekers', value: stats?.seekers ?? 0, icon: Users, href: '/dashboard/seekers', iconColor: 'text-purple-500', iconBg: 'bg-purple-500/10' },
+    { title: 'Total Applications', value: stats?.applications ?? 0, icon: FileText, href: '/dashboard/ats', iconColor: 'text-emerald-500', iconBg: 'bg-emerald-500/10' },
+    { title: 'Active Subscriptions', value: stats?.subscriptions ?? 0, icon: CreditCard, href: '/dashboard/subscriptions', iconColor: 'text-amber-500', iconBg: 'bg-amber-500/10' },
+    { title: 'Active Job Postings', value: stats?.activeJobs ?? 0, icon: Briefcase, href: '/dashboard/companies', iconColor: 'text-cyan-500', iconBg: 'bg-cyan-500/10' },
+    { title: 'Live Walk-in Rooms', value: stats?.openWalkInRooms ?? 0, icon: Video, href: '/dashboard/companies', iconColor: 'text-rose-500', iconBg: 'bg-rose-500/10' },
   ];
 
   return (
-    <div style={{ width: '100%' }}>
+    <div className="w-full space-y-8">
       <div className="page-header">
-        <h1 className="page-title">Platform Overview</h1>
-        <p className="page-subtitle">Real-time health, monetization & activity metrics across EasyApply</p>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20">
+            System Live
+          </span>
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#1d1d1f] dark:text-white tracking-tight">
+          Platform Overview
+        </h1>
+        <p className="text-xs sm:text-sm text-[#86868b] dark:text-slate-400 mt-1 font-medium">
+          Real-time health, monetization &amp; activity metrics across EasyApply ecosystem
+        </p>
       </div>
 
       {loading ? (
-        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--muted)' }}>
-          Loading platform metrics...
+        <div className="py-16 text-center text-[#86868b] text-sm">
+          <div className="inline-block w-6 h-6 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin mb-3" />
+          <p>Synchronizing platform telemetry...</p>
         </div>
       ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginBottom: '32px', width: '100%' }}>
+          {/* Stat Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {statItems.map((item, idx) => {
               const Icon = item.icon;
               return (
-                <Link key={idx} href={item.href} style={{ textDecoration: 'none' }}>
-                  <div className="stat-card" style={{ cursor: 'pointer', transition: 'transform 0.2s, border-color 0.2s', border: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                      <div style={{ width: 44, height: 44, borderRadius: 12, background: item.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Icon size={24} className={item.iconColor} />
+                <Link key={idx} href={item.href} className="no-underline group">
+                  <div className="stat-card p-6 rounded-2xl bg-white dark:bg-[#0f1221] border border-black/[0.06] dark:border-white/[0.08] shadow-xs group-hover:shadow-md transition-all duration-200 group-hover:-translate-y-0.5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className={`w-11 h-11 rounded-xl ${item.iconBg} flex items-center justify-center`}>
+                        <Icon className={`w-5 h-5 ${item.iconColor}`} />
                       </div>
-                      <span className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        View <ArrowRight size={13} />
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-[#0071e3]/10 text-[#0071e3] group-hover:bg-[#0071e3] group-hover:text-white transition-colors">
+                        View <ArrowRight size={12} />
                       </span>
                     </div>
-                    <div style={{ fontSize: '32px', fontWeight: '700', color: '#fff', marginBottom: '4px' }}>
+                    <div className="text-3xl font-black text-[#1d1d1f] dark:text-white tracking-tight mb-1">
                       {item.value.toLocaleString()}
                     </div>
-                    <div style={{ color: 'var(--muted)', fontSize: '14px', fontWeight: '500' }}>
+                    <div className="text-xs font-semibold text-[#86868b] dark:text-slate-400">
                       {item.title}
                     </div>
                   </div>
@@ -98,75 +111,108 @@ export default function DashboardPage() {
             })}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '24px', width: '100%' }}>
-            <div className="glass" style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '16px' }}>
-                <Zap size={20} className="text-amber-400" />
-                <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>Quick Management</h2>
+          {/* Quick Management & Security Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Quick Management */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-[#0f1221] border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500">
+                  <Zap size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-[#1d1d1f] dark:text-white">Quick Management</h2>
+                  <p className="text-[11px] text-[#86868b]">Control company workflows and system parameters</p>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <Link href="/dashboard/companies" className="btn btn-ghost" style={{ justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Building2 size={16} />
-                    <span>Manage Companies & Feature Toggles</span>
+
+              <div className="space-y-2.5">
+                <Link
+                  href="/dashboard/companies"
+                  className="flex items-center justify-between p-3.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-[#fbfbfd] dark:bg-[#14182e] hover:bg-[#f2f2f7] dark:hover:bg-[#1a203d] text-[#1d1d1f] dark:text-white text-xs font-semibold transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Building2 size={16} className="text-[#0071e3]" />
+                    <span>Manage Companies &amp; Feature Toggles</span>
                   </div>
-                  <ChevronRight size={16} />
+                  <ChevronRight size={15} className="text-[#86868b] group-hover:translate-x-0.5 transition-transform" />
                 </Link>
-                <Link href="/dashboard/subscriptions" className="btn btn-ghost" style={{ justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <CreditCard size={16} />
-                    <span>Custom Subscription Matrix & Plans</span>
+
+                <Link
+                  href="/dashboard/subscriptions"
+                  className="flex items-center justify-between p-3.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-[#fbfbfd] dark:bg-[#14182e] hover:bg-[#f2f2f7] dark:hover:bg-[#1a203d] text-[#1d1d1f] dark:text-white text-xs font-semibold transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <CreditCard size={16} className="text-purple-500" />
+                    <span>Custom Subscription Matrix &amp; Plans</span>
                   </div>
-                  <ChevronRight size={16} />
+                  <ChevronRight size={15} className="text-[#86868b] group-hover:translate-x-0.5 transition-transform" />
                 </Link>
-                <Link href="/dashboard/settings" className="btn btn-ghost" style={{ justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <KeyRound size={16} />
+
+                <Link
+                  href="/dashboard/settings"
+                  className="flex items-center justify-between p-3.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-[#fbfbfd] dark:bg-[#14182e] hover:bg-[#f2f2f7] dark:hover:bg-[#1a203d] text-[#1d1d1f] dark:text-white text-xs font-semibold transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <KeyRound size={16} className="text-amber-500" />
                     <span>System Credentials (Razorpay, SMTP, Groq, LiveKit)</span>
                   </div>
-                  <ChevronRight size={16} />
+                  <ChevronRight size={15} className="text-[#86868b] group-hover:translate-x-0.5 transition-transform" />
                 </Link>
-                <Link href="/dashboard/ats" className="btn btn-ghost" style={{ justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Bot size={16} />
+
+                <Link
+                  href="/dashboard/ats"
+                  className="flex items-center justify-between p-3.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-[#fbfbfd] dark:bg-[#14182e] hover:bg-[#f2f2f7] dark:hover:bg-[#1a203d] text-[#1d1d1f] dark:text-white text-xs font-semibold transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Bot size={16} className="text-emerald-500" />
                     <span>Trigger ATS Batch Re-calculation</span>
                   </div>
-                  <ChevronRight size={16} />
+                  <ChevronRight size={15} className="text-[#86868b] group-hover:translate-x-0.5 transition-transform" />
                 </Link>
               </div>
             </div>
 
-            <div className="glass" style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '16px' }}>
-                <ShieldCheck size={20} className="text-emerald-400" />
-                <h2 style={{ fontSize: '18px', fontWeight: '600', margin: 0 }}>Security & System Status</h2>
+            {/* Security & System Status */}
+            <div className="p-6 rounded-3xl bg-white dark:bg-[#0f1221] border border-black/[0.06] dark:border-white/[0.08] shadow-xs">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                  <ShieldCheck size={18} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-[#1d1d1f] dark:text-white">Security &amp; System Status</h2>
+                  <p className="text-[11px] text-[#86868b]">Infrastructure encryption and operational health</p>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--muted)' }}>Credential Storage</span>
-                  <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <CheckCircle2 size={13} />
+
+              <div className="space-y-3.5 text-xs font-medium">
+                <div className="flex justify-between items-center p-3 rounded-xl bg-[#fbfbfd] dark:bg-[#14182e] border border-black/[0.04] dark:border-white/[0.04]">
+                  <span className="text-[#6e6e73] dark:text-slate-400">Credential Storage</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <CheckCircle2 size={12} />
                     AES-256 Encrypted
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--muted)' }}>Seeker Pricing Policy</span>
-                  <span className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <CheckCircle2 size={13} />
+
+                <div className="flex justify-between items-center p-3 rounded-xl bg-[#fbfbfd] dark:bg-[#14182e] border border-black/[0.04] dark:border-white/[0.04]">
+                  <span className="text-[#6e6e73] dark:text-slate-400">Seeker Pricing Policy</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#0071e3]/10 text-[#0071e3] dark:text-[#2997ff] border border-[#0071e3]/20">
+                    <CheckCircle2 size={12} />
                     100% Free Forever
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--muted)' }}>Walk-in Priority Queue</span>
-                  <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <Activity size={13} />
+
+                <div className="flex justify-between items-center p-3 rounded-xl bg-[#fbfbfd] dark:bg-[#14182e] border border-black/[0.04] dark:border-white/[0.04]">
+                  <span className="text-[#6e6e73] dark:text-slate-400">Walk-in Priority Queue</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <Activity size={12} />
                     Active (Skill + Aging)
                   </span>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--muted)' }}>API Status</span>
-                  <span className="badge badge-green" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <CheckCircle2 size={13} />
+
+                <div className="flex justify-between items-center p-3 rounded-xl bg-[#fbfbfd] dark:bg-[#14182e] border border-black/[0.04] dark:border-white/[0.04]">
+                  <span className="text-[#6e6e73] dark:text-slate-400">API Health Status</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <CheckCircle2 size={12} />
                     Operational
                   </span>
                 </div>
