@@ -70,6 +70,7 @@ app.use('/api/crm', crmRoutes);
 app.use('/api/walkin', walkInRoutes);
 
 // Public routes last (to avoid conflicts)
+app.use('/api/jobs', publicJobRoutes);
 app.use('/api/public', publicJobRoutes);
 
 app.get('/', (_req, res) => res.send('Backend Running'));

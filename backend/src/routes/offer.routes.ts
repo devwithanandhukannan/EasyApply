@@ -52,6 +52,7 @@ router.post('/:id/sign', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_H
 router.post('/:id/send', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), sendOfferLetter as any);
 
 // ─── OFFER VIEWS ───────────────────────────────────────────────────
+router.get('/', requireCompanyRoleOrJobSeeker([ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER]), getCompanyOffers as any);
 router.get('/company/list', requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getCompanyOffers as any);
 router.get('/:id', requireCompanyRoleOrJobSeeker([ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER]), getOfferDetails as any);
 router.get('/:id/download', requireCompanyRoleOrJobSeeker([ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER]), downloadOfferPDF as any);

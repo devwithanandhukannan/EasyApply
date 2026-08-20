@@ -210,6 +210,7 @@ model JobSeekerProfile {
   talentPoolMemberships TalentPoolMember[]
   spotJobBookings       SpotJobBooking[]
   walkInQueueEntries    WalkInQueueEntry[]
+  savedJobs             SavedJob[]
 
   @@index([email])
   @@index([userId])
@@ -452,10 +453,24 @@ model JobPosting {
 
   applications     Application[]
   interviewBatches InterviewBatch[]
+  savedJobs        SavedJob[]
 
   @@index([companyId])
   @@index([status])
   @@index([createdAt])
+}
+
+model SavedJob {
+  id                 String           @id @default(uuid())
+  jobSeekerProfileId String
+  jobSeekerProfile   JobSeekerProfile @relation(fields: [jobSeekerProfileId], references: [id], onDelete: Cascade)
+  jobPostingId       String
+  jobPosting         JobPosting       @relation(fields: [jobPostingId], references: [id], onDelete: Cascade)
+  createdAt          DateTime         @default(now())
+
+  @@unique([jobSeekerProfileId, jobPostingId])
+  @@index([jobSeekerProfileId])
+  @@index([jobPostingId])
 }
 
 model Application {

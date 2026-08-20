@@ -20,9 +20,10 @@ import {
   Rocket,
   Globe,
   Building2,
+  Bookmark,
 } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 import EasyApplyLogo from './EasyApplyLogo';
 
@@ -40,11 +41,13 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { logout } = useAuth();
 
   const menuItems = [
     { icon: Home, label: 'Dashboard', href: '/dashboard' },
     { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' },
+    { icon: Bookmark, label: 'Saved Jobs', href: '/dashboard/jobs?tab=saved' },
     { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
     { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
     { icon: CalendarDays, label: 'Calendar', href: '/dashboard/calendar' },
@@ -59,13 +62,23 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
     logout();
   };
 
+  const isSavedTabActive = searchParams?.get('tab') === 'saved';
+
   const NavLinks = ({ onClickItem }: { onClickItem?: () => void }) => (
     <>
       {menuItems.map((item) => {
         const Icon = item.icon;
-        const isActive = item.href === '/dashboard' 
-          ? pathname === '/dashboard' 
-          : pathname.startsWith(item.href);
+        let isActive = false;
+
+        if (item.href === '/dashboard') {
+          isActive = pathname === '/dashboard';
+        } else if (item.href === '/dashboard/jobs?tab=saved') {
+          isActive = pathname === '/dashboard/jobs' && isSavedTabActive;
+        } else if (item.href === '/dashboard/jobs') {
+          isActive = pathname === '/dashboard/jobs' && !isSavedTabActive;
+        } else {
+          isActive = pathname.startsWith(item.href);
+        }
 
         return (
           <Link

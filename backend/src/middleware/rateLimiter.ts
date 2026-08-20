@@ -1,5 +1,5 @@
 // src/middleware/rateLimiter.ts
-import { rateLimit } from 'express-rate-limit';
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import type { Request, Response } from 'express';
 
 // Standardized 429 JSON Error Handler
@@ -41,9 +41,11 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   handler: createRateLimitHandler('Too many login attempts. For security reasons, please wait 15 minutes before trying again.'),
   keyGenerator: (req) => {
+    const clientIp = ipKeyGenerator(req.ip || '127.0.0.1');
     const identifier = req.body?.email || req.body?.mobileNumber || '';
-    return `${req.ip}_${identifier}`.toLowerCase();
+    return `${clientIp}_${identifier}`.toLowerCase();
   },
+  validate: { keyGeneratorIpFallback: false },
 });
 
 /**
@@ -58,9 +60,11 @@ export const otpLimiter = rateLimit({
   legacyHeaders: false,
   handler: createRateLimitHandler('Maximum OTP request limit reached. Please wait 15 minutes before requesting another OTP.'),
   keyGenerator: (req) => {
+    const clientIp = ipKeyGenerator(req.ip || '127.0.0.1');
     const identifier = req.body?.mobileNumber || req.body?.email || req.body?.newMobileNumber || req.body?.newEmail || '';
-    return `otp_${req.ip}_${identifier}`.toLowerCase();
+    return `otp_${clientIp}_${identifier}`.toLowerCase();
   },
+  validate: { keyGeneratorIpFallback: false },
 });
 
 /**
@@ -75,8 +79,11 @@ export const aiLimiter = rateLimit({
   legacyHeaders: false,
   handler: createRateLimitHandler('AI copilot usage limit reached for this minute. Please wait 60 seconds.'),
   keyGenerator: (req: any) => {
-    return (req.user?.userId || req.company?.companyId || req.ip || 'anonymous').toString();
+    if (req.user?.userId) return `user_${req.user.userId}`;
+    if (req.company?.companyId) return `company_${req.company.companyId}`;
+    return ipKeyGenerator(req.ip || '127.0.0.1');
   },
+  validate: { keyGeneratorIpFallback: false },
 });
 
 /**
@@ -91,8 +98,11 @@ export const livekitLimiter = rateLimit({
   legacyHeaders: false,
   handler: createRateLimitHandler('Too many video session connection requests. Please wait a moment.'),
   keyGenerator: (req: any) => {
-    return (req.user?.userId || req.company?.companyId || req.ip || 'anonymous').toString();
+    if (req.user?.userId) return `user_${req.user.userId}`;
+    if (req.company?.companyId) return `company_${req.company.companyId}`;
+    return ipKeyGenerator(req.ip || '127.0.0.1');
   },
+  validate: { keyGeneratorIpFallback: false },
 });
 
 /**
@@ -107,3 +117,4 @@ export const publicLimiter = rateLimit({
   legacyHeaders: false,
   handler: createRateLimitHandler('Too many requests. Please slow down and try again.'),
 });
+

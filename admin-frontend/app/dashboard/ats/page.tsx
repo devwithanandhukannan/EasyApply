@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
@@ -8,7 +9,10 @@ import {
   Activity,
   X,
   Cpu,
+  Bot,
+  Zap,
 } from 'lucide-react';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 interface BatchJob {
   jobPostingId: string;
@@ -22,7 +26,7 @@ export default function AtsBatchPage() {
   const [jobId, setJobId] = useState('');
   const [jobs, setJobs] = useState<BatchJob[]>([]);
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { showToast } = useGlassToast();
 
   useEffect(() => {
     fetchJobs();
@@ -45,51 +49,50 @@ export default function AtsBatchPage() {
     e.preventDefault();
     if (!jobId.trim()) return;
     setLoading(true);
-    setMsg(null);
     try {
       const res = await api.post(`/admin/ats/recalculate/${jobId.trim()}`);
       if (res.data.success) {
-        setMsg({ type: 'success', text: res.data.message });
+        showToast('Triggered', res.data.message, 'success');
         setJobId('');
         fetchJobs();
       } else {
-        setMsg({ type: 'error', text: res.data.message });
+        showToast('Error', res.data.message, 'danger');
       }
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to trigger batch recalculation' });
+      showToast('Error', err.response?.data?.message || 'Failed to trigger batch recalculation', 'danger');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ width: '100%' }}>
-      <div className="page-header">
-        <h1 className="page-title">ATS Batch Re-Calculation Engine</h1>
-        <p className="page-subtitle">Throttled asynchronous AI recalculation of candidate resume scores for massive pools</p>
+    <div className="w-full space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+          ATS Batch Re-Calculation Engine
+        </h1>
+        <p className="text-xs sm:text-sm text-[#6b7280] dark:text-zinc-400 mt-1">
+          Asynchronous AI re-evaluation of applicant match scores for large candidate pools
+        </p>
       </div>
 
-      {msg && (
-        <div className={`alert ${msg.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{msg.text}</span>
-          <button style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => setMsg(null)}>
-            <X size={16} />
-          </button>
+      {/* Trigger Form Card */}
+      <div className="glass-card rounded-3xl p-6 sm:p-7 bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center">
+            <Cpu size={20} />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-zinc-900 dark:text-white">Trigger Batch Re-Calculation</h3>
+            <p className="text-xs text-zinc-400">
+              Re-evaluates match scores for all submitted candidate CVs against the updated job description using Groq LLM.
+            </p>
+          </div>
         </div>
-      )}
 
-      {/* Trigger Form */}
-      <div className="glass" style={{ padding: '32px', marginBottom: '32px', width: '100%', boxSizing: 'border-box' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '8px' }}>
-          <Cpu size={20} className="text-indigo-400" />
-          <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>Trigger Recalculation for a Job Posting</h3>
-        </div>
-        <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '20px' }}>
-          Recalculates match scores for all submitted candidate CVs against the latest job criteria in batches of 5 (with a 3s delay) to stay strictly within Groq API rate limits.
-        </p>
-
-        <form onSubmit={handleTrigger} style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap', width: '100%' }}>
-          <div style={{ flex: 1, minWidth: '280px' }}>
+        <form onSubmit={handleTrigger} className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end pt-2">
+          <div className="flex-1">
             <label className="label">Job Posting UUID</label>
             <input
               className="input"
@@ -99,67 +102,73 @@ export default function AtsBatchPage() {
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={loading} style={{ height: '42px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            {loading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-            <span>{loading ? 'Triggering...' : 'Start Recalculation'}</span>
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary text-xs flex items-center justify-center gap-1.5 h-[42px] px-5 shrink-0"
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            <span>{loading ? 'Triggering Engine...' : 'Start Recalculation'}</span>
           </button>
         </form>
       </div>
 
-      {/* Running / Recent Jobs */}
-      <div className="glass" style={{ padding: '32px', width: '100%', boxSizing: 'border-box' }}>
-        <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 16px 0' }}>Active & Recent Batch Jobs</h3>
+      {/* Active & Recent Batch Jobs */}
+      <div className="glass-card rounded-3xl p-6 sm:p-7 bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-4">
+        <h3 className="text-base font-bold text-zinc-900 dark:text-white">Active &amp; Recent Batch Tasks</h3>
 
         {jobs.length === 0 ? (
-          <div style={{ color: 'var(--muted)', textAlign: 'center', padding: '32px' }}>
-            No background batch recalculations currently active.
+          <div className="py-12 text-center text-zinc-400 text-xs font-medium">
+            No background batch recalculations currently queued or running.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
+          <div className="space-y-3">
             {jobs.map((job) => {
               const pct = job.total > 0 ? Math.round((job.done / job.total) * 100) : 0;
               return (
-                <div key={job.jobPostingId} style={{ background: 'var(--surface2)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div
+                  key={job.jobPostingId}
+                  className="p-4 sm:p-5 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06] space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#fff' }}>
-                        Job Posting: <code style={{ color: 'var(--accent)' }}>{job.jobPostingId}</code>
+                      <div className="text-xs font-bold text-zinc-900 dark:text-white">
+                        Job Posting: <code className="text-[#0071e3] font-mono text-[11px]">{job.jobPostingId}</code>
                       </div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                        Started: {new Date(job.startedAt).toLocaleTimeString()}
+                      <div className="text-[10px] text-zinc-400 mt-0.5">
+                        Started at {new Date(job.startedAt).toLocaleTimeString()}
                       </div>
                     </div>
-                    <div>
-                      <span className={`badge ${job.status === 'completed' ? 'badge-green' : 'badge-yellow'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                        {job.status === 'completed' ? (
-                          <>
-                            <CheckCircle2 size={13} />
-                            <span>Completed</span>
-                          </>
-                        ) : (
-                          <>
-                            <Activity size={13} />
-                            <span>Processing...</span>
-                          </>
-                        )}
-                      </span>
-                    </div>
+
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                      job.status === 'completed'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                    }`}>
+                      {job.status === 'completed' ? (
+                        <>
+                          <CheckCircle2 size={12} />
+                          <span>Completed</span>
+                        </>
+                      ) : (
+                        <>
+                          <Activity size={12} className="animate-spin" />
+                          <span>Processing...</span>
+                        </>
+                      )}
+                    </span>
                   </div>
 
                   {/* Progress bar */}
-                  <div style={{ background: 'var(--border)', height: '8px', borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
+                  <div className="w-full bg-zinc-200 dark:bg-white/10 h-2 rounded-full overflow-hidden">
                     <div
-                      style={{
-                        background: 'linear-gradient(90deg, var(--accent), var(--success))',
-                        height: '100%',
-                        width: `${pct}%`,
-                        transition: 'width 0.4s ease',
-                      }}
-                    ></div>
+                      className="bg-gradient-to-r from-[#0071e3] to-emerald-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--muted)' }}>
-                    <span>{job.done} of {job.total} CVs analyzed</span>
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400 font-semibold">
+                    <span>{job.done} of {job.total} CVs processed</span>
                     <span>{pct}%</span>
                   </div>
                 </div>

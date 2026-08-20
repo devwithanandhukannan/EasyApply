@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 // @ts-ignore
 import htmlPdf from 'html-pdf-node';
+import { renderHtmlToPdf } from '../services/pdfGenerator.service.ts';
 import { prisma } from '../utils/prisma.ts';
 import { extractText } from '../utils/textExtractor.ts';
 import { analyzeResume, generateFreshCV, convertToHTML, optimizeForJD, suggestKeywords } from '../services/groq.service.ts';
@@ -19,13 +20,22 @@ const readAI = (resume: any) => (resume.aiSuggestions as any) ?? {};
 const pushVersion = (contentData: any, label?: string) => {
   const versions: any[] = contentData.versions ?? [];
   if (contentData.htmlContent) {
+    // Avoid creating identical duplicate version snapshots
+    const lastVersion = versions[versions.length - 1];
+    if (lastVersion && lastVersion.htmlContent === contentData.htmlContent) {
+      if (label && lastVersion.label === 'Manual save') {
+        lastVersion.label = label;
+      }
+      return;
+    }
+
     versions.push({
-      id: Date.now().toString(),
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       label: label ?? `Version ${versions.length + 1}`,
       htmlContent: contentData.htmlContent,
       savedAt: new Date().toISOString(),
     });
-    if (versions.length > 20) versions.shift();
+    if (versions.length > 30) versions.shift();
   }
   contentData.versions = versions;
 };
@@ -77,7 +87,7 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
       },
       autoCorrectedText: analysis?.autoCorrectedText ?? null,
       htmlContent: null, 
-      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      margins: { top: 48, right: 48, bottom: 48, left: 48 },
       template: 'default',
       versions: [],
     };
@@ -124,50 +134,45 @@ export const uploadAndAnalyze = async (req: Request, res: Response) => {
 };
 
 const compileResumeHtml = (data: any): string => {
-  const headingStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; margin-bottom: 5px;";
-  const sectionTitleStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-top: 20px;";
-  const bodyStyle = "color: #333; font-family: 'Georgia, serif'; font-size: 14px; line-height: 1.5;";
-  const subStyle = "color: #555; font-family: Arial, sans-serif; font-size: 13px;";
-  const linkStyle = "color: #2563EB; text-decoration: none; margin-right: 10px;";
-
-  let html = `<h1 style="${headingStyle}">${data.fullName || ''}</h1>`;
+  let html = `<h1>${data.fullName || ''}</h1>`;
   
   // Contact Section
-  html += `<p style="${bodyStyle} text-align: center;">`;
-  const contactParts = [];
+  const contactParts: string[] = [];
   if (data.contact?.location) contactParts.push(data.contact.location);
   if (data.contact?.phone) contactParts.push(data.contact.phone);
   if (data.contact?.email) contactParts.push(data.contact.email);
-  html += contactParts.join(' &nbsp;&middot;&nbsp; ');
-  html += `<br>`;
-  
-  const linkParts = [];
-  if (data.contact?.links) {
-     data.contact.links.forEach((link: string) => linkParts.push(`<a style="${linkStyle}" href="${link}">${link}</a>`));
+  if (data.contact?.links?.length) {
+    data.contact.links.forEach((link: string) => {
+      contactParts.push(`<a href="${link}">${link}</a>`);
+    });
   }
-  html += linkParts.join(' &nbsp;&middot;&nbsp; ');
-  html += `</p>`;
+
+  if (contactParts.length > 0) {
+    html += `<p style="text-align: center;">${contactParts.join(' &nbsp;&middot;&nbsp; ')}</p>`;
+  }
 
   // Summary Section
   if (data.summary) {
-    html += `<h2 style="${sectionTitleStyle}">Professional Summary</h2>`;
-    html += `<p style="${bodyStyle}">${data.summary}</p>`;
+    html += `<h2>Professional Summary</h2>`;
+    html += `<p>${data.summary}</p>`;
   }
 
   // Skills Section
   if (data.skills?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Skills</h2>`;
-    html += `<p style="${bodyStyle}"><strong>Core Competencies:</strong> ${data.skills.join(', ')}</p>`;
+    html += `<h2>Skills</h2>`;
+    html += `<p><strong>Core Competencies:</strong> ${data.skills.join(', ')}</p>`;
   }
 
   // Experience Section
   if (data.experience?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Professional Experience</h2>`;
+    html += `<h2>Professional Experience</h2>`;
     data.experience.forEach((exp: any) => {
-      html += `<p style="${bodyStyle}"><strong>${exp.role}</strong> <span style="float: right;">${exp.duration || ''}</span><br>${exp.company} ${exp.location ? `— ${exp.location}` : ''}</p>`;
+      html += `<p><strong>${exp.role || ''}</strong> <span style="float: right;">${exp.duration || ''}</span><br>${exp.company || ''}${exp.location ? ` — ${exp.location}` : ''}</p>`;
       if (exp.bullets?.length) {
-        html += `<ul style="${bodyStyle}">`;
-        exp.bullets.forEach((b: string) => html += `<li>${b}</li>`);
+        html += `<ul>`;
+        exp.bullets.forEach((b: string) => {
+          html += `<li>${b}</li>`;
+        });
         html += `</ul>`;
       }
     });
@@ -175,39 +180,39 @@ const compileResumeHtml = (data: any): string => {
 
   // Projects Section
   if (data.projects?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Projects</h2>`;
+    html += `<h2>Projects</h2>`;
     data.projects.forEach((proj: any) => {
-      html += `<p style="${bodyStyle}"><strong>${proj.name}</strong> <span style="float: right;">${proj.link || 'GitHub'}</span><br><em>${proj.technologies ? proj.technologies.join(', ') : ''}</em></p>`;
+      html += `<p><strong>${proj.name || ''}</strong> <span style="float: right;">${proj.link || ''}</span><br><em>${proj.technologies ? proj.technologies.join(', ') : ''}</em></p>`;
       if (proj.description) {
-        html += `<ul style="${bodyStyle}"><li>${proj.description}</li></ul>`;
+        html += `<ul><li>${proj.description}</li></ul>`;
       }
     });
   }
 
   // Education Section
   if (data.education?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Education</h2>`;
+    html += `<h2>Education</h2>`;
     data.education.forEach((edu: any) => {
-      html += `<p style="${bodyStyle}"><strong>${edu.degree} ${edu.field ? `(${edu.field})` : ''} — ${edu.institution}</strong> <span style="float: right;">${edu.duration || ''}</span><br>${edu.details || ''}</p>`;
+      html += `<p><strong>${edu.degree || ''} ${edu.field ? `(${edu.field})` : ''} — ${edu.institution || ''}</strong> <span style="float: right;">${edu.duration || ''}</span><br>${edu.details || ''}</p>`;
     });
   }
 
   // Certifications Section
   if (data.certifications?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Certifications</h2>`;
-    html += `<ul style="${bodyStyle}">` + data.certifications.map((c: string) => `<li>${c}</li>`).join('') + `</ul>`;
+    html += `<h2>Certifications</h2>`;
+    html += `<ul>` + data.certifications.map((c: string) => `<li>${c}</li>`).join('') + `</ul>`;
   }
 
   // Languages Section
   if (data.languages?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Languages</h2>`;
-    html += `<p style="${bodyStyle}">${data.languages.join(', ')}</p>`;
+    html += `<h2>Languages</h2>`;
+    html += `<p>${data.languages.join(', ')}</p>`;
   }
 
   // Achievements Section
   if (data.achievements?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Key Achievements</h2>`;
-    html += `<ul style="${bodyStyle}">` + data.achievements.map((a: string) => `<li>${a}</li>`).join('') + `</ul>`;
+    html += `<h2>Key Achievements</h2>`;
+    html += `<ul>` + data.achievements.map((a: string) => `<li>${a}</li>`).join('') + `</ul>`;
   }
 
   return html;
@@ -315,7 +320,7 @@ export const generateCV = async (req: Request, res: Response) => {
       rawText,
       parsedData: generated.resumeData ?? {},
       atsBreakdown: generated.atsBreakdown ?? {},
-      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      margins: { top: 48, right: 48, bottom: 48, left: 48 },
       template: 'default',
       versions: [],
       customPrompt: customPrompt ?? null,
@@ -377,7 +382,15 @@ export const downloadUploadedPDF = async (req: Request, res: Response) => {
     const isView = req.query.view === 'true' || req.path.includes('view');
 
     // ─── CASE 1: PHYSICAL STORAGE ATTACHMENT (UPLOADED FILE) ───────────
-    if (resume.filePath) {
+    // ─── CASE 1: PHYSICAL STORAGE ATTACHMENT (UPLOADED FILE WITHOUT EDITED HTML) ───
+    const contentData = readContent(resume);
+    let htmlContent = contentData.htmlContent;
+
+    if (!htmlContent && contentData.parsedData) {
+      htmlContent = compileResumeHtml(contentData.parsedData);
+    }
+
+    if (resume.filePath && !htmlContent) {
       const absoluteDiskPath = path.resolve(resume.filePath);
 
       if (fs.existsSync(absoluteDiskPath)) {
@@ -396,14 +409,7 @@ export const downloadUploadedPDF = async (req: Request, res: Response) => {
       console.warn(`File expected on disk but missing at: ${absoluteDiskPath}. Falling back to dynamic HTML stream.`);
     }
 
-    // ─── CASE 2: VIRTUAL MEMORY RENDERING (BUILT / AI OPTIMIZED RESUME) ───
-    const contentData = readContent(resume);
-    let htmlContent = contentData.htmlContent;
-
-    if (!htmlContent && contentData.parsedData) {
-      htmlContent = compileResumeHtml(contentData.parsedData);
-    }
-
+    // ─── CASE 2: VIRTUAL MEMORY RENDERING (BUILT / AI OPTIMIZED / EDITED RESUME) ───
     if (!htmlContent) {
       return res.status(422).json({ 
         success: false, 
@@ -411,36 +417,20 @@ export const downloadUploadedPDF = async (req: Request, res: Response) => {
       });
     }
 
-    const margins = contentData.margins ?? { top: 60, right: 72, bottom: 60, left: 72 };
-    const pdfOptions = {
-      format: 'A4',
-      margin: {
-        top: `${margins.top}px`,
-        right: `${margins.right}px`,
-        bottom: `${margins.bottom}px`,
-        left: `${margins.left}px`,
-      },
-      printBackground: true,
-    };
+    let margins = contentData.margins ?? { top: 48, right: 48, bottom: 48, left: 48 };
+    if (margins.left === 72 && margins.right === 72) {
+      margins = { top: 48, right: 48, bottom: 48, left: 48 };
+    }
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `${isView ? 'inline' : 'attachment'}; filename="${clientSideFilename}"`);
 
-    htmlPdf.generatePdf({ content: htmlContent }, pdfOptions)
-      .then((pdfBuffer: Buffer) => {
-        return res.status(200).send(pdfBuffer);
-      })
-      .catch((pdfErr: Error) => {
-        console.error('PDF Engine generation pipeline exception:', pdfErr);
-        if (!res.headersSent) {
-          return res.status(500).json({ success: false, message: 'PDF translation engine failed.' });
-        }
-      });
-
-  } catch (err) {
+    const pdfBuffer = await renderHtmlToPdf(htmlContent, margins, safeDocumentName);
+    return res.status(200).send(pdfBuffer);
+  } catch (err: any) {
     console.error('System Failure within downloadUploadedPDF route execution:', err);
     if (!res.headersSent) {
-      return res.status(500).json({ success: false, message: 'Internal Server Error handling document downstream extraction.' });
+      return res.status(500).json({ success: false, message: err?.message || 'Internal Server Error handling document downstream extraction.' });
     }
   }
 };
@@ -456,16 +446,51 @@ export const convertResumeToHTML = async (req: Request, res: Response) => {
     if (!resume) return res.status(404).json({ success: false, message: 'Resume not found' });
 
     const contentData = readContent(resume);
-    if (contentData.htmlContent) return res.json({ success: true, data: resume });
+    if (contentData.htmlContent) {
+      if (resume.source === 'uploaded') {
+        const updated = await prisma.resume.update({
+          where: { id },
+          data: { source: 'built' },
+        });
+        return res.json({ success: true, data: updated });
+      }
+      return res.json({ success: true, data: resume });
+    }
 
-    const htmlContent = await convertToHTML(contentData.parsedData ?? {});
+    let htmlContent = '';
+    const parsed = contentData.parsedData;
+    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+      try {
+        htmlContent = await convertToHTML(parsed);
+      } catch (e) {
+        console.warn('convertToHTML AI failure, using compileResumeHtml fallback:', e);
+      }
+      if (!htmlContent) {
+        htmlContent = compileResumeHtml(parsed);
+      }
+    }
+
+    if (!htmlContent && contentData.rawText) {
+      htmlContent = `<p>${contentData.rawText.replace(/\n\n+/g, '</p><p>').replace(/\n/g, '<br>')}</p>`;
+    }
+
+    if (!htmlContent) {
+      htmlContent = `<h1>${resume.name}</h1><p>Professional resume content</p>`;
+    }
+
     contentData.htmlContent = htmlContent;
 
-    const updated = await prisma.resume.update({ where: { id }, data: { content: contentData } });
+    const updated = await prisma.resume.update({
+      where: { id },
+      data: {
+        source: 'built',
+        content: contentData,
+      },
+    });
     return res.json({ success: true, data: updated });
   } catch (err) {
     console.error('convertResumeToHTML error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to convert' });
+    return res.status(500).json({ success: false, message: 'Failed to convert resume to editable format' });
   }
 };
 
@@ -587,10 +612,10 @@ export const updateResume = async (req: Request, res: Response) => {
 
     const contentData = readContent(existing);
 
-    if (versionLabel) pushVersion(contentData, versionLabel);
     if (htmlContent !== undefined) contentData.htmlContent = htmlContent;
     if (margins) contentData.margins = margins;
     if (template) contentData.template = template;
+    if (versionLabel) pushVersion(contentData, versionLabel);
 
     await prisma.$transaction(async (tx) => {
       if (isPrimary === true) {
@@ -602,7 +627,7 @@ export const updateResume = async (req: Request, res: Response) => {
       });
     });
 
-    return res.json({ success: true, message: 'Updated' });
+    return res.json({ success: true, message: 'Updated', data: { versions: contentData.versions } });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to update' });
   }
@@ -622,11 +647,13 @@ export const restoreVersion = async (req: Request, res: Response) => {
     const version = (contentData.versions ?? []).find((v: any) => v.id === versionId);
     if (!version) return res.status(404).json({ success: false, message: 'Version not found' });
 
-    pushVersion(contentData, 'Before restore');
+    if (contentData.htmlContent && contentData.htmlContent !== version.htmlContent) {
+      pushVersion(contentData, 'Draft before restore');
+    }
     contentData.htmlContent = version.htmlContent;
 
     await prisma.resume.update({ where: { id }, data: { content: contentData } });
-    return res.json({ success: true, data: { htmlContent: version.htmlContent } });
+    return res.json({ success: true, data: { htmlContent: version.htmlContent, versions: contentData.versions } });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to restore' });
   }
@@ -791,7 +818,7 @@ export const generateRegionalCV = async (req: Request, res: Response) => {
     const contentData = {
       htmlContent: result.htmlContent ?? '',
       atsBreakdown: {},
-      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      margins: { top: 48, right: 48, bottom: 48, left: 48 },
       template: `${country}-${style || 'modern'}`,
       versions: [],
       country,

@@ -343,16 +343,22 @@ ${htmlContent}
 };
 
 export const convertToHTML = async (parsedData: any) => {
-  const prompt = `Convert this structured resume data into a clean, professional HTML resume.
-The layout should closely match the user's original CV style.
+  const prompt = `Convert this structured resume data into a clean, professional semantic HTML resume.
+The layout should cleanly match the standard resume structure.
 Return ONLY valid JSON — no markdown.
 
 Parsed Data:
 ${JSON.stringify(parsedData, null, 2)}
 
-Same HTML rules: inline styles only, no wrapper tags, Georgia/serif font.
-Name as <h1>, section headings as <h2> with border-bottom dividers.
-Return: { "htmlContent": "<html>" }`;
+HTML Structure rules:
+- Name as <h1> (centered)
+- Contact information as a centered <p> with items separated by &nbsp;&middot;&nbsp; (links as <a> tags)
+- Section headings as <h2>
+- Role/Experience entries: <p><strong>Role</strong> <span style="float: right;">Date</span><br>Company — Location</p>
+- Bullet points as <ul><li>...</li></ul>
+- Education entries: <p><strong>Degree — Institution</strong> <span style="float: right;">Date</span><br>Details</p>
+- No unnecessary wrappers or conflicting font tags.
+Return format: { "htmlContent": "<h1>...</h1>..." }`;
 
   const completion = await createGroqChatCompletion({
     messages: [{ role: 'user', content: prompt }],

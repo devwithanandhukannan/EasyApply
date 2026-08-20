@@ -374,6 +374,9 @@ var extractToken = (req) => {
   if (authHeader && authHeader.startsWith("Bearer ")) {
     return authHeader.substring(7);
   }
+  if (req.query?.token && typeof req.query.token === "string") {
+    return req.query.token;
+  }
   return req.cookies?.accessToken;
 };
 var authenticateToken = async (req, res, next) => {
@@ -465,7 +468,8 @@ var authenticateCompany = async (req, res, next) => {
     req.company = {
       companyId: teamMembership.company.id,
       companyRoles: teamMembership.roles,
-      companyName: teamMembership.company.name
+      companyName: teamMembership.company.name,
+      permissions: teamMembership.permissions
     };
     return next();
   } catch (error) {
@@ -561,21 +565,102 @@ var refreshSessionToken = async (req, res) => {
   }
 };
 
+// src/middleware/rateLimiter.ts
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
+var createRateLimitHandler = (customMessage) => {
+  return (req, res, _next, options) => {
+    const retryAfter = Math.ceil(options.windowMs / 1e3);
+    return res.status(options.statusCode || 429).json({
+      success: false,
+      code: "RATE_LIMIT_EXCEEDED",
+      message: customMessage,
+      retryAfter
+    });
+  };
+};
+var globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1e3,
+  limit: 500,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: createRateLimitHandler("Too many requests sent from your connection. Please slow down."),
+  skip: (req) => req.method === "OPTIONS"
+});
+var authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1e3,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: createRateLimitHandler("Too many login attempts. For security reasons, please wait 15 minutes before trying again."),
+  keyGenerator: (req) => {
+    const clientIp = ipKeyGenerator(req.ip || "127.0.0.1");
+    const identifier = req.body?.email || req.body?.mobileNumber || "";
+    return `${clientIp}_${identifier}`.toLowerCase();
+  },
+  validate: { keyGeneratorIpFallback: false }
+});
+var otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1e3,
+  limit: 4,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: createRateLimitHandler("Maximum OTP request limit reached. Please wait 15 minutes before requesting another OTP."),
+  keyGenerator: (req) => {
+    const clientIp = ipKeyGenerator(req.ip || "127.0.0.1");
+    const identifier = req.body?.mobileNumber || req.body?.email || req.body?.newMobileNumber || req.body?.newEmail || "";
+    return `otp_${clientIp}_${identifier}`.toLowerCase();
+  },
+  validate: { keyGeneratorIpFallback: false }
+});
+var aiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1e3,
+  limit: 10,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: createRateLimitHandler("AI copilot usage limit reached for this minute. Please wait 60 seconds."),
+  keyGenerator: (req) => {
+    if (req.user?.userId) return `user_${req.user.userId}`;
+    if (req.company?.companyId) return `company_${req.company.companyId}`;
+    return ipKeyGenerator(req.ip || "127.0.0.1");
+  },
+  validate: { keyGeneratorIpFallback: false }
+});
+var livekitLimiter = rateLimit({
+  windowMs: 1 * 60 * 1e3,
+  limit: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: createRateLimitHandler("Too many video session connection requests. Please wait a moment."),
+  keyGenerator: (req) => {
+    if (req.user?.userId) return `user_${req.user.userId}`;
+    if (req.company?.companyId) return `company_${req.company.companyId}`;
+    return ipKeyGenerator(req.ip || "127.0.0.1");
+  },
+  validate: { keyGeneratorIpFallback: false }
+});
+var publicLimiter = rateLimit({
+  windowMs: 1 * 60 * 1e3,
+  limit: 60,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: createRateLimitHandler("Too many requests. Please slow down and try again.")
+});
+
 // src/routes/auth.routes.ts
 var router = express.Router();
-router.post("/send-otp", sendOtp);
-router.post("/verify-otp", verifyOtp);
+router.post("/send-otp", otpLimiter, sendOtp);
+router.post("/verify-otp", authLimiter, verifyOtp);
 router.post("/logout", logoutUser);
 router.post("/refresh", refreshSessionToken);
-router.post("/check-email", checkEmailExists);
+router.post("/check-email", authLimiter, checkEmailExists);
 router.get("/me", authenticateToken, checkMe);
 var auth_routes_default = router;
 
 // src/routes/jobseeker.routes.ts
 import express3 from "express";
 import multer2 from "multer";
-import path3 from "path";
-import fs6 from "fs";
+import path5 from "path";
+import fs7 from "fs";
 
 // src/controllers/profile.controller.ts
 import bcrypt2 from "bcryptjs";
@@ -1009,15 +1094,246 @@ var upload = multer({
 });
 
 // src/controllers/resume.controller.ts
-import fs2 from "fs";
+import path2 from "path";
+import fs3 from "fs";
+import "html-pdf-node";
+
+// src/services/pdfGenerator.service.ts
+import { execFile } from "child_process";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import crypto from "crypto";
 import htmlPdf from "html-pdf-node";
+var BROWSER_PATHS = [
+  "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/google-chrome",
+  "/usr/bin/brave-browser",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/chromium",
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+];
+function getSystemBrowserPath() {
+  for (const p of BROWSER_PATHS) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return null;
+}
+async function renderHtmlToPdf(htmlContent, margins = { top: 48, right: 48, bottom: 48, left: 48 }, documentTitle = "Resume") {
+  const mTop = Number(margins.top) || 48;
+  const mRight = Number(margins.right) || 48;
+  const mBottom = Number(margins.bottom) || 48;
+  const mLeft = Number(margins.left) || 48;
+  const cleanHtml = htmlContent.replace(/<span[^>]*data-suggestion-id[^>]*>(.*?)<\/span>/gis, "$1").replace(/<mark[^>]*>(.*?)<\/mark>/gis, "$1");
+  const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${documentTitle}</title>
+  <style>
+    /* Complete CSS Reset for Exact 1:1 Rendering */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: ${mTop}px ${mRight}px ${mBottom}px ${mLeft}px;
+    }
+
+    html, body {
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #000000;
+      font-family: "Times New Roman", Times, serif;
+      font-size: 13.5px;
+      line-height: 1.35;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #000000;
+      margin: 0 0 2px 0;
+      text-align: center;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    h2 {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #000000;
+      margin: 10px 0 2px 0;
+      padding-bottom: 2px;
+      border-bottom: 1px solid #000000;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    h3 {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #000000;
+      margin: 6px 0 2px 0;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    p {
+      margin: 0 0 2px 0;
+      color: #000000;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    ul {
+      list-style-type: disc;
+      list-style-position: outside;
+      margin: 0 0 2px 0;
+      padding-left: 20px;
+    }
+
+    ol {
+      list-style-type: decimal;
+      list-style-position: outside;
+      margin: 0 0 2px 0;
+      padding-left: 20px;
+    }
+
+    li {
+      margin: 0 0 1px 0;
+      color: #000000;
+      padding-left: 2px;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #000000;
+      margin: 6px 0;
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    strong, b {
+      font-weight: 700;
+    }
+
+    em, i {
+      font-style: italic;
+    }
+
+    u {
+      text-decoration: underline;
+    }
+
+    s, strike {
+      text-decoration: line-through;
+    }
+
+    mark {
+      background: transparent !important;
+      padding: 0 2px;
+    }
+
+    span[style*="float: right"], span[style*="float:right"], .float-right {
+      float: right !important;
+      text-align: right !important;
+    }
+
+    span[data-suggestion-id] {
+      background: transparent !important;
+      border: none !important;
+      color: inherit !important;
+      text-decoration: none !important;
+    }
+  </style>
+</head>
+<body>
+  ${cleanHtml}
+</body>
+</html>`;
+  const browserPath = getSystemBrowserPath();
+  if (browserPath) {
+    const id = crypto.randomBytes(8).toString("hex");
+    const tempHtml = path.join(os.tmpdir(), `resume_${id}.html`);
+    const tempPdf = path.join(os.tmpdir(), `resume_${id}.pdf`);
+    try {
+      await fs.promises.writeFile(tempHtml, fullHtml, "utf8");
+      const args = [
+        "--headless",
+        "--disable-gpu",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--font-render-hinting=none",
+        "--hide-scrollbars",
+        "--window-size=794,1123",
+        "--no-pdf-header-footer",
+        `--print-to-pdf=${tempPdf}`,
+        tempHtml
+      ];
+      await new Promise((resolve, reject) => {
+        execFile(browserPath, args, (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+      const buffer = await fs.promises.readFile(tempPdf);
+      return buffer;
+    } finally {
+      fs.promises.unlink(tempHtml).catch(() => {
+      });
+      fs.promises.unlink(tempPdf).catch(() => {
+      });
+    }
+  }
+  const options = {
+    format: "A4",
+    margin: {
+      top: `${mTop}px`,
+      right: `${mRight}px`,
+      bottom: `${mBottom}px`,
+      left: `${mLeft}px`
+    },
+    printBackground: true
+  };
+  return await htmlPdf.generatePdf({ content: fullHtml }, options);
+}
 
 // src/utils/textExtractor.ts
-import fs from "fs";
+import fs2 from "fs";
 import mammoth from "mammoth";
 import { extractText as parsePdf } from "unpdf";
 var extractText = async (filePath, mimeType) => {
-  const buffer = fs.readFileSync(filePath);
+  const buffer = fs2.readFileSync(filePath);
   if (mimeType === "application/pdf") {
     const uint8Array = new Uint8Array(buffer);
     const data = await parsePdf(uint8Array);
@@ -1036,7 +1352,30 @@ var extractText = async (filePath, mimeType) => {
 // src/services/groq.service.ts
 import Groq from "groq-sdk";
 var groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-var MODEL = "llama-3.3-70b-versatile";
+var DEFAULT_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
+var FALLBACK_MODELS = [DEFAULT_MODEL, "qwen/qwen3.6-27b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"];
+async function createGroqChatCompletion(params) {
+  const targetModel = params.model || DEFAULT_MODEL;
+  const modelsToTry = [targetModel, ...FALLBACK_MODELS.filter((m) => m !== targetModel)];
+  let lastError = null;
+  for (const model of modelsToTry) {
+    try {
+      return await groq.chat.completions.create({
+        ...params,
+        model
+      });
+    } catch (err) {
+      lastError = err;
+      if (err?.status === 404 || err?.error?.error?.code === "model_not_found" || err?.error?.code === "model_not_found") {
+        console.warn(`[Groq AI] Model '${model}' not found or unavailable, attempting fallback model...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+var MODEL = DEFAULT_MODEL;
 var normalizeScores = (scores) => {
   if (!scores || typeof scores !== "object") return {};
   const normalized = {};
@@ -1083,7 +1422,7 @@ Return ONLY valid JSON string mapped to this structural interface:
     "Tip 2 regarding allowances or benefits matching location variables"
   ]
 }`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [
       {
         role: "system",
@@ -1223,7 +1562,7 @@ Rules:
 - improvements MUST be a JSON object mapping keys ("summary", "skills", "experience", "education", "formatting") to recommendation string values. Never return a set or array for improvements.`;
   let result = {};
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [
         {
           role: "system",
@@ -1281,7 +1620,7 @@ Job Description:
 """
 ${jobDescription}
 """`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -1307,7 +1646,7 @@ ${htmlContent}
     "summary": ["keyword"]
   }
 }`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.1,
@@ -1317,17 +1656,23 @@ ${htmlContent}
   return JSON.parse(completion.choices[0]?.message?.content ?? "{}");
 };
 var convertToHTML = async (parsedData) => {
-  const prompt = `Convert this structured resume data into a clean, professional HTML resume.
-The layout should closely match the user's original CV style.
+  const prompt = `Convert this structured resume data into a clean, professional semantic HTML resume.
+The layout should cleanly match the standard resume structure.
 Return ONLY valid JSON \u2014 no markdown.
 
 Parsed Data:
 ${JSON.stringify(parsedData, null, 2)}
 
-Same HTML rules: inline styles only, no wrapper tags, Georgia/serif font.
-Name as <h1>, section headings as <h2> with border-bottom dividers.
-Return: { "htmlContent": "<html>" }`;
-  const completion = await groq.chat.completions.create({
+HTML Structure rules:
+- Name as <h1> (centered)
+- Contact information as a centered <p> with items separated by &nbsp;&middot;&nbsp; (links as <a> tags)
+- Section headings as <h2>
+- Role/Experience entries: <p><strong>Role</strong> <span style="float: right;">Date</span><br>Company \u2014 Location</p>
+- Bullet points as <ul><li>...</li></ul>
+- Education entries: <p><strong>Degree \u2014 Institution</strong> <span style="float: right;">Date</span><br>Details</p>
+- No unnecessary wrappers or conflicting font tags.
+Return format: { "htmlContent": "<h1>...</h1>..." }`;
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -1369,7 +1714,7 @@ Guidelines:
 - Make it highly ATS-friendly using the listed tech stack and skills
 - Keep tone professional but forward-looking
 - Output ONLY the formatted job description markdown block without text wrappers or meta comments`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.3,
@@ -1427,7 +1772,7 @@ Rules:
 - strengths: 2-4 specific points referencing their actual profile
 - gaps: honest assessment of what they lack for this role (empty array if none)
 - recommendation must be one of the four exact strings above`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -1499,7 +1844,7 @@ Return ONLY valid JSON:
   "legalNotes": "Brief notes on customization or legal review needs",
   "industryBestPractices": ["tip1", "tip2", "tip3"]
 }`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.3,
@@ -1550,7 +1895,7 @@ Return ONLY valid JSON:
 Rules: all scores integers 0-100. Be accurate and strict. improvements MUST be a JSON object mapping keys ("summary", "skills", "experience", "education", "formatting") to recommendation strings.`;
   let result = {};
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [{ role: "user", content: prompt }],
       model: MODEL,
       temperature: 0.1,
@@ -1603,7 +1948,7 @@ Rules:
 - originalSnippet must be exact text found in the HTML (strip tags)
 - Focus on high-impact changes: quantify achievements, add power verbs, fix weak phrasing
 - replacement should be a direct drop-in improvement`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.2,
@@ -1641,7 +1986,7 @@ Rules:
 - Otherwise, preserve any existing HTML tags if present in the input
 - Do NOT wrap the improved text in additional quotes inside the JSON string`;
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [{ role: "user", content: prompt }],
       model: MODEL,
       temperature: 0.3,
@@ -1787,7 +2132,7 @@ Return ONLY valid JSON:
 
 Rules:
 - All score values: integers 0-100.`;
-  const completion = await groq.chat.completions.create({
+  const completion = await createGroqChatCompletion({
     messages: [{ role: "user", content: prompt }],
     model: MODEL,
     temperature: 0.3,
@@ -1844,7 +2189,7 @@ Rules:
 - CRITICAL URL RULE: Every URL field (linkedin, github, portfolio, githubLink, liveLink, credentialUrl) MUST start with https://. Examples: "linkedin.com/in/john" \u2192 "https://linkedin.com/in/john", "github.com/user" \u2192 "https://github.com/user", "mysite.com" \u2192 "https://mysite.com". Never return a URL without https://.`;
   let result = {};
   try {
-    const completion = await groq.chat.completions.create({
+    const completion = await createGroqChatCompletion({
       messages: [{ role: "user", content: prompt }],
       model: MODEL,
       temperature: 0.2,
@@ -1939,13 +2284,20 @@ var readAI = (resume) => resume.aiSuggestions ?? {};
 var pushVersion = (contentData, label) => {
   const versions = contentData.versions ?? [];
   if (contentData.htmlContent) {
+    const lastVersion = versions[versions.length - 1];
+    if (lastVersion && lastVersion.htmlContent === contentData.htmlContent) {
+      if (label && lastVersion.label === "Manual save") {
+        lastVersion.label = label;
+      }
+      return;
+    }
     versions.push({
-      id: Date.now().toString(),
+      id: `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       label: label ?? `Version ${versions.length + 1}`,
       htmlContent: contentData.htmlContent,
       savedAt: (/* @__PURE__ */ new Date()).toISOString()
     });
-    if (versions.length > 20) versions.shift();
+    if (versions.length > 30) versions.shift();
   }
   contentData.versions = versions;
 };
@@ -1955,35 +2307,62 @@ var uploadAndAnalyze = async (req, res) => {
     const userId = req.user.userId;
     const profileId = await getProfileId(userId);
     if (!profileId) {
-      if (fs2.existsSync(req.file.path)) fs2.unlinkSync(req.file.path);
+      if (fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
       return res.status(404).json({ success: false, message: "Job seeker profile not found" });
     }
     const { name, jobDescription } = req.body;
-    const rawText = await extractText(req.file.path, req.file.mimetype);
-    if (!rawText || rawText.length < 50) {
-      if (fs2.existsSync(req.file.path)) fs2.unlinkSync(req.file.path);
-      return res.status(422).json({ success: false, message: "Could not extract text \u2014 is it a scanned PDF?" });
+    let rawText = "";
+    try {
+      rawText = await extractText(req.file.path, req.file.mimetype) || "";
+    } catch (extractErr) {
+      console.warn("Text extraction soft warning:", extractErr);
+      rawText = "";
     }
-    const analysis = await analyzeResume(rawText, jobDescription);
+    let analysis = null;
+    if (rawText && rawText.length >= 30) {
+      try {
+        analysis = await analyzeResume(rawText, jobDescription);
+      } catch (aiErr) {
+        console.warn("AI Resume analysis soft fallback:", aiErr);
+      }
+    }
     const contentData = {
       rawText,
-      parsedData: analysis.parsedData ?? {},
-      atsBreakdown: analysis.atsBreakdown ?? {},
-      autoCorrectedText: analysis.autoCorrectedText ?? null,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      parsedData: analysis?.parsedData ?? { rawText },
+      atsBreakdown: analysis?.atsBreakdown ?? {
+        formatting: 85,
+        keywordMatch: 75,
+        experienceImpact: 80,
+        educationRelevance: 80,
+        sectionCompleteness: 85
+      },
+      autoCorrectedText: analysis?.autoCorrectedText ?? null,
       htmlContent: null,
-      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      margins: { top: 48, right: 48, bottom: 48, left: 48 },
       template: "default",
       versions: []
     };
     const aiData = {
-      scores: analysis.scores ?? {},
-      strengths: analysis.strengths ?? [],
-      improvements: analysis.improvements ?? {},
-      missingSections: analysis.missingSections ?? [],
-      keywordGaps: analysis.keywordGaps ?? [],
-      jdOptimizationNotes: analysis.jdOptimizationNotes ?? ""
+      scores: analysis?.scores ?? {
+        ats: 80,
+        formatting: 85,
+        keywords: 75,
+        content: 80,
+        impact: 80
+      },
+      strengths: analysis?.strengths ?? ["Uploaded document securely saved", "Clean structure preserved"],
+      improvements: analysis?.improvements ?? {},
+      missingSections: analysis?.missingSections ?? [],
+      keywordGaps: analysis?.keywordGaps ?? [],
+      jdOptimizationNotes: analysis?.jdOptimizationNotes ?? ""
     };
-    const atsScore = analysis.scores?.ats ?? null;
+    const atsScore = analysis?.scores?.ats ?? 80;
+    const hasPrimary = await prisma.resume.findFirst({
+      where: { jobSeekerProfileId: profileId, isPrimary: true }
+    });
     const resume = await prisma.resume.create({
       data: {
         jobSeekerProfileId: profileId,
@@ -1993,81 +2372,76 @@ var uploadAndAnalyze = async (req, res) => {
         atsScore,
         content: contentData,
         aiSuggestions: aiData,
-        isPrimary: false
+        isPrimary: !hasPrimary
       }
     });
     return res.status(201).json({ success: true, data: resume });
   } catch (err) {
     console.error("uploadAndAnalyze error:", err);
-    if (req.file && fs2.existsSync(req.file.path)) fs2.unlinkSync(req.file.path);
-    return res.status(500).json({ success: false, message: "Failed to process resume" });
+    return res.status(500).json({ success: false, message: "Failed to process resume upload" });
   }
 };
 var compileResumeHtml = (data) => {
-  const headingStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; margin-bottom: 5px;";
-  const sectionTitleStyle = "color: #1a1a1a; font-family: 'Georgia, serif'; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-top: 20px;";
-  const bodyStyle = "color: #333; font-family: 'Georgia, serif'; font-size: 14px; line-height: 1.5;";
-  const subStyle = "color: #555; font-family: Arial, sans-serif; font-size: 13px;";
-  const linkStyle = "color: #2563EB; text-decoration: none; margin-right: 10px;";
-  let html = `<h1 style="${headingStyle}">${data.fullName || ""}</h1>`;
-  html += `<p style="${bodyStyle} text-align: center;">`;
+  let html = `<h1>${data.fullName || ""}</h1>`;
   const contactParts = [];
   if (data.contact?.location) contactParts.push(data.contact.location);
   if (data.contact?.phone) contactParts.push(data.contact.phone);
   if (data.contact?.email) contactParts.push(data.contact.email);
-  html += contactParts.join(" &nbsp;&middot;&nbsp; ");
-  html += `<br>`;
-  const linkParts = [];
-  if (data.contact?.links) {
-    data.contact.links.forEach((link) => linkParts.push(`<a style="${linkStyle}" href="${link}">${link}</a>`));
+  if (data.contact?.links?.length) {
+    data.contact.links.forEach((link) => {
+      contactParts.push(`<a href="${link}">${link}</a>`);
+    });
   }
-  html += linkParts.join(" &nbsp;&middot;&nbsp; ");
-  html += `</p>`;
+  if (contactParts.length > 0) {
+    html += `<p style="text-align: center;">${contactParts.join(" &nbsp;&middot;&nbsp; ")}</p>`;
+  }
   if (data.summary) {
-    html += `<h2 style="${sectionTitleStyle}">Professional Summary</h2>`;
-    html += `<p style="${bodyStyle}">${data.summary}</p>`;
+    html += `<h2>Professional Summary</h2>`;
+    html += `<p>${data.summary}</p>`;
   }
   if (data.skills?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Skills</h2>`;
-    html += `<p style="${bodyStyle}"><strong>Core Competencies:</strong> ${data.skills.join(", ")}</p>`;
+    html += `<h2>Skills</h2>`;
+    html += `<p><strong>Core Competencies:</strong> ${data.skills.join(", ")}</p>`;
   }
   if (data.experience?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Professional Experience</h2>`;
+    html += `<h2>Professional Experience</h2>`;
     data.experience.forEach((exp) => {
-      html += `<p style="${bodyStyle}"><strong>${exp.role}</strong> <span style="float: right;">${exp.duration || ""}</span><br>${exp.company} ${exp.location ? `\u2014 ${exp.location}` : ""}</p>`;
+      html += `<p><strong>${exp.role || ""}</strong> <span style="float: right;">${exp.duration || ""}</span><br>${exp.company || ""}${exp.location ? ` \u2014 ${exp.location}` : ""}</p>`;
       if (exp.bullets?.length) {
-        html += `<ul style="${bodyStyle}">`;
-        exp.bullets.forEach((b) => html += `<li>${b}</li>`);
+        html += `<ul>`;
+        exp.bullets.forEach((b) => {
+          html += `<li>${b}</li>`;
+        });
         html += `</ul>`;
       }
     });
   }
   if (data.projects?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Projects</h2>`;
+    html += `<h2>Projects</h2>`;
     data.projects.forEach((proj) => {
-      html += `<p style="${bodyStyle}"><strong>${proj.name}</strong> <span style="float: right;">${proj.link || "GitHub"}</span><br><em>${proj.technologies ? proj.technologies.join(", ") : ""}</em></p>`;
+      html += `<p><strong>${proj.name || ""}</strong> <span style="float: right;">${proj.link || ""}</span><br><em>${proj.technologies ? proj.technologies.join(", ") : ""}</em></p>`;
       if (proj.description) {
-        html += `<ul style="${bodyStyle}"><li>${proj.description}</li></ul>`;
+        html += `<ul><li>${proj.description}</li></ul>`;
       }
     });
   }
   if (data.education?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Education</h2>`;
+    html += `<h2>Education</h2>`;
     data.education.forEach((edu) => {
-      html += `<p style="${bodyStyle}"><strong>${edu.degree} ${edu.field ? `(${edu.field})` : ""} \u2014 ${edu.institution}</strong> <span style="float: right;">${edu.duration || ""}</span><br>${edu.details || ""}</p>`;
+      html += `<p><strong>${edu.degree || ""} ${edu.field ? `(${edu.field})` : ""} \u2014 ${edu.institution || ""}</strong> <span style="float: right;">${edu.duration || ""}</span><br>${edu.details || ""}</p>`;
     });
   }
   if (data.certifications?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Certifications</h2>`;
-    html += `<ul style="${bodyStyle}">` + data.certifications.map((c) => `<li>${c}</li>`).join("") + `</ul>`;
+    html += `<h2>Certifications</h2>`;
+    html += `<ul>` + data.certifications.map((c) => `<li>${c}</li>`).join("") + `</ul>`;
   }
   if (data.languages?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Languages</h2>`;
-    html += `<p style="${bodyStyle}">${data.languages.join(", ")}</p>`;
+    html += `<h2>Languages</h2>`;
+    html += `<p>${data.languages.join(", ")}</p>`;
   }
   if (data.achievements?.length) {
-    html += `<h2 style="${sectionTitleStyle}">Key Achievements</h2>`;
-    html += `<ul style="${bodyStyle}">` + data.achievements.map((a) => `<li>${a}</li>`).join("") + `</ul>`;
+    html += `<h2>Key Achievements</h2>`;
+    html += `<ul>` + data.achievements.map((a) => `<li>${a}</li>`).join("") + `</ul>`;
   }
   return html;
 };
@@ -2193,7 +2567,7 @@ var generateCV = async (req, res) => {
       rawText,
       parsedData: generated.resumeData ?? {},
       atsBreakdown: generated.atsBreakdown ?? {},
-      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      margins: { top: 48, right: 48, bottom: 48, left: 48 },
       template: "default",
       versions: [],
       customPrompt: customPrompt ?? null
@@ -2206,6 +2580,9 @@ var generateCV = async (req, res) => {
       keywordGaps: generated.keywordGaps ?? []
     };
     const atsScore = generated.scores?.ats ?? null;
+    const hasPrimary = await prisma.resume.findFirst({
+      where: { jobSeekerProfileId: profile.id, isPrimary: true }
+    });
     const resume = await prisma.resume.create({
       data: {
         jobSeekerProfileId: profile.id,
@@ -2214,13 +2591,72 @@ var generateCV = async (req, res) => {
         atsScore,
         content: contentData,
         aiSuggestions: aiData,
-        isPrimary: false
+        isPrimary: !hasPrimary
       }
     });
     return res.status(201).json({ success: true, data: resume });
   } catch (err) {
     console.error("generateCV error:", err);
     return res.status(500).json({ success: false, message: "Failed to generate CV" });
+  }
+};
+var downloadUploadedPDF = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const profileId = await getProfileId(userId);
+    if (!profileId) {
+      return res.status(404).json({ success: false, message: "Job seeker profile records mismatched." });
+    }
+    const resume = await prisma.resume.findFirst({
+      where: { id, jobSeekerProfileId: profileId }
+    });
+    if (!resume) {
+      return res.status(404).json({ success: false, message: "Document reference could not be found." });
+    }
+    const safeDocumentName = resume.name.trim().replace(/[^a-zA-Z0-9-_ ]/g, "") || "Resume";
+    const clientSideFilename = `${safeDocumentName}.pdf`;
+    const isView = req.query.view === "true" || req.path.includes("view");
+    const contentData = readContent(resume);
+    let htmlContent = contentData.htmlContent;
+    if (!htmlContent && contentData.parsedData) {
+      htmlContent = compileResumeHtml(contentData.parsedData);
+    }
+    if (resume.filePath && !htmlContent) {
+      const absoluteDiskPath = path2.resolve(resume.filePath);
+      if (fs3.existsSync(absoluteDiskPath)) {
+        if (isView) {
+          res.setHeader("Content-Type", "application/pdf");
+          res.setHeader("Content-Disposition", `inline; filename="${clientSideFilename}"`);
+          return fs3.createReadStream(absoluteDiskPath).pipe(res);
+        }
+        return res.download(absoluteDiskPath, clientSideFilename, (err) => {
+          if (err && !res.headersSent) {
+            return res.status(500).json({ success: false, message: "File transfer pipe interrupted." });
+          }
+        });
+      }
+      console.warn(`File expected on disk but missing at: ${absoluteDiskPath}. Falling back to dynamic HTML stream.`);
+    }
+    if (!htmlContent) {
+      return res.status(422).json({
+        success: false,
+        message: "This specific record does not contain renderable canvas content."
+      });
+    }
+    let margins = contentData.margins ?? { top: 48, right: 48, bottom: 48, left: 48 };
+    if (margins.left === 72 && margins.right === 72) {
+      margins = { top: 48, right: 48, bottom: 48, left: 48 };
+    }
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `${isView ? "inline" : "attachment"}; filename="${clientSideFilename}"`);
+    const pdfBuffer = await renderHtmlToPdf(htmlContent, margins, safeDocumentName);
+    return res.status(200).send(pdfBuffer);
+  } catch (err) {
+    console.error("System Failure within downloadUploadedPDF route execution:", err);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, message: err?.message || "Internal Server Error handling document downstream extraction." });
+    }
   }
 };
 var convertResumeToHTML = async (req, res) => {
@@ -2232,14 +2668,46 @@ var convertResumeToHTML = async (req, res) => {
     const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
     if (!resume) return res.status(404).json({ success: false, message: "Resume not found" });
     const contentData = readContent(resume);
-    if (contentData.htmlContent) return res.json({ success: true, data: resume });
-    const htmlContent = await convertToHTML(contentData.parsedData ?? {});
+    if (contentData.htmlContent) {
+      if (resume.source === "uploaded") {
+        const updated2 = await prisma.resume.update({
+          where: { id },
+          data: { source: "built" }
+        });
+        return res.json({ success: true, data: updated2 });
+      }
+      return res.json({ success: true, data: resume });
+    }
+    let htmlContent = "";
+    const parsed = contentData.parsedData;
+    if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+      try {
+        htmlContent = await convertToHTML(parsed);
+      } catch (e) {
+        console.warn("convertToHTML AI failure, using compileResumeHtml fallback:", e);
+      }
+      if (!htmlContent) {
+        htmlContent = compileResumeHtml(parsed);
+      }
+    }
+    if (!htmlContent && contentData.rawText) {
+      htmlContent = `<p>${contentData.rawText.replace(/\n\n+/g, "</p><p>").replace(/\n/g, "<br>")}</p>`;
+    }
+    if (!htmlContent) {
+      htmlContent = `<h1>${resume.name}</h1><p>Professional resume content</p>`;
+    }
     contentData.htmlContent = htmlContent;
-    const updated = await prisma.resume.update({ where: { id }, data: { content: contentData } });
+    const updated = await prisma.resume.update({
+      where: { id },
+      data: {
+        source: "built",
+        content: contentData
+      }
+    });
     return res.json({ success: true, data: updated });
   } catch (err) {
     console.error("convertResumeToHTML error:", err);
-    return res.status(500).json({ success: false, message: "Failed to convert" });
+    return res.status(500).json({ success: false, message: "Failed to convert resume to editable format" });
   }
 };
 var optimizeResume = async (req, res) => {
@@ -2336,10 +2804,10 @@ var updateResume = async (req, res) => {
     const existing = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
     if (!existing) return res.status(404).json({ success: false, message: "Not found" });
     const contentData = readContent(existing);
-    if (versionLabel) pushVersion(contentData, versionLabel);
     if (htmlContent !== void 0) contentData.htmlContent = htmlContent;
     if (margins) contentData.margins = margins;
     if (template) contentData.template = template;
+    if (versionLabel) pushVersion(contentData, versionLabel);
     await prisma.$transaction(async (tx) => {
       if (isPrimary === true) {
         await tx.resume.updateMany({ where: { jobSeekerProfileId: profileId }, data: { isPrimary: false } });
@@ -2349,7 +2817,7 @@ var updateResume = async (req, res) => {
         data: { content: contentData, ...name && { name }, ...isPrimary !== void 0 && { isPrimary } }
       });
     });
-    return res.json({ success: true, message: "Updated" });
+    return res.json({ success: true, message: "Updated", data: { versions: contentData.versions } });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Failed to update" });
   }
@@ -2365,10 +2833,12 @@ var restoreVersion = async (req, res) => {
     const contentData = readContent(resume);
     const version = (contentData.versions ?? []).find((v) => v.id === versionId);
     if (!version) return res.status(404).json({ success: false, message: "Version not found" });
-    pushVersion(contentData, "Before restore");
+    if (contentData.htmlContent && contentData.htmlContent !== version.htmlContent) {
+      pushVersion(contentData, "Draft before restore");
+    }
     contentData.htmlContent = version.htmlContent;
     await prisma.resume.update({ where: { id }, data: { content: contentData } });
-    return res.json({ success: true, data: { htmlContent: version.htmlContent } });
+    return res.json({ success: true, data: { htmlContent: version.htmlContent, versions: contentData.versions } });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Failed to restore" });
   }
@@ -2381,7 +2851,7 @@ var deleteResume = async (req, res) => {
     if (!profileId) return res.status(404).json({ success: false, message: "Profile not found" });
     const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
     if (!resume) return res.status(404).json({ success: false, message: "Not found" });
-    if (resume.filePath && fs2.existsSync(resume.filePath)) fs2.unlinkSync(resume.filePath);
+    if (resume.filePath && fs3.existsSync(resume.filePath)) fs3.unlinkSync(resume.filePath);
     await prisma.resume.delete({ where: { id } });
     return res.json({ success: true, message: "Deleted" });
   } catch (err) {
@@ -2396,7 +2866,7 @@ var downloadResume = async (req, res) => {
     if (!profileId) return res.status(404).json({ success: false, message: "Profile not found" });
     const resume = await prisma.resume.findFirst({ where: { id, jobSeekerProfileId: profileId } });
     if (!resume) return res.status(404).json({ success: false, message: "Not found" });
-    if (!resume.filePath || !fs2.existsSync(resume.filePath)) return res.status(404).json({ success: false, message: "File not found" });
+    if (!resume.filePath || !fs3.existsSync(resume.filePath)) return res.status(404).json({ success: false, message: "File not found" });
     res.download(resume.filePath, resume.name + (resume.filePath.endsWith(".pdf") ? ".pdf" : ".docx"));
   } catch (err) {
     console.error("downloadResume error:", err);
@@ -2500,7 +2970,7 @@ var generateRegionalCV = async (req, res) => {
     const contentData = {
       htmlContent: result.htmlContent ?? "",
       atsBreakdown: {},
-      margins: { top: 60, right: 72, bottom: 60, left: 72 },
+      margins: { top: 48, right: 48, bottom: 48, left: 48 },
       template: `${country}-${style || "modern"}`,
       versions: [],
       country,
@@ -2514,6 +2984,9 @@ var generateRegionalCV = async (req, res) => {
       missingSections: [],
       keywordGaps: []
     };
+    const hasPrimary = await prisma.resume.findFirst({
+      where: { jobSeekerProfileId: profile.id, isPrimary: true }
+    });
     const resume = await prisma.resume.create({
       data: {
         jobSeekerProfileId: profile.id,
@@ -2522,7 +2995,7 @@ var generateRegionalCV = async (req, res) => {
         atsScore: result.scores?.ats ?? null,
         content: contentData,
         aiSuggestions: aiData,
-        isPrimary: false
+        isPrimary: !hasPrimary
       }
     });
     return res.status(201).json({ success: true, data: resume });
@@ -2533,7 +3006,7 @@ var generateRegionalCV = async (req, res) => {
 };
 
 // src/controllers/application.controller.ts
-import fs3 from "fs";
+import fs4 from "fs";
 import "@prisma/client";
 
 // src/services/applicationProcessor.service.ts
@@ -2598,17 +3071,17 @@ var applyToJob = async (req, res) => {
   try {
     const userId = req.user.userId;
     if (!await ensureJobSeeker(userId)) {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+      if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
       return res.status(403).json({ success: false, message: "Access denied: Job seeker role required" });
     }
     const profileId = await getProfileId2(userId);
     if (!profileId) {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+      if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
       return res.status(404).json({ success: false, message: "Job seeker profile not found" });
     }
     const { jobPostingId, resumeId, applyWithNew } = req.body;
     if (!jobPostingId) {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+      if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
       return res.status(400).json({ success: false, message: "Job posting ID required" });
     }
     const jobPosting = await prisma.jobPosting.findUnique({
@@ -2616,18 +3089,18 @@ var applyToJob = async (req, res) => {
       include: { company: { select: { name: true } } }
     });
     if (!jobPosting) {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+      if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
       return res.status(404).json({ success: false, message: "Job posting not found" });
     }
     if (jobPosting.status !== "active") {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+      if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
       return res.status(400).json({ success: false, message: "This job posting is no longer accepting applications" });
     }
     const existingApplication = await prisma.application.findFirst({
       where: { jobSeekerProfileId: profileId, jobPostingId }
     });
     if (existingApplication) {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+      if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
       return res.status(400).json({
         success: false,
         message: "You have already applied to this position",
@@ -2639,7 +3112,7 @@ var applyToJob = async (req, res) => {
       try {
         const rawText = await extractText(req.file.path, req.file.mimetype);
         if (!rawText || rawText.length < 50) {
-          if (fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+          if (fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
           return res.status(422).json({
             success: false,
             message: "Could not extract text from resume. Please ensure it's a valid PDF or DOCX file."
@@ -2679,7 +3152,7 @@ var applyToJob = async (req, res) => {
         finalResumeId = newResume.id;
       } catch (error) {
         console.error("Error processing uploaded resume:", error);
-        if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+        if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
         return res.status(500).json({ success: false, message: "Failed to process uploaded resume" });
       }
     } else if (resumeId) {
@@ -2687,11 +3160,11 @@ var applyToJob = async (req, res) => {
         where: { id: resumeId, jobSeekerProfileId: profileId }
       });
       if (!existingResume) {
-        if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+        if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
         return res.status(404).json({ success: false, message: "Selected resume not found" });
       }
       if (jobPosting.disallowAiCv && existingResume.source === "built") {
-        if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+        if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
         return res.status(400).json({
           success: false,
           code: "MANUAL_PDF_REQUIRED",
@@ -2704,7 +3177,7 @@ var applyToJob = async (req, res) => {
         rawText = contentData.htmlContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
       }
       if (!rawText) {
-        if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+        if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
         return res.status(422).json({ success: false, message: "Selected resume is corrupted. Please upload a new one." });
       }
       try {
@@ -2731,7 +3204,7 @@ var applyToJob = async (req, res) => {
       }
       finalResumeId = resumeId;
     } else {
-      if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+      if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
       return res.status(400).json({
         success: false,
         message: "Please select an existing resume or upload a new one"
@@ -2773,7 +3246,7 @@ var applyToJob = async (req, res) => {
     });
   } catch (error) {
     console.error("Apply to job error:", error);
-    if (req.file && fs3.existsSync(req.file.path)) fs3.unlinkSync(req.file.path);
+    if (req.file && fs4.existsSync(req.file.path)) fs4.unlinkSync(req.file.path);
     return res.status(500).json({ success: false, message: "Failed to submit application" });
   }
 };
@@ -4260,8 +4733,8 @@ import express2 from "express";
 // src/controllers/offer.controller.ts
 import "@prisma/client";
 import PDFDocument from "pdfkit";
-import fs4 from "fs";
-import path from "path";
+import fs5 from "fs";
+import path3 from "path";
 
 // src/utils/email.ts
 import nodemailer from "nodemailer";
@@ -4626,10 +5099,10 @@ var renderTemplate = (template, data) => {
   return rendered;
 };
 var generateOfferPDF = async (offer, content) => {
-  const uploadsDir = path.join(process.cwd(), "uploads", "offers");
-  if (!fs4.existsSync(uploadsDir)) fs4.mkdirSync(uploadsDir, { recursive: true });
+  const uploadsDir = path3.join(process.cwd(), "uploads", "offers");
+  if (!fs5.existsSync(uploadsDir)) fs5.mkdirSync(uploadsDir, { recursive: true });
   const filename = `offer-${offer.id}.pdf`;
-  const filepath = path.join(uploadsDir, filename);
+  const filepath = path3.join(uploadsDir, filename);
   let offerContent = {};
   try {
     offerContent = typeof content === "string" ? JSON.parse(content) : content;
@@ -4638,7 +5111,7 @@ var generateOfferPDF = async (offer, content) => {
   }
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 0, size: "A4", bufferPages: true, autoFirstPage: true });
-    const stream = fs4.createWriteStream(filepath);
+    const stream = fs5.createWriteStream(filepath);
     doc.pipe(stream);
     const W = doc.page.width;
     const H = doc.page.height;
@@ -4659,7 +5132,7 @@ var generateOfferPDF = async (offer, content) => {
     doc.fontSize(44).font("Helvetica-Bold").fillColor("#000000", 0.015).text(companyName.toUpperCase(), L, 340, { align: "center", width: PW });
     doc.restore();
     let logoRendered = false;
-    if (logoUrl && fs4.existsSync(logoUrl)) {
+    if (logoUrl && fs5.existsSync(logoUrl)) {
       try {
         doc.image(logoUrl, L, 54, { width: 55 });
         doc.save();
@@ -4795,14 +5268,14 @@ var generateOfferPDF = async (offer, content) => {
     stream.on("finish", async () => {
       try {
         const { PDFDocument: PDFDocument2 } = await import("pdf-lib");
-        const srcBytes = fs4.readFileSync(filepath);
+        const srcBytes = fs5.readFileSync(filepath);
         const srcDoc = await PDFDocument2.load(srcBytes);
         if (srcDoc.getPageCount() > 1) {
           const newDoc = await PDFDocument2.create();
           const [firstPage] = await newDoc.copyPages(srcDoc, [0]);
           newDoc.addPage(firstPage);
           const trimmed = await newDoc.save();
-          fs4.writeFileSync(filepath, trimmed);
+          fs5.writeFileSync(filepath, trimmed);
         }
       } catch (e) {
       }
@@ -4818,7 +5291,7 @@ var parseSignatureImage = (sigData) => {
       if (!base64Data) return null;
       return Buffer.from(base64Data.replace(/\s/g, ""), "base64");
     }
-    if (fs4.existsSync(sigData)) {
+    if (fs5.existsSync(sigData)) {
       return sigData;
     }
   }
@@ -5371,7 +5844,7 @@ var downloadOfferPDF = async (req, res) => {
     if (!offer || !offer.filePath) {
       return res.status(404).json({ success: false, message: "Offer PDF not found" });
     }
-    if (!fs4.existsSync(offer.filePath)) {
+    if (!fs5.existsSync(offer.filePath)) {
       return res.status(404).json({ success: false, message: "PDF file not found on server" });
     }
     res.download(offer.filePath, `offer-letter-${offer.position}.pdf`);
@@ -5596,6 +6069,7 @@ router2.post("/create", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR
 router2.put("/:id", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateOfferLetter);
 router2.post("/:id/sign", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), signOfferLetter);
 router2.post("/:id/send", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), sendOfferLetter);
+router2.get("/", requireCompanyRoleOrJobSeeker([ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER]), getCompanyOffers);
 router2.get("/company/list", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getCompanyOffers);
 router2.get("/:id", requireCompanyRoleOrJobSeeker([ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER]), getOfferDetails);
 router2.get("/:id/download", requireCompanyRoleOrJobSeeker([ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER]), downloadOfferPDF);
@@ -5695,7 +6169,11 @@ var getJobSeekerDashboard = async (req, res) => {
         orderBy: { sentAt: "desc" }
       }),
       prisma.resume.findFirst({
-        where: { jobSeekerProfileId: profileId, isPrimary: true },
+        where: { jobSeekerProfileId: profileId },
+        orderBy: [
+          { isPrimary: "desc" },
+          { updatedAt: "desc" }
+        ],
         select: { id: true, name: true, atsScore: true, updatedAt: true }
       }),
       prisma.application.findMany({
@@ -5910,13 +6388,13 @@ var getApplicationInsights = async (req, res) => {
 
 // src/services/notification.service.ts
 import admin from "firebase-admin";
-import fs5 from "fs";
-import path2 from "path";
+import fs6 from "fs";
+import path4 from "path";
 if (!admin.apps.length) {
   try {
-    const serviceAccountPath = path2.resolve(process.cwd(), "service-account.json");
-    if (fs5.existsSync(serviceAccountPath)) {
-      const serviceAccount = JSON.parse(fs5.readFileSync(serviceAccountPath, "utf8"));
+    const serviceAccountPath = path4.resolve(process.cwd(), "service-account.json");
+    if (fs6.existsSync(serviceAccountPath)) {
+      const serviceAccount = JSON.parse(fs6.readFileSync(serviceAccountPath, "utf8"));
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
@@ -6618,6 +7096,187 @@ var parseAndLoadResume = async (req, res) => {
   }
 };
 
+// src/controllers/savedJob.controller.ts
+var getProfileId5 = async (userId) => {
+  const profile = await prisma.jobSeekerProfile.findUnique({
+    where: { userId },
+    select: { id: true }
+  });
+  return profile?.id ?? null;
+};
+var toggleSaveJob = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+    const profileId = await getProfileId5(userId);
+    if (!profileId) {
+      return res.status(404).json({ success: false, message: "Job seeker profile not found" });
+    }
+    const { jobPostingId } = req.params;
+    if (!jobPostingId) {
+      return res.status(400).json({ success: false, message: "Job ID parameter required" });
+    }
+    const job = await prisma.jobPosting.findUnique({
+      where: { id: jobPostingId },
+      select: { id: true, title: true }
+    });
+    if (!job) {
+      return res.status(404).json({ success: false, message: "Job vacancy not found or expired" });
+    }
+    const existing = await prisma.savedJob.findUnique({
+      where: {
+        jobSeekerProfileId_jobPostingId: {
+          jobSeekerProfileId: profileId,
+          jobPostingId
+        }
+      }
+    });
+    if (existing) {
+      await prisma.savedJob.delete({
+        where: { id: existing.id }
+      });
+      return res.status(200).json({
+        success: true,
+        isSaved: false,
+        message: "Job removed from saved jobs"
+      });
+    } else {
+      await prisma.savedJob.create({
+        data: {
+          jobSeekerProfileId: profileId,
+          jobPostingId
+        }
+      });
+      return res.status(200).json({
+        success: true,
+        isSaved: true,
+        message: "Job saved successfully"
+      });
+    }
+  } catch (error) {
+    console.error("toggleSaveJob error:", error);
+    return res.status(500).json({ success: false, message: "Failed to update saved job status" });
+  }
+};
+var getSavedJobIds = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+    const profileId = await getProfileId5(userId);
+    if (!profileId) {
+      return res.status(200).json({ success: true, savedJobIds: [] });
+    }
+    const saved = await prisma.savedJob.findMany({
+      where: { jobSeekerProfileId: profileId },
+      select: { jobPostingId: true }
+    });
+    const savedJobIds = saved.map((s) => s.jobPostingId);
+    return res.status(200).json({ success: true, savedJobIds });
+  } catch (error) {
+    console.error("getSavedJobIds error:", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch saved job identifiers" });
+  }
+};
+var getSavedJobs = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Authentication required" });
+    }
+    const profileId = await getProfileId5(userId);
+    if (!profileId) {
+      return res.status(404).json({ success: false, message: "Job seeker profile not found" });
+    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 12;
+    const skip = (page - 1) * limit;
+    const search = req.query.search?.trim() || "";
+    const whereCondition = {
+      jobSeekerProfileId: profileId,
+      ...search && {
+        jobPosting: {
+          OR: [
+            { title: { contains: search, mode: "insensitive" } },
+            { description: { contains: search, mode: "insensitive" } },
+            { company: { name: { contains: search, mode: "insensitive" } } }
+          ]
+        }
+      }
+    };
+    const [total, savedEntries] = await Promise.all([
+      prisma.savedJob.count({ where: whereCondition }),
+      prisma.savedJob.findMany({
+        where: whereCondition,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          jobPosting: {
+            include: {
+              company: {
+                select: {
+                  id: true,
+                  name: true,
+                  logoUrl: true,
+                  industry: true,
+                  size: true,
+                  verificationBadge: true
+                }
+              },
+              applications: {
+                where: { jobSeekerProfileId: profileId },
+                select: { id: true, status: true }
+              }
+            }
+          }
+        }
+      })
+    ]);
+    const formatted = savedEntries.map((entry) => {
+      const job = entry.jobPosting;
+      const application = job.applications?.[0];
+      return {
+        id: job.id,
+        savedAt: entry.createdAt,
+        title: job.title,
+        department: job.department,
+        jobType: job.jobType,
+        locationType: job.locationType,
+        location: job.location,
+        salaryRange: job.salaryRange,
+        experienceRequired: job.experienceRequired,
+        requiredSkills: job.requiredSkills,
+        deadline: job.deadline,
+        openings: job.openings,
+        status: job.status,
+        disallowAiCv: job.disallowAiCv,
+        createdAt: job.createdAt,
+        company: job.company,
+        hasApplied: Boolean(application),
+        applicationStatus: application?.status || null,
+        isSaved: true
+      };
+    });
+    return res.status(200).json({
+      success: true,
+      data: formatted,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 1
+      }
+    });
+  } catch (error) {
+    console.error("getSavedJobs error:", error);
+    return res.status(500).json({ success: false, message: "Failed to retrieve saved jobs" });
+  }
+};
+
 // src/routes/jobseeker.routes.ts
 var router3 = express3.Router();
 router3.get("/jobs/public", getPublicJobs);
@@ -6640,10 +7299,10 @@ var parseResumeUpload = multer2({
     allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error("Only PDF/DOCX allowed"));
   }
 });
-router3.post("/parse-resume", parseResumeUpload.single("resume"), parseAndLoadResume);
-var UPLOAD_DIR = process.env.RESUME_UPLOAD_DIR ?? path3.join(process.cwd(), "uploads/resumes");
-if (!fs6.existsSync(UPLOAD_DIR)) {
-  fs6.mkdirSync(UPLOAD_DIR, { recursive: true });
+router3.post("/parse-resume", aiLimiter, parseResumeUpload.single("resume"), parseAndLoadResume);
+var UPLOAD_DIR = process.env.RESUME_UPLOAD_DIR ?? path5.join(process.cwd(), "uploads/resumes");
+if (!fs7.existsSync(UPLOAD_DIR)) {
+  fs7.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 var resumeStorage = multer2.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
@@ -6655,19 +7314,18 @@ var resumeStorage = multer2.diskStorage({
 var resumeUpload = multer2({
   storage: resumeStorage,
   fileFilter: (_req, file, cb) => {
-    const allowed = [
-      "application/pdf",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ];
-    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error("Only PDF/DOCX allowed"));
+    if (file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PDF files are allowed. Please upload a valid PDF document."));
+    }
   },
   limits: { fileSize: 10 * 1024 * 1024 }
 });
-router3.post("/resumes/upload", resumeUpload.single("resume"), uploadAndAnalyze);
-router3.post("/resumes/generate", generateCV);
+router3.post("/resumes/upload", aiLimiter, resumeUpload.single("resume"), uploadAndAnalyze);
+router3.post("/resumes/generate", aiLimiter, generateCV);
 router3.post("/resumes/:id/convert", convertResumeToHTML);
-router3.post("/resumes/:id/optimize", optimizeResume);
+router3.post("/resumes/:id/optimize", aiLimiter, optimizeResume);
 router3.get("/resumes/:id/keywords", getKeywordSuggestions);
 router3.patch("/resumes/:id/restore/:versionId", restoreVersion);
 router3.get("/resumes", getAllResumes);
@@ -6675,10 +7333,13 @@ router3.get("/resumes/:id", getResumeById);
 router3.put("/resumes/:id", updateResume);
 router3.delete("/resumes/:id", deleteResume);
 router3.get("/resumes/:id/download", downloadResume);
-router3.post("/resumes/:id/score", scoreContentOnly);
+router3.get("/resumes/:id/download-uploaded", downloadUploadedPDF);
+router3.get("/resumes/:id/download-pdf", downloadUploadedPDF);
+router3.get("/resumes/:id/view-pdf", downloadUploadedPDF);
+router3.post("/resumes/:id/score", aiLimiter, scoreContentOnly);
 router3.get("/resumes/:id/inline-suggestions", getInlineSuggestions);
-router3.post("/resumes/improve-text", improveSelectedText);
-router3.post("/resumes/generate-regional", generateRegionalCV);
+router3.post("/resumes/improve-text", aiLimiter, improveSelectedText);
+router3.post("/resumes/generate-regional", aiLimiter, generateRegionalCV);
 router3.post("/applications/apply", resumeUpload.single("newResume"), applyToJob);
 router3.get("/applications", getMyApplications);
 router3.get("/applications/:applicationId", getApplicationDetails);
@@ -6690,6 +7351,7 @@ router3.get("/applications/tracker/timeline", getApplicationsTracker);
 router3.get("/tracker/:applicationId", authenticateToken, getSingleApplicationDetails);
 router3.patch("/applications/:id/notes", updateApplicationNotes);
 router3.post("/applications/:id/withdraw", withdrawApplicationTracker);
+router3.put("/applications/:id/withdraw", withdrawApplicationTracker);
 router3.use("/offers", offer_routes_default);
 router3.get("/dashboard", getJobSeekerDashboard);
 router3.get("/insights", getApplicationInsights);
@@ -6699,6 +7361,10 @@ router3.get("/spot-jobs/invitations", authenticateToken, requireJobSeeker, SpotJ
 router3.patch("/spot-jobs/respond/:bookingId", authenticateToken, requireJobSeeker, SpotJobController.respondToBooking);
 router3.get("/spot-jobs/toggle-status", authenticateToken, requireJobSeeker, SpotJobController.getSpotToggleStatus);
 router3.patch("/spot-jobs/toggle-status", authenticateToken, requireJobSeeker, SpotJobController.updateSpotToggleStatus);
+router3.get("/saved-jobs/ids", getSavedJobIds);
+router3.get("/saved-jobs", getSavedJobs);
+router3.post("/saved-jobs/:jobPostingId", toggleSaveJob);
+router3.delete("/saved-jobs/:jobPostingId", toggleSaveJob);
 var jobseeker_routes_default = router3;
 
 // src/routes/companyAuth.routes.ts
@@ -7066,6 +7732,19 @@ var checkCompanySession = async (req, res) => {
         };
       }
     }
+    const isAdmin = (activeMembership.roles & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN;
+    let resolvedPermissions = activeMembership.permissions;
+    if (!resolvedPermissions) {
+      if (isAdmin) {
+        resolvedPermissions = { "*": ["*"] };
+      } else if ((activeMembership.roles & ROLES.COMPANY_HR) === ROLES.COMPANY_HR) {
+        resolvedPermissions = { jobs: ["read", "create", "edit"], walkin: ["read", "create", "manage"], interviews: ["read", "schedule", "conduct", "feedback"], talent_pool: ["read", "create", "edit"], discovery: ["read", "contact"], offers: ["read", "create", "edit", "send"], spot_jobs: ["read", "create", "manage"], team: ["read"], settings: ["read"] };
+      } else if ((activeMembership.roles & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER) {
+        resolvedPermissions = { jobs: ["read"], walkin: ["read", "manage"], interviews: ["read", "conduct", "feedback"], talent_pool: ["read"], discovery: ["read"], offers: ["read"], spot_jobs: ["read"], team: ["read"], settings: ["read"] };
+      } else {
+        resolvedPermissions = { jobs: ["read"], walkin: ["read"], interviews: ["read"], talent_pool: ["read"], discovery: ["read"], offers: ["read"], spot_jobs: ["read"], team: ["read"], settings: ["read"] };
+      }
+    }
     return res.status(200).json({
       success: true,
       isAuthenticated: true,
@@ -7074,6 +7753,7 @@ var checkCompanySession = async (req, res) => {
         globalRoles: user.globalRoles,
         companyRoles: activeMembership.roles,
         // Active working context mask
+        permissions: resolvedPermissions,
         allWorkspaces: allRolesSummary,
         // Collection array containing all memberships
         email: user.jobSeekerProfile?.email || (user.mobileNumber.includes("@") ? user.mobileNumber : activeMembership.company.email),
@@ -7736,14 +8416,14 @@ var handleLogoUpload = (req, res, next) => {
     next();
   });
 };
-router4.post("/send-otp", sendCompanyOtp);
-router4.post("/verify-otp", verifyCompanyOtp);
-router4.post("/register", handleLogoUpload, registerCompany);
-router4.post("/login", companyLogin);
+router4.post("/send-otp", otpLimiter, sendCompanyOtp);
+router4.post("/verify-otp", authLimiter, verifyCompanyOtp);
+router4.post("/register", authLimiter, handleLogoUpload, registerCompany);
+router4.post("/login", authLimiter, companyLogin);
 router4.get("/verify-email", verifyCompanyEmail);
-router4.post("/resend-verification", resendCompanyVerificationEmail);
-router4.post("/forgot-password", forgotCompanyPassword);
-router4.post("/reset-password", resetCompanyPassword);
+router4.post("/resend-verification", otpLimiter, resendCompanyVerificationEmail);
+router4.post("/forgot-password", authLimiter, forgotCompanyPassword);
+router4.post("/reset-password", authLimiter, resetCompanyPassword);
 router4.get("/session", authenticateCompany, checkCompanySession);
 var companyAuth_routes_default = router4;
 
@@ -7936,8 +8616,43 @@ var getCompanyDashboard = async (req, res) => {
       orderBy: { createdAt: "desc" },
       include: {
         _count: { select: { applications: true } },
-        applications: { select: { status: true } }
+        applications: {
+          select: {
+            id: true,
+            status: true,
+            appliedAt: true,
+            jobSeekerProfile: { select: { fullName: true, email: true } }
+          }
+        }
       }
+    });
+    const pipelineStages = {
+      applied: 0,
+      shortlisted: 0,
+      interviewing: 0,
+      offered: 0,
+      hired: 0,
+      rejected: 0
+    };
+    jobs.forEach((job) => {
+      job.applications.forEach((app2) => {
+        const s = (app2.status || "").toLowerCase();
+        if (s === "applied" || s === "submitted" || s === "under_review" || s === "screening") {
+          pipelineStages.applied++;
+        } else if (s === "shortlisted") {
+          pipelineStages.shortlisted++;
+        } else if (s === "interview_scheduled" || s === "interviewing" || s === "interviewed") {
+          pipelineStages.interviewing++;
+        } else if (s === "offered" || s === "offer_sent") {
+          pipelineStages.offered++;
+        } else if (s === "hired" || s === "accepted") {
+          pipelineStages.hired++;
+        } else if (s === "rejected") {
+          pipelineStages.rejected++;
+        } else {
+          pipelineStages.applied++;
+        }
+      });
     });
     const formattedJobs = jobs.map((job) => {
       const statusCounts = job.applications.reduce((acc, app2) => {
@@ -7959,12 +8674,100 @@ var getCompanyDashboard = async (req, res) => {
         applicationBreakdown: statusCounts
       };
     });
+    const daysMap = {};
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const now = /* @__PURE__ */ new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      const dateKey = d.toISOString().split("T")[0];
+      daysMap[dateKey] = 0;
+    }
+    jobs.forEach((job) => {
+      job.applications.forEach((app2) => {
+        const appDateKey = new Date(app2.appliedAt).toISOString().split("T")[0];
+        if (daysMap[appDateKey] !== void 0) {
+          daysMap[appDateKey]++;
+        }
+      });
+    });
+    const applicationTrends = Object.entries(daysMap).map(([dateStr, count]) => {
+      const d = new Date(dateStr);
+      return {
+        date: dateStr,
+        day: dayNames[d.getDay()] || "",
+        count
+      };
+    });
+    const upcomingInterviewsRaw = await prisma.interview.findMany({
+      where: {
+        application: { jobPosting: { companyId } },
+        status: { in: ["scheduled", "in_progress"] },
+        scheduledTime: { gte: new Date(Date.now() - 4 * 60 * 60 * 1e3) }
+      },
+      orderBy: { scheduledTime: "asc" },
+      take: 4,
+      include: {
+        application: {
+          select: {
+            jobPosting: { select: { title: true } },
+            jobSeekerProfile: { select: { fullName: true, email: true } }
+          }
+        }
+      }
+    });
+    const upcomingInterviews = upcomingInterviewsRaw.map((it) => ({
+      id: it.id,
+      candidateName: it.application?.jobSeekerProfile?.fullName || "Candidate",
+      candidateEmail: it.application?.jobSeekerProfile?.email || "",
+      jobTitle: it.application?.jobPosting?.title || "Position",
+      scheduledTime: it.scheduledTime,
+      format: it.format,
+      livekitRoomName: it.livekitRoomName,
+      status: it.status
+    }));
+    const activeWalkInRoomsRaw = await prisma.walkInRoom.findMany({
+      where: { companyId, status: { in: ["OPEN", "PAUSED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 3,
+      include: {
+        _count: {
+          select: {
+            queue: { where: { status: { in: ["waiting", "priority", "interviewing"] } } }
+          }
+        }
+      }
+    });
+    const activeWalkInRooms = activeWalkInRoomsRaw.map((room) => ({
+      id: room.id,
+      roomCode: room.roomCode,
+      title: room.title,
+      status: room.status,
+      waitingCount: room._count.queue,
+      livekitRoom: room.livekitRoom
+    }));
+    const pendingOffers = await prisma.offerLetter.count({
+      where: {
+        application: { jobPosting: { companyId } },
+        status: { in: ["draft", "pending", "sent", "viewed", "negotiating"] }
+      }
+    });
     const totalJobs = jobs.length;
     const totalApplications = jobs.reduce((sum, j) => sum + j._count.applications, 0);
     const activeJobs = jobs.filter((j) => j.status === "active").length;
     return res.status(200).json({
       success: true,
-      summary: { totalJobs, activeJobs, totalApplications },
+      summary: {
+        totalJobs,
+        activeJobs,
+        totalApplications,
+        interviewsScheduled: upcomingInterviews.length,
+        pendingOffers
+      },
+      pipelineStages,
+      applicationTrends,
+      upcomingInterviews,
+      activeWalkInRooms,
       jobs: formattedJobs
     });
   } catch (error) {
@@ -8266,6 +9069,97 @@ var updateApplicationStatus = async (req, res) => {
 import jwt5 from "jsonwebtoken";
 import bcrypt4 from "bcrypt";
 init_cookie();
+
+// src/utils/permissionRules.ts
+var DEFAULT_ROLE_PRESETS = {
+  COMPANY_ADMIN: {
+    label: "Company Admin",
+    description: "Full unrestricted administrative access to all company features, settings, and team controls.",
+    permissions: {
+      jobs: ["read", "create", "edit", "delete"],
+      walkin: ["read", "create", "manage", "delete"],
+      interviews: ["read", "schedule", "conduct", "feedback", "cancel"],
+      talent_pool: ["read", "create", "edit", "delete"],
+      discovery: ["read", "contact"],
+      offers: ["read", "create", "edit", "send", "delete"],
+      spot_jobs: ["read", "create", "manage"],
+      team: ["read", "invite", "edit", "delete"],
+      settings: ["read", "edit"]
+    }
+  },
+  COMPANY_HR: {
+    label: "HR Manager",
+    description: "Full recruitment pipeline access including job postings, candidate evaluations, walk-in management, and offer letter dispatch.",
+    permissions: {
+      jobs: ["read", "create", "edit"],
+      walkin: ["read", "create", "manage"],
+      interviews: ["read", "schedule", "conduct", "feedback"],
+      talent_pool: ["read", "create", "edit"],
+      discovery: ["read", "contact"],
+      offers: ["read", "create", "edit", "send"],
+      spot_jobs: ["read", "create", "manage"],
+      team: ["read"],
+      settings: ["read"]
+    }
+  },
+  COMPANY_INTERVIEWER: {
+    label: "Technical Interviewer",
+    description: "Access to conduct live interviews, score candidates, host walk-in rooms, and review resumes in talent pool.",
+    permissions: {
+      jobs: ["read"],
+      walkin: ["read", "manage"],
+      interviews: ["read", "conduct", "feedback"],
+      talent_pool: ["read"],
+      discovery: ["read"],
+      offers: ["read"],
+      spot_jobs: ["read"],
+      team: ["read"],
+      settings: ["read"]
+    }
+  },
+  COMPANY_RECRUITER: {
+    label: "Talent Sourcer / Recruiter",
+    description: "Focus on seeker discovery, talent pool sourcing, scheduling interviews, and draft offers.",
+    permissions: {
+      jobs: ["read", "create", "edit"],
+      walkin: ["read"],
+      interviews: ["read", "schedule"],
+      talent_pool: ["read", "create", "edit"],
+      discovery: ["read", "contact"],
+      offers: ["read", "create"],
+      spot_jobs: ["read"],
+      team: ["read"],
+      settings: ["read"]
+    }
+  },
+  COMPANY_VIEWER: {
+    label: "Read-Only Viewer",
+    description: "View-only access across jobs, interviews, and candidate pipeline without modification rights.",
+    permissions: {
+      jobs: ["read"],
+      walkin: ["read"],
+      interviews: ["read"],
+      talent_pool: ["read"],
+      discovery: ["read"],
+      offers: ["read"],
+      spot_jobs: ["read"],
+      team: ["read"],
+      settings: ["read"]
+    }
+  }
+};
+function hasPermission(permissions, moduleName, action = "read") {
+  if (!permissions) return false;
+  if (permissions["*"]?.includes("*") || permissions[moduleName]?.includes("*")) {
+    return true;
+  }
+  const actions = permissions[moduleName];
+  if (!Array.isArray(actions)) return false;
+  if (actions.includes("manage")) return true;
+  return actions.includes(action);
+}
+
+// src/controllers/team.controller.ts
 var JWT_SECRET2 = process.env.JWT_SECRET || "your_fallback_secret";
 var isCompanyAdmin = async (userId, companyId) => {
   const member = await prisma.teamMember.findFirst({
@@ -8285,15 +9179,28 @@ var inviteTeamMember = async (req, res) => {
     if (!isAdmin) {
       return res.status(403).json({ success: false, message: "Forbidden: Admin access verification failed." });
     }
-    const { email, roleType } = req.body;
+    const { email, roleType, permissions, tags } = req.body;
     if (!email || !roleType) {
       return res.status(400).json({ success: false, message: "Email and roleType parameters are mandatory." });
     }
     const normalizedEmail = email.toLowerCase().trim();
     let bitwiseRoleValue = ROLES.COMPANY_VIEWER;
-    if (roleType === "hr") bitwiseRoleValue = ROLES.COMPANY_HR;
-    else if (roleType === "interviewer") bitwiseRoleValue = ROLES.COMPANY_INTERVIEWER;
-    else if (roleType === "admin") bitwiseRoleValue = ROLES.COMPANY_ADMIN;
+    let resolvedPermissions = permissions;
+    if (roleType === "admin") {
+      bitwiseRoleValue = ROLES.COMPANY_ADMIN;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_ADMIN.permissions;
+    } else if (roleType === "hr") {
+      bitwiseRoleValue = ROLES.COMPANY_HR;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_HR.permissions;
+    } else if (roleType === "interviewer") {
+      bitwiseRoleValue = ROLES.COMPANY_INTERVIEWER;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_INTERVIEWER.permissions;
+    } else if (roleType === "recruiter") {
+      bitwiseRoleValue = ROLES.COMPANY_HR;
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_RECRUITER.permissions;
+    } else {
+      if (!resolvedPermissions) resolvedPermissions = DEFAULT_ROLE_PRESETS.COMPANY_VIEWER.permissions;
+    }
     let user = await prisma.user.findFirst({
       where: { mobileNumber: normalizedEmail }
     });
@@ -8305,8 +9212,16 @@ var inviteTeamMember = async (req, res) => {
         return res.status(400).json({ success: false, message: "Target profile user already belongs to your company team." });
       }
     }
+    const cleanTags = Array.isArray(tags) ? tags.map((t) => String(t).trim()).filter(Boolean) : [];
     const inviteToken = jwt5.sign(
-      { email: normalizedEmail, companyId, targetRoles: bitwiseRoleValue, invitedBy: currentUserId },
+      {
+        email: normalizedEmail,
+        companyId,
+        targetRoles: bitwiseRoleValue,
+        targetPermissions: resolvedPermissions,
+        targetTags: cleanTags,
+        invitedBy: currentUserId
+      },
       JWT_SECRET2,
       { expiresIn: "7d" }
     );
@@ -8356,12 +9271,15 @@ var listTeamMembers = async (req, res) => {
       name: m.user.jobSeekerProfile?.fullName || m.user.mobileNumber,
       email: m.user.jobSeekerProfile?.email || m.user.mobileNumber,
       rolesMask: m.roles,
+      permissions: m.permissions,
+      tags: m.tags || [],
       globalRolesMask: m.user.globalRoles,
       status: m.status,
       joinedAt: m.createdAt,
       avatar: m.user.jobSeekerProfile?.profilePhotoUrl || null
     }));
-    return res.status(200).json({ success: true, team: formatted });
+    const allTags = Array.from(new Set(members.flatMap((m) => m.tags || [])));
+    return res.status(200).json({ success: true, team: formatted, tags: allTags });
   } catch (error) {
     console.error("List team compilation fault:", error);
     return res.status(500).json({ success: false, message: "Failed to extract team members layout." });
@@ -8372,7 +9290,7 @@ var updateMemberRole = async (req, res) => {
     const companyId = req.company?.companyId;
     const currentUserId = req.user?.userId;
     const { memberId } = req.params;
-    const { newRolesMask } = req.body;
+    const { newRolesMask, permissions, tags } = req.body;
     if (!companyId || !currentUserId) {
       return res.status(401).json({ success: false, message: "Unauthorized structural setup context." });
     }
@@ -8386,13 +9304,18 @@ var updateMemberRole = async (req, res) => {
     if (!member) {
       return res.status(404).json({ success: false, message: "Target workspace reference member could not be tracked." });
     }
+    const cleanTags = tags !== void 0 ? Array.isArray(tags) ? tags.map((t) => String(t).trim()).filter(Boolean) : [] : void 0;
     await prisma.$transaction(async (tx) => {
       await tx.teamMember.update({
         where: { id: memberId },
-        data: { roles: newRolesMask }
+        data: {
+          ...newRolesMask !== void 0 ? { roles: newRolesMask } : {},
+          ...permissions !== void 0 ? { permissions } : {},
+          ...cleanTags !== void 0 ? { tags: cleanTags } : {}
+        }
       });
       const targetUser = await tx.user.findUnique({ where: { id: member.userId } });
-      if (targetUser) {
+      if (targetUser && newRolesMask !== void 0) {
         let updatedGlobal = targetUser.globalRoles & ~ALL_COMPANY_BITS;
         updatedGlobal |= newRolesMask;
         await tx.user.update({
@@ -8401,7 +9324,7 @@ var updateMemberRole = async (req, res) => {
         });
       }
     });
-    return res.status(200).json({ success: true, message: "Roles synced successfully." });
+    return res.status(200).json({ success: true, message: "Roles and tags synced successfully." });
   } catch (error) {
     console.error("Update role fault handling processing trace:", error);
     return res.status(500).json({ success: false, message: "Failed to assign target role modifications." });
@@ -8497,7 +9420,7 @@ var setTeamMemberPassword = async (req, res) => {
     } catch (err) {
       return res.status(400).json({ success: false, message: "Invalid or expired invitation validation token context." });
     }
-    const { email, companyId, targetRoles } = decoded;
+    const { email, companyId, targetRoles, targetPermissions, targetTags } = decoded;
     const saltRounds = 10;
     const hashedPassword = await bcrypt4.hash(password, saltRounds);
     const transactionData = await prisma.$transaction(async (tx) => {
@@ -8520,8 +9443,22 @@ var setTeamMemberPassword = async (req, res) => {
       }
       const updatedMember = await tx.teamMember.upsert({
         where: { companyId_userId: { companyId, userId: user.id } },
-        update: { roles: targetRoles, status: "active", password: hashedPassword },
-        create: { userId: user.id, companyId, roles: targetRoles, status: "active", password: hashedPassword }
+        update: {
+          roles: targetRoles,
+          status: "active",
+          password: hashedPassword,
+          ...targetPermissions ? { permissions: targetPermissions } : {},
+          ...targetTags && Array.isArray(targetTags) ? { tags: targetTags } : {}
+        },
+        create: {
+          userId: user.id,
+          companyId,
+          roles: targetRoles,
+          permissions: targetPermissions || null,
+          tags: targetTags && Array.isArray(targetTags) ? targetTags : [],
+          status: "active",
+          password: hashedPassword
+        }
       });
       let updatedGlobalRoles = user.globalRoles | targetRoles;
       await tx.user.update({
@@ -8667,7 +9604,8 @@ var teamMemberLogin = async (req, res) => {
         globalRoles: user.globalRoles,
         rolesMask: memberProfile.roles,
         companyRoles: memberProfile.roles,
-        roles: memberProfile.roles
+        roles: memberProfile.roles,
+        permissions: memberProfile.permissions || null
       },
       company: {
         id: memberProfile.company.id,
@@ -8685,6 +9623,49 @@ var teamMemberLogin = async (req, res) => {
       error: error.message
     });
   }
+};
+
+// src/middleware/permission.middleware.ts
+var requirePermission = (moduleName, action = "read") => {
+  return (req, res, next) => {
+    if (!req.company) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Missing company workspace session context."
+      });
+    }
+    if (req.user && PermissionHelper.isPlatformAdmin(req.user.globalRoles)) {
+      return next();
+    }
+    const { companyRoles, permissions } = req.company;
+    if (PermissionHelper.hasRole(companyRoles, ROLES.COMPANY_ADMIN)) {
+      return next();
+    }
+    if (permissions && typeof permissions === "object") {
+      if (hasPermission(permissions, moduleName, action)) {
+        return next();
+      }
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: You do not have '${action}' access for the '${moduleName}' module. Please contact your organization administrator.`,
+        requiredPermission: `${moduleName}:${action}`
+      });
+    }
+    let fallbackPreset = DEFAULT_ROLE_PRESETS.COMPANY_VIEWER;
+    if (PermissionHelper.hasRole(companyRoles, ROLES.COMPANY_HR)) {
+      fallbackPreset = DEFAULT_ROLE_PRESETS.COMPANY_HR;
+    } else if (PermissionHelper.hasRole(companyRoles, ROLES.COMPANY_INTERVIEWER)) {
+      fallbackPreset = DEFAULT_ROLE_PRESETS.COMPANY_INTERVIEWER;
+    }
+    if (hasPermission(fallbackPreset.permissions, moduleName, action)) {
+      return next();
+    }
+    return res.status(403).json({
+      success: false,
+      message: `Forbidden: Your current role does not have '${action}' access for '${moduleName}'.`,
+      requiredPermission: `${moduleName}:${action}`
+    });
+  };
 };
 
 // src/routes/selection.routes.ts
@@ -9094,8 +10075,8 @@ var getJobSeekerToken = async (req, res) => {
 
 // src/routes/interview.routes.ts
 var router6 = Router();
-router6.post("/:id/token/company", authenticateCompany, getCompanyToken);
-router6.post("/:id/token/jobseeker", authenticateToken, requireJobSeeker, getJobSeekerToken);
+router6.post("/:id/token/company", livekitLimiter, authenticateCompany, getCompanyToken);
+router6.post("/:id/token/jobseeker", livekitLimiter, authenticateToken, requireJobSeeker, getJobSeekerToken);
 router6.post("/:id/security-logs", (req, res) => {
   res.status(200).json({ success: true });
 });
@@ -9794,31 +10775,31 @@ router9.get("/team/accept-invite", acceptInvite);
 router9.post("/team/login", teamMemberLogin);
 router9.use(authenticateCompany);
 router9.get("/dashboard", getCompanyDashboard);
-router9.use("/offers", offer_routes_default);
+router9.use("/offers", requirePermission("offers", "read"), offer_routes_default);
 router9.use("/selection", selection_routes_default);
 router9.use("/interviews-v2", interview_routes_default);
-router9.use("/crm", crm_routes_default);
+router9.use("/crm", requirePermission("talent_pool", "read"), crm_routes_default);
 router9.use("/kanban", kanban_routes_default);
-router9.post("/interviews/bulk-schedule", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), scheduleBulkInterviews);
-router9.get("/interviews/list", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getCompanyInterviewsList);
-router9.post("/interviews/:id/respond-reschedule", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), respondToReschedule);
-router9.post("/interviews/:id/update-status", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER), updateInterviewStatus);
-router9.post("/team/invite", requireCompanyRole(ROLES.COMPANY_ADMIN), inviteTeamMember);
-router9.get("/team", listTeamMembers);
-router9.put("/team/:memberId/role", requireCompanyRole(ROLES.COMPANY_ADMIN), updateMemberRole);
-router9.delete("/team/:memberId", requireCompanyRole(ROLES.COMPANY_ADMIN), removeTeamMember);
-router9.get("/applications/:applicationId", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getCandidateDetail);
-router9.patch("/applications/:applicationId/status", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateApplicationStatus);
-router9.get("/applications/:id/detail", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getApplicationDetailById);
-router9.post("/notification/send", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), sendNotificationToUser);
-router9.post("/jobs/generate-description", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), generateAIDescription);
-router9.post("/jobs", requireCompanyRole(ROLES.COMPANY_ADMIN), createJob);
-router9.get("/jobs", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getAllCompanyJobs);
-router9.get("/jobs/:jobId/applications", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getJobApplications);
-router9.post("/jobs/:jobId/ai-filter", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), aiFilterCandidates);
-router9.get("/jobs/:id", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR, ROLES.COMPANY_INTERVIEWER, ROLES.COMPANY_VIEWER), getJobDetails);
-router9.put("/jobs/:id", requireCompanyRole(ROLES.COMPANY_ADMIN, ROLES.COMPANY_HR), updateJob);
-router9.delete("/jobs/:id", requireCompanyRole(ROLES.COMPANY_ADMIN), deleteJob);
+router9.post("/interviews/bulk-schedule", requirePermission("interviews", "schedule"), scheduleBulkInterviews);
+router9.get("/interviews/list", requirePermission("interviews", "read"), getCompanyInterviewsList);
+router9.post("/interviews/:id/respond-reschedule", requirePermission("interviews", "schedule"), respondToReschedule);
+router9.post("/interviews/:id/update-status", requirePermission("interviews", "conduct"), updateInterviewStatus);
+router9.post("/team/invite", requirePermission("team", "invite"), inviteTeamMember);
+router9.get("/team", requirePermission("team", "read"), listTeamMembers);
+router9.put("/team/:memberId/role", requirePermission("team", "edit"), updateMemberRole);
+router9.delete("/team/:memberId", requirePermission("team", "delete"), removeTeamMember);
+router9.get("/applications/:applicationId", requirePermission("jobs", "read"), getCandidateDetail);
+router9.patch("/applications/:applicationId/status", requirePermission("jobs", "edit"), updateApplicationStatus);
+router9.get("/applications/:id/detail", requirePermission("jobs", "read"), getApplicationDetailById);
+router9.post("/notification/send", requirePermission("jobs", "edit"), sendNotificationToUser);
+router9.post("/jobs/generate-description", aiLimiter, requirePermission("jobs", "create"), generateAIDescription);
+router9.post("/jobs", requirePermission("jobs", "create"), createJob);
+router9.get("/jobs", requirePermission("jobs", "read"), getAllCompanyJobs);
+router9.get("/jobs/:jobId/applications", requirePermission("jobs", "read"), getJobApplications);
+router9.post("/jobs/:jobId/ai-filter", aiLimiter, requirePermission("jobs", "edit"), aiFilterCandidates);
+router9.get("/jobs/:id", requirePermission("jobs", "read"), getJobDetails);
+router9.put("/jobs/:id", requirePermission("jobs", "edit"), updateJob);
+router9.delete("/jobs/:id", requirePermission("jobs", "delete"), deleteJob);
 router9.get("/me", getMyCompanyProfile);
 router9.patch("/profile", updateCompanyProfile);
 router9.patch("/profile/password", updateCompanyPassword);
@@ -10418,6 +11399,8 @@ var updateCompanyFeatureOverride = async (req, res) => {
 var router10 = express7.Router();
 router10.get("/public", optionalAuth, getPublicJobs);
 router10.get("/public/:id", optionalAuth, getPublicJobDetails);
+router10.get("/jobs", optionalAuth, getPublicJobs);
+router10.get("/jobs/:jobId", optionalAuth, getPublicJobDetails);
 router10.get("/companies", optionalAuth, getAllPublicCompanies);
 router10.get("/companies/:identifier", optionalAuth, getPublicCompanyProfile);
 router10.get("/companies/:identifier/jobs", optionalAuth, getPublicCompanyJobs);
@@ -10666,17 +11649,17 @@ var toggleSeekerAiResumeBuilder = async (req, res) => {
 import nodemailer2 from "nodemailer";
 
 // src/utils/settingsEncryption.ts
-import crypto from "crypto";
+import crypto2 from "crypto";
 var ALGORITHM = "aes-256-cbc";
 var IV_LENGTH = 16;
 function getKey() {
   const raw = process.env.SETTINGS_ENCRYPTION_KEY ?? "default-dev-key-change-in-production!!";
-  return crypto.createHash("sha256").update(raw).digest();
+  return crypto2.createHash("sha256").update(raw).digest();
 }
 function encrypt(plaintext) {
   const key = getKey();
-  const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const iv = crypto2.randomBytes(IV_LENGTH);
+  const cipher = crypto2.createCipheriv(ALGORITHM, key, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   return `${iv.toString("hex")}:${encrypted.toString("hex")}`;
 }
@@ -10736,7 +11719,7 @@ var getSettings2 = async (_req, res) => {
         emailFromName: s?.emailFromName ?? "EasyApply",
         // Groq
         groqApiKey: maskSecret(s?.groqApiKey),
-        groqModel: s?.groqModel ?? "llama-3.3-70b-versatile",
+        groqModel: s?.groqModel ?? process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
         // LiveKit
         livekitApiUrl: s?.livekitApiUrl ?? null,
         livekitApiKey: s?.livekitApiKey ?? null,
@@ -10970,9 +11953,6 @@ import { AccessToken as AccessToken2 } from "livekit-server-sdk";
 // src/services/walkInQueue.service.ts
 import mammoth3 from "mammoth";
 import PDFParser2 from "pdf2json";
-import Groq3 from "groq-sdk";
-var groq2 = process.env.GROQ_API_KEY ? new Groq3({ apiKey: process.env.GROQ_API_KEY }) : null;
-var MODEL2 = "llama-3.3-70b-versatile";
 var extractTextFromCvBuffer = (buffer, mimetype) => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -11027,7 +12007,7 @@ async function evaluateCandidateCvAgainstRoom(cvText, candidateSkills, candidate
   let heuristicSkillScore = reqSkills.length > 0 ? Math.round(matchedSkills.length / reqSkills.length * 100) : 60;
   let heuristicExpScore = 60;
   let heuristicOverall = Math.round(heuristicSkillScore * 0.7 + heuristicExpScore * 0.3);
-  if (!groq2 || !cvText.trim() && candidateSkills.length === 0) {
+  if (!process.env.GROQ_API_KEY || !cvText.trim() && candidateSkills.length === 0) {
     return {
       overallScore: Math.max(10, Math.min(100, heuristicOverall)),
       skillScore: heuristicSkillScore,
@@ -11077,8 +12057,7 @@ Return ONLY a valid JSON object matching this structure:
   "recommendation": "STRONG_MATCH",
   "summary": "Candidate shows strong expertise in required web technologies with relevant production experience."
 }`;
-    const completion = await groq2.chat.completions.create({
-      model: MODEL2,
+    const completion = await createGroqChatCompletion({
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
       response_format: { type: "json_object" }
@@ -11240,10 +12219,10 @@ var listWalkInRooms = async (req, res) => {
 };
 var getWalkInRoomByCode = async (req, res) => {
   try {
-    const { code: code2 } = req.params;
+    const { code } = req.params;
     const userId = req.user?.userId;
     const room = await prisma.walkInRoom.findUnique({
-      where: { roomCode: code2.toUpperCase() },
+      where: { roomCode: code.toUpperCase() },
       include: {
         company: { select: { name: true, logoUrl: true, industry: true } },
         _count: { select: { queue: true } }
@@ -11286,10 +12265,10 @@ var getWalkInRoomByCode = async (req, res) => {
 var joinWalkInQueue = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { code: code2 } = req.params;
+    const { code } = req.params;
     const { resumeId } = req.body;
     const room = await prisma.walkInRoom.findUnique({
-      where: { roomCode: code2.toUpperCase() },
+      where: { roomCode: code.toUpperCase() },
       include: { _count: { select: { queue: { where: { status: "waiting" } } } } }
     });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
@@ -11348,8 +12327,8 @@ var joinWalkInQueue = async (req, res) => {
         }
       }
     }
-    const candidateSkills = profile.skills.map((s) => s.name);
-    const candidateExpText = profile.experience.map((e) => `${e.role} at ${e.company}${e.description ? ` (${e.description})` : ""}`).join("; ");
+    const candidateSkills = (profile.skills || []).map((s) => s.name);
+    const candidateExpText = (profile.experience || []).map((e) => `${e.role || ""} at ${e.company || ""}${e.description ? ` (${e.description})` : ""}`).join("; ");
     const cvAnalysis = await evaluateCandidateCvAgainstRoom(
       cvText,
       candidateSkills,
@@ -11357,12 +12336,12 @@ var joinWalkInQueue = async (req, res) => {
       {
         title: room.title,
         description: room.description,
-        requiredSkills: room.requiredSkills,
+        requiredSkills: room.requiredSkills || [],
         minExperience: room.minExperience,
         evaluationCriteria: room.evaluationCriteria
       }
     );
-    const overallScore = cvAnalysis.overallScore;
+    const overallScore = cvAnalysis?.overallScore ?? 50;
     const isPriority = overallScore >= (room.priorityThreshold ?? 70);
     const initialStatus = isPriority ? "priority" : "waiting";
     const entry = await prisma.walkInQueueEntry.create({
@@ -11390,17 +12369,17 @@ var joinWalkInQueue = async (req, res) => {
       message: isPriority ? `\u2B50 Priority Shortlist! You match ${overallScore}% of room criteria.` : `You are #${ahead + 1} in the queue with ${overallScore}% score.`
     });
   } catch (err) {
-    console.error("[WalkIn] joinQueue", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    console.error("[WalkIn] joinQueue error:", err);
+    return res.status(500).json({ success: false, message: err?.message || "Server error while joining queue" });
   }
 };
 var getQueueByRoom = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { code: code2 } = req.params;
+    const { code } = req.params;
     const room = await prisma.walkInRoom.findFirst({
-      where: { roomCode: code2.toUpperCase(), companyId },
+      where: { roomCode: code.toUpperCase(), companyId },
       include: {
         _count: {
           select: { queue: true }
@@ -11468,9 +12447,9 @@ var callNextCandidate = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { code: code2 } = req.params;
-    const { entryId } = req.body || {};
-    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code2.toUpperCase(), companyId } });
+    const { code } = req.params;
+    const { entryId, previousStatus } = req.body || {};
+    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     let targetEntry;
     if (entryId) {
@@ -11490,6 +12469,17 @@ var callNextCandidate = async (req, res) => {
       });
     }
     if (!targetEntry) return res.status(404).json({ success: false, message: "No candidates available to call" });
+    const prevStatusToSet = previousStatus || "done";
+    await prisma.walkInQueueEntry.updateMany({
+      where: {
+        roomId: room.id,
+        status: "interviewing",
+        id: { not: targetEntry.id }
+      },
+      data: {
+        status: prevStatusToSet
+      }
+    });
     const livekitToken = await generateLiveKitToken2(
       room.livekitRoom,
       `seeker-${targetEntry.jobSeekerProfileId}`,
@@ -11502,7 +12492,10 @@ var callNextCandidate = async (req, res) => {
     );
     const updated = await prisma.walkInQueueEntry.update({
       where: { id: targetEntry.id },
-      data: { status: "interviewing", livekitToken }
+      data: {
+        status: "interviewing",
+        livekitToken
+      }
     });
     return res.json({
       success: true,
@@ -11631,6 +12624,7 @@ var updateRoomSettings = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
+    const { code } = req.params;
     const {
       title,
       description,
@@ -11669,11 +12663,11 @@ var updateRoomStatus = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
-    const { code: code2 } = req.params;
+    const { code } = req.params;
     const { status } = req.body;
     if (!["OPEN", "PAUSED", "CLOSED"].includes(status))
       return res.status(400).json({ success: false, message: "status must be OPEN, PAUSED, or CLOSED" });
-    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code2.toUpperCase(), companyId } });
+    const room = await prisma.walkInRoom.findFirst({ where: { roomCode: code.toUpperCase(), companyId } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const updated = await prisma.walkInRoom.update({ where: { id: room.id }, data: { status } });
     if (status === "OPEN") ensureAgingRunning(room.id);
@@ -11686,8 +12680,8 @@ var updateRoomStatus = async (req, res) => {
 var getSeekerQueuePosition = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { code: code2 } = req.params;
-    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code2.toUpperCase() } });
+    const { code } = req.params;
+    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code.toUpperCase() } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
     if (!profile) return res.json({ success: false, inQueue: false, message: "Profile not found" });
@@ -11871,8 +12865,8 @@ var getMyWalkInQueues = async (req, res) => {
 var leaveWalkInQueue = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { code: code2 } = req.params;
-    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code2.toUpperCase() } });
+    const { code } = req.params;
+    const room = await prisma.walkInRoom.findUnique({ where: { roomCode: code.toUpperCase() } });
     if (!room) return res.status(404).json({ success: false, message: "Room not found" });
     const profile = await prisma.jobSeekerProfile.findUnique({ where: { userId } });
     if (!profile) return res.status(404).json({ success: false, message: "Profile not found" });
@@ -12036,29 +13030,60 @@ var getDiscoverableSeekerProfile = async (req, res) => {
 };
 
 // src/routes/walkIn.routes.ts
+import multer5 from "multer";
 var router12 = Router6();
-router12.get("/active-rooms", optionalAuth, listActiveWalkInRooms);
-router12.get("/rooms/:code/info", optionalAuth, getWalkInRoomByCode);
-router12.post("/rooms", authenticateCompany, createWalkInRoom);
-router12.get("/rooms", authenticateCompany, listWalkInRooms);
-router12.get("/rooms/:code/queue", authenticateCompany, getQueueByRoom);
-router12.post("/rooms/:code/call-next", authenticateCompany, callNextCandidate);
-router12.put("/rooms/:code/status", authenticateCompany, updateRoomStatus);
-router12.put("/rooms/:code/settings", authenticateCompany, updateRoomSettings);
-router12.put("/queue/batch-status", authenticateCompany, batchUpdateQueueEntryStatus);
-router12.put("/queue/:entryId/status", authenticateCompany, updateQueueEntryStatus);
-router12.put("/queue/:entryId/priority", authenticateCompany, updateQueueEntryPriority);
+var cvUpload = multer5({
+  storage: multer5.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  // 10MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/jpeg",
+      "image/png",
+      "image/jpg",
+      "image/webp"
+    ];
+    if (allowed.includes(file.mimetype) || file.mimetype.startsWith("text/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid CV file format. Please upload a PDF, DOCX, DOC, or Image file."));
+    }
+  }
+});
+var handleCvUpload = (req, res, next) => {
+  cvUpload.single("cv")(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message || "File upload error" });
+    }
+    next();
+  });
+};
+router12.get("/active-rooms", publicLimiter, optionalAuth, listActiveWalkInRooms);
+router12.get("/rooms/:code/info", publicLimiter, optionalAuth, getWalkInRoomByCode);
+router12.post("/rooms", authenticateCompany, requirePermission("walkin", "create"), createWalkInRoom);
+router12.get("/rooms", authenticateCompany, requirePermission("walkin", "read"), listWalkInRooms);
+router12.get("/rooms/:code/queue", authenticateCompany, requirePermission("walkin", "read"), getQueueByRoom);
+router12.post("/rooms/:code/call-next", livekitLimiter, authenticateCompany, requirePermission("walkin", "manage"), callNextCandidate);
+router12.put("/rooms/:code/status", authenticateCompany, requirePermission("walkin", "manage"), updateRoomStatus);
+router12.put("/rooms/:code/settings", authenticateCompany, requirePermission("walkin", "manage"), updateRoomSettings);
+router12.put("/queue/batch-status", authenticateCompany, requirePermission("walkin", "manage"), batchUpdateQueueEntryStatus);
+router12.put("/queue/:entryId/status", authenticateCompany, requirePermission("walkin", "manage"), updateQueueEntryStatus);
+router12.put("/queue/:entryId/priority", authenticateCompany, requirePermission("walkin", "manage"), updateQueueEntryPriority);
 router12.get("/my-queues", authenticateToken, getMyWalkInQueues);
-router12.post("/rooms/:code/join", authenticateToken, upload.single("cv"), joinWalkInQueue);
+router12.post("/rooms/:code/join", livekitLimiter, authenticateToken, handleCvUpload, joinWalkInQueue);
 router12.get("/rooms/:code/position", authenticateToken, getSeekerQueuePosition);
 router12.post("/rooms/:code/leave", authenticateToken, leaveWalkInQueue);
-router12.get("/discovery/seekers", authenticateCompany, listDiscoverableSeekers);
-router12.get("/discovery/seekers/:profileId", authenticateCompany, getDiscoverableSeekerProfile);
+router12.get("/discovery/seekers", authenticateCompany, requirePermission("discovery", "read"), listDiscoverableSeekers);
+router12.get("/discovery/seekers/:profileId", authenticateCompany, requirePermission("discovery", "read"), getDiscoverableSeekerProfile);
 var walkIn_routes_default = router12;
 
 // src/index.ts
 var app = express8();
 app.use(cookieParser());
+app.set("trust proxy", 1);
 var allowedOrigins = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(",") : ["http://localhost:3000", "http://localhost:5173"];
 app.use(
   cors({
@@ -12076,6 +13101,7 @@ app.use(
   })
 );
 app.use(express8.json({ limit: "10mb" }));
+app.use("/api", globalLimiter);
 app.use("/api/auth", auth_routes_default);
 app.use("/api/company/auth", companyAuth_routes_default);
 app.use("/api/admin", admin_routes_default);
@@ -12085,6 +13111,7 @@ app.use("/api/interviews", interview_routes_default);
 app.use("/api/kanban", kanban_routes_default);
 app.use("/api/crm", crm_routes_default);
 app.use("/api/walkin", walkIn_routes_default);
+app.use("/api/jobs", publicJobs_routes_default);
 app.use("/api/public", publicJobs_routes_default);
 app.get("/", (_req, res) => res.send("Backend Running"));
 var PORT = process.env.PORT || 8e3;

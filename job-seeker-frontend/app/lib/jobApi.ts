@@ -10,12 +10,12 @@ export const getPublicJobs = async (params?: {
   page?: number;
   limit?: number;
 }) => {
-  const response = await api.get('/jobs', { params });
+  const response = await api.get('/public/jobs', { params });
   return response.data;
 };
 
 export const getPublicJobDetails = async (id: string) => {
-  const response = await api.get(`/jobs/${id}`);
+  const response = await api.get(`/public/jobs/${id}`);
   return response.data;
 };
 
@@ -83,5 +83,21 @@ export const withdrawApplication = async (id: string) => {
 // Get my resumes for selection
 export const getMyResumes = async () => {
   const response = await api.get('/jobseeker/resumes');
+  return response.data;
+};
+
+// Saved Jobs (Bookmarks)
+export const toggleSaveJob = async (jobPostingId: string) => {
+  const response = await api.post(`/jobseeker/saved-jobs/${jobPostingId}`);
+  return response.data;
+};
+
+export const getSavedJobs = async (params?: { search?: string; page?: number; limit?: number }) => {
+  const response = await api.get('/jobseeker/saved-jobs', { params });
+  return response.data;
+};
+
+export const getSavedJobIds = async () => {
+  const response = await api.get('/jobseeker/saved-jobs/ids');
   return response.data;
 };

@@ -7,13 +7,14 @@ import {
   Target, Lightbulb, KeyRound, BarChart3, ArrowUpRight, Loader2,
   Trash2, TrendingUp, Edit3, Star, ChevronDown, Zap, Globe,
   Download, ArrowRight, Check, Copy, Shield, Sparkle, Eye, Lock,
-  FileCheck, Layers, Gauge, RefreshCw, Info
+  FileCheck, Layers, Gauge, RefreshCw, Info, ExternalLink
 } from 'lucide-react';
 import {
   getAllResumes, uploadResume, generateCV, deleteResume, updateResume,
   generateRegionalResume,
   type ResumeListItem, type ResumeScores,
 } from '@/app/lib/resumeApi';
+import api from '@/app/lib/axios';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -299,7 +300,15 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault(); setDrag(false);
     const f = e.dataTransfer.files[0];
-    if (f && (f.name.endsWith('.pdf') || f.name.endsWith('.docx'))) setFile(f);
+    if (f) {
+      if (f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf') {
+        setFile(f);
+        setError('');
+      } else {
+        setError('Only PDF documents (.pdf) are supported.');
+        showToast('Invalid File', 'Please select a valid PDF document.', 'danger');
+      }
+    }
   };
 
   const handleSubmit = async () => {
@@ -308,13 +317,13 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
     try {
       const res = await uploadResume(file, name.trim() || undefined, jd.trim() || undefined);
       if (res.data?.success) {
-        showToast('Resume Uploaded', `${file.name} saved successfully.`, 'success');
+        showToast('Resume Uploaded', `${file.name} saved and ATS scored successfully.`, 'success');
         onSuccess(res.data.data);
         onClose();
       }
     } catch (e: any) {
       setError(e?.response?.data?.message ?? 'Upload failed.');
-      showToast('Error', 'Failed to upload document.', 'danger');
+      showToast('Error', e?.response?.data?.message ?? 'Failed to upload document.', 'danger');
     } finally { setLoading(false); }
   };
 
@@ -323,8 +332,8 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
       <div className="bg-white dark:bg-[#18181b] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl p-6 sm:p-8 w-full max-w-lg shadow-2xl space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-zinc-900 dark:text-white font-bold text-lg">Upload Resume</h2>
-            <p className="text-zinc-400 dark:text-[#86868b] text-xs mt-0.5">PDF or DOCX · Instant storage & ATS scoring</p>
+            <h2 className="text-zinc-900 dark:text-white font-bold text-lg">Upload PDF Resume</h2>
+            <p className="text-zinc-400 dark:text-[#86868b] text-xs mt-0.5">PDF only (max 10MB) · Instant text extraction & ATS scoring</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 text-zinc-400 hover:text-zinc-700 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer text-xs">
             <X size={16} />
@@ -340,20 +349,31 @@ function UploadModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
             drag ? 'border-[#0071e3] bg-[#0071e3]/5' : file ? 'border-emerald-500/50 bg-emerald-500/5' : 'border-zinc-200 dark:border-white/[0.1] hover:border-[#0071e3]/40'
           }`}
         >
-          <input ref={inputRef} type="file" accept=".pdf,.docx" className="hidden"
-            onChange={e => e.target.files?.[0] && setFile(e.target.files[0])} />
+          <input ref={inputRef} type="file" accept=".pdf,application/pdf" className="hidden"
+            onChange={e => {
+              const selectedFile = e.target.files?.[0];
+              if (selectedFile) {
+                if (selectedFile.name.toLowerCase().endsWith('.pdf') || selectedFile.type === 'application/pdf') {
+                  setFile(selectedFile);
+                  setError('');
+                } else {
+                  setError('Only PDF documents (.pdf) are supported.');
+                  showToast('Invalid File', 'Please select a valid PDF document.', 'danger');
+                }
+              }
+            }} />
           <div className="w-12 h-12 rounded-2xl bg-[#0071e3]/10 flex items-center justify-center mx-auto mb-3 text-[#0071e3]">
             {file ? <CheckCircle2 size={22} className="text-emerald-500" /> : <Upload size={22} />}
           </div>
           {file ? (
             <div>
               <p className="text-zinc-900 dark:text-white text-sm font-semibold truncate max-w-xs mx-auto">{file.name}</p>
-              <p className="text-zinc-400 text-xs mt-0.5">{(file.size / 1024).toFixed(0)} KB · Click to change file</p>
+              <p className="text-zinc-400 text-xs mt-0.5">{(file.size / 1024).toFixed(0)} KB · Click to change PDF</p>
             </div>
           ) : (
             <div>
-              <p className="text-zinc-900 dark:text-white text-sm font-semibold">Drop your resume here or browse</p>
-              <p className="text-zinc-400 text-xs mt-0.5">Supports PDF and DOCX documents</p>
+              <p className="text-zinc-900 dark:text-white text-sm font-semibold">Drop your PDF resume here or browse</p>
+              <p className="text-zinc-400 text-xs mt-0.5">Supports PDF documents only</p>
             </div>
           )}
         </div>
@@ -528,6 +548,154 @@ function GenerateModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
   );
 }
 
+// ─── PDF Preview Modal ──────────────────────────────────────────────────
+function PdfPreviewModal({ resume, onClose }: { resume: ResumeListItem; onClose: () => void }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useGlassToast();
+
+  useEffect(() => {
+    let currentUrl: string | null = null;
+    const loadPdf = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await api.get(`/jobseeker/resumes/${resume.id}/view-pdf`, {
+          responseType: 'blob',
+        });
+        const blob = new Blob([res.data], { type: 'application/pdf' });
+        currentUrl = URL.createObjectURL(blob);
+        setBlobUrl(currentUrl);
+      } catch (err: any) {
+        console.error('Failed to stream PDF preview:', err);
+        setError('Unable to preview PDF directly. You can still download the original document.');
+        showToast('Preview Error', 'Could not load PDF document preview.', 'danger');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPdf();
+
+    return () => {
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+    };
+  }, [resume.id]);
+
+  const handleDownload = async () => {
+    try {
+      showToast('Downloading', `Starting download for ${resume.name}...`, 'info');
+      const res = await api.get(`/jobseeker/resumes/${resume.id}/download-uploaded`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${resume.name.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+      showToast('Downloaded', 'PDF downloaded successfully.', 'success');
+    } catch (err: any) {
+      console.error('Download failed:', err);
+      showToast('Error', 'Failed to download PDF document.', 'danger');
+    }
+  };
+
+  const handleOpenNewTab = () => {
+    if (blobUrl) {
+      window.open(blobUrl, '_blank');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-3 sm:p-6 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-[#18181b] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl w-full max-w-5xl h-[90vh] shadow-2xl flex flex-col overflow-hidden">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.08] shrink-0 bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-sm">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#0071e3]/10 text-[#0071e3] flex items-center justify-center shrink-0">
+              <FileText size={18} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-zinc-900 dark:text-white font-bold text-sm sm:text-base truncate max-w-xs sm:max-w-md">
+                {resume.name}
+              </h2>
+              <p className="text-zinc-400 dark:text-[#86868b] text-xs">
+                {resume.source === 'uploaded' ? 'Original Uploaded PDF' : 'Rendered PDF Document'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {blobUrl && (
+              <button
+                onClick={handleOpenNewTab}
+                className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 dark:hover:bg-white/20 text-zinc-700 dark:text-zinc-200 transition-colors cursor-pointer"
+                title="Open in new tab"
+              >
+                <ExternalLink size={13} />
+                <span>New Tab</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-[#0071e3] hover:bg-[#0062c4] text-white transition-colors cursor-pointer shadow-xs"
+            >
+              <Download size={13} />
+              <span>Download</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 text-zinc-400 hover:text-zinc-700 dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer ml-1"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* Modal Body / PDF Canvas */}
+        <div className="flex-1 w-full bg-zinc-900 relative">
+          {loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 text-zinc-400 gap-3 z-10">
+              <Loader2 size={28} className="animate-spin text-[#0071e3]" />
+              <p className="text-xs font-medium">Authenticating & loading PDF document...</p>
+            </div>
+          )}
+
+          {error ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900 text-zinc-400 gap-4 p-6 text-center">
+              <AlertCircle size={32} className="text-amber-500" />
+              <p className="text-xs text-zinc-300 max-w-sm">{error}</p>
+              <button
+                onClick={handleDownload}
+                className="px-4 py-2 bg-[#0071e3] text-white rounded-xl text-xs font-semibold"
+              >
+                Download PDF
+              </button>
+            </div>
+          ) : (
+            blobUrl && (
+              <iframe
+                src={blobUrl}
+                title={resume.name}
+                className="w-full h-full border-0"
+              />
+            )
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Visual ATS Panel (Design Upgrade) ────────────────────────────────────
 function ATSPanel({
   resume,
@@ -540,6 +708,7 @@ function ATSPanel({
 }) {
   const [tab, setTab] = useState<'strengths' | 'improvements' | 'missing' | 'keywords'>('strengths');
   const [copiedKw, setCopiedKw] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const { showToast } = useGlassToast();
 
   const ai = resume.aiSuggestions;
@@ -564,17 +733,26 @@ function ATSPanel({
 
   const culturalNotes = content?.culturalNotes;
 
-  const handleDownload = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
-    const downloadUrl = `http://localhost:8000/api/jobseeker/resumes/${resume.id}/download-uploaded${token ? `?token=${token}` : ''}`;
-    window.open(downloadUrl, '_blank');
-    showToast('Downloading', `Starting download for ${resume.name}...`, 'info');
-  };
-
-  const handleViewPdf = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : '';
-    const viewUrl = `http://localhost:8000/api/jobseeker/resumes/${resume.id}/view-pdf${token ? `?token=${token}` : ''}`;
-    window.open(viewUrl, '_blank');
+  const handleDownload = async () => {
+    try {
+      showToast('Downloading', `Starting download for ${resume.name}...`, 'info');
+      const res = await api.get(`/jobseeker/resumes/${resume.id}/download-uploaded`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${resume.name.trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume'}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+      showToast('Downloaded', 'PDF downloaded successfully.', 'success');
+    } catch (err: any) {
+      console.error('Download failed:', err);
+      showToast('Error', 'Failed to download PDF document.', 'danger');
+    }
   };
 
   const copyKeyword = (kw: string) => {
@@ -635,11 +813,11 @@ function ATSPanel({
             {resume.source === 'uploaded' ? (
               <>
                 <button
-                  onClick={handleViewPdf}
-                  className="flex items-center gap-2 bg-[#0071e3] hover:bg-[#0062c4] text-white px-5 py-2.5 rounded-2xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                  onClick={() => setPreviewOpen(true)}
+                  className="flex items-center gap-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-white/10 dark:hover:bg-white/20 text-zinc-900 dark:text-white px-4 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-xs"
                 >
                   <Eye size={14} />
-                  <span>View PDF</span>
+                  <span>Preview PDF</span>
                 </button>
 
                 <button
@@ -648,6 +826,14 @@ function ATSPanel({
                 >
                   <Download size={14} />
                   <span>Download PDF</span>
+                </button>
+
+                <button
+                  onClick={onEdit}
+                  className="flex items-center gap-2 bg-[#0071e3] hover:bg-[#0062c4] text-white px-5 py-2.5 rounded-2xl text-xs font-bold shadow-sm transition-all cursor-pointer"
+                >
+                  <Edit3 size={14} />
+                  <span>Open Visual Editor</span>
                 </button>
               </>
             ) : (
@@ -671,6 +857,14 @@ function ATSPanel({
             )}
           </div>
         </div>
+
+        {/* In-app PDF Preview Modal */}
+        {previewOpen && (
+          <PdfPreviewModal
+            resume={resume}
+            onClose={() => setPreviewOpen(false)}
+          />
+        )}
 
         {culturalNotes && (
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl px-4 py-3 my-5 flex items-start gap-2.5">

@@ -15,11 +15,13 @@ import {
   ShieldCheck,
   Upload,
   FileText,
-  X
+  X,
+  Bookmark
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
+import { toggleSaveJob, getSavedJobIds } from '@/app/lib/jobApi';
 
 export default function JobDetailsPage() {
   const { showToast } = useGlassToast();
@@ -28,12 +30,14 @@ export default function JobDetailsPage() {
   const [job, setJob] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasApplied, setHasApplied] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [showApplyModal, setShowApplyModal] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchJobDetails();
       checkApplicationStatus();
+      checkSavedStatus();
     }
   }, [id]);
 
@@ -60,6 +64,38 @@ export default function JobDetailsPage() {
       }
     } catch (error) {
       console.error('Error tracking configuration states:', error);
+    }
+  };
+
+  const checkSavedStatus = async () => {
+    try {
+      const res = await getSavedJobIds();
+      if (res?.success && Array.isArray(res.savedJobIds)) {
+        setIsSaved(res.savedJobIds.includes(id as string));
+      }
+    } catch (error) {
+      console.error('Error tracking saved status:', error);
+    }
+  };
+
+  const handleToggleSave = async () => {
+    if (!job) return;
+    const prevSaved = isSaved;
+    setIsSaved(!prevSaved);
+
+    try {
+      const res = await toggleSaveJob(job.id);
+      if (res?.success) {
+        setIsSaved(res.isSaved);
+        showToast(
+          res.isSaved ? 'Job Saved' : 'Removed from Saved',
+          res.isSaved ? `"${job.title}" saved to your bookmarks.` : `"${job.title}" removed from bookmarks.`,
+          'success'
+        );
+      }
+    } catch (err: any) {
+      setIsSaved(prevSaved);
+      showToast('Error', err.response?.data?.message || 'Failed to update saved job status', 'danger');
     }
   };
 
@@ -192,16 +228,29 @@ export default function JobDetailsPage() {
         </div>
 
         {/* Embedded Actions */}
-        <div className="w-full md:w-auto shrink-0 pt-2 md:pt-0 border-t border-black/[0.06] dark:border-white/[0.08] md:border-transparent">
+        <div className="w-full md:w-auto shrink-0 pt-2 md:pt-0 border-t border-black/[0.06] dark:border-white/[0.08] md:border-transparent flex items-center gap-2.5 flex-wrap">
+          <button
+            type="button"
+            onClick={handleToggleSave}
+            className={`px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 border ${
+              isSaved
+                ? 'bg-[#0071e3]/10 border-[#0071e3]/30 text-[#0071e3] shadow-xs'
+                : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] border-black/[0.06] dark:border-white/[0.08] text-[#1d1d1f] dark:text-white'
+            }`}
+          >
+            <Bookmark size={15} className={isSaved ? 'fill-[#0071e3]' : ''} />
+            <span>{isSaved ? 'Saved' : 'Save Job'}</span>
+          </button>
+
           {hasApplied ? (
-            <div className="w-full md:w-auto px-5 py-2.5 bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158] text-xs font-bold rounded-2xl flex items-center justify-center gap-2">
+            <div className="flex-1 md:flex-initial px-5 py-3 bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158] text-xs font-bold rounded-2xl flex items-center justify-center gap-2">
               <CheckCircle2 size={15} />
               <span>Application Submitted</span>
             </div>
           ) : (
             <button
               onClick={() => setShowApplyModal(true)}
-              className="w-full md:w-auto px-6 py-3 bg-[#0071e3] hover:bg-[#0077ed] text-white font-bold rounded-2xl text-xs transition-all shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer flex items-center justify-center gap-2"
+              className="flex-1 md:flex-initial px-6 py-3 bg-[#0071e3] hover:bg-[#0077ed] text-white font-bold rounded-2xl text-xs transition-all shadow-[0_4px_14px_rgba(0,113,227,0.3)] cursor-pointer flex items-center justify-center gap-2"
             >
               <span>Apply for Position</span>
             </button>

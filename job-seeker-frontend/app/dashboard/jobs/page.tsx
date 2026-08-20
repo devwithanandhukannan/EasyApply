@@ -1,8 +1,8 @@
 // app/dashboard/jobs/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { 
   Search, 
   MapPin, 
@@ -19,15 +19,32 @@ import {
   Globe,
   Lock,
   ShieldAlert,
+  Bookmark
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
+import { toggleSaveJob, getSavedJobs, getSavedJobIds } from '@/app/lib/jobApi';
 
 export default function JobsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-24">
+        <div className="w-6 h-6 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <JobsContent />
+    </Suspense>
+  );
+}
+
+function JobsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { showToast } = useGlassToast();
 
+  const [activeTab, setActiveTab] = useState<'all' | 'saved'>('all');
+  const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [jobs, setJobs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,10 +59,36 @@ export default function JobsPage() {
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(true); 
 
-  // Fetch data when page, drop-down filters, or location string changes
+  // Initialize tab from query param if available
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'saved') {
+      setActiveTab('saved');
+    } else {
+      setActiveTab('all');
+    }
+  }, [searchParams]);
+
+  // Fetch saved job IDs on mount
+  const fetchSavedJobIds = useCallback(async () => {
+    try {
+      const res = await getSavedJobIds();
+      if (res?.success && Array.isArray(res.savedJobIds)) {
+        setSavedJobIds(new Set(res.savedJobIds));
+      }
+    } catch (e) {
+      console.error('Failed to load saved job IDs:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSavedJobIds();
+  }, [fetchSavedJobIds]);
+
+  // Fetch data when activeTab, page, drop-down filters, or location string changes
   useEffect(() => {
     fetchJobs();
-  }, [page, filters]);
+  }, [activeTab, page, filters]);
 
   // Fetch data when user stops writing or clears the search query input box
   useEffect(() => {
@@ -64,21 +107,35 @@ export default function JobsPage() {
     try {
       setIsLoading(true);
       
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '12',
-        ...(searchQuery.trim() && { search: searchQuery.trim() }),
-        ...(filters.jobType !== 'all' && { jobType: filters.jobType }),
-        ...(filters.locationType !== 'all' && { locationType: filters.locationType }),
-        ...(filters.location.trim() && { location: filters.location.trim() }),
-      });
+      if (activeTab === 'saved') {
+        const res = await getSavedJobs({
+          page,
+          limit: 12,
+          ...(searchQuery.trim() && { search: searchQuery.trim() }),
+        });
 
-      const response = await api.get(`/public/search?${params}`);
-      
-      if (response.data.success) {
-        setIsAuthenticated(true);
-        setJobs(response.data.data);
-        setTotalPages(response.data.pagination?.totalPages || 1);
+        if (res?.success) {
+          setIsAuthenticated(true);
+          setJobs(res.data || []);
+          setTotalPages(res.pagination?.totalPages || 1);
+        }
+      } else {
+        const params = new URLSearchParams({
+          page: page.toString(),
+          limit: '12',
+          ...(searchQuery.trim() && { search: searchQuery.trim() }),
+          ...(filters.jobType !== 'all' && { jobType: filters.jobType }),
+          ...(filters.locationType !== 'all' && { locationType: filters.locationType }),
+          ...(filters.location.trim() && { location: filters.location.trim() }),
+        });
+
+        const response = await api.get(`/public/search?${params}`);
+        
+        if (response.data.success) {
+          setIsAuthenticated(true);
+          setJobs(response.data.data);
+          setTotalPages(response.data.pagination?.totalPages || 1);
+        }
       }
     } catch (error: any) {
       console.error('Error fetching positions:', error);
@@ -91,6 +148,52 @@ export default function JobsPage() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleToggleSave = async (job: any, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const isCurrentlySaved = savedJobIds.has(job.id);
+
+    // Optimistic UI state update
+    setSavedJobIds((prev) => {
+      const next = new Set(prev);
+      if (isCurrentlySaved) {
+        next.delete(job.id);
+      } else {
+        next.add(job.id);
+      }
+      return next;
+    });
+
+    try {
+      const res = await toggleSaveJob(job.id);
+      if (res?.success) {
+        showToast(
+          res.isSaved ? 'Job Saved' : 'Removed from Saved',
+          res.isSaved ? `"${job.title}" bookmarked.` : `"${job.title}" removed from bookmarks.`,
+          'success'
+        );
+
+        if (activeTab === 'saved' && !res.isSaved) {
+          setJobs((prev) => prev.filter((j) => j.id !== job.id));
+        }
+        fetchSavedJobIds();
+      }
+    } catch (err: any) {
+      // Rollback on error
+      setSavedJobIds((prev) => {
+        const next = new Set(prev);
+        if (isCurrentlySaved) {
+          next.add(job.id);
+        } else {
+          next.delete(job.id);
+        }
+        return next;
+      });
+      showToast('Error', err.response?.data?.message || 'Failed to update saved job status', 'danger');
     }
   };
 
@@ -143,11 +246,50 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-1 text-[#1d1d1f] dark:text-[#f5f5f7] font-sans antialiased">
-      <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-5">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">Explore Vacancies</h1>
-        <p className="text-xs sm:text-sm text-[#86868b] mt-0.5 font-medium">
-          Find matching positions across various roles and tech stacks
-        </p>
+      {/* Page Title & Navigation Tabs */}
+      <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">
+            {activeTab === 'saved' ? 'Saved Jobs' : 'Explore Vacancies'}
+          </h1>
+          <p className="text-xs sm:text-sm text-[#86868b] mt-0.5 font-medium">
+            {activeTab === 'saved' 
+              ? 'Quick access to positions you bookmarked for later review and application' 
+              : 'Find matching positions across various roles and tech stacks'}
+          </p>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-1.5 p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-2xl self-start sm:self-auto shrink-0 border border-black/[0.04] dark:border-white/[0.06]">
+          <button
+            onClick={() => { setActiveTab('all'); setPage(1); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'all'
+                ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
+                : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+            }`}
+          >
+            <Briefcase size={13} />
+            <span>All Positions</span>
+          </button>
+
+          <button
+            onClick={() => { setActiveTab('saved'); setPage(1); }}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === 'saved'
+                ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] shadow-xs'
+                : 'text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white'
+            }`}
+          >
+            <Bookmark size={13} className={activeTab === 'saved' ? 'fill-[#0071e3]' : ''} />
+            <span>Saved Jobs</span>
+            {savedJobIds.size > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#0071e3]/10 text-[#0071e3] border border-[#0071e3]/20">
+                {savedJobIds.size}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Search and Filters panel */}
@@ -157,48 +299,50 @@ export default function JobsPage() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={15} />
             <input
               type="text"
-              placeholder="Search by title, description or roles..."
+              placeholder={activeTab === 'saved' ? "Filter saved jobs by title, company..." : "Search by title, description or roles..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] focus:outline-none focus:border-[#0071e3] transition-colors font-medium"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <select
-              value={filters.jobType}
-              onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
-              className="px-3.5 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium focus:outline-none focus:border-[#0071e3] cursor-pointer"
-            >
-              <option value="all">All Employment Types</option>
-              <option value="Full-time">Full-time</option>
-              <option value="Part-time">Part-time</option>
-              <option value="Contract">Contract</option>
-              <option value="Freelance">Freelance</option>
-            </select>
+          {activeTab === 'all' && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <select
+                value={filters.jobType}
+                onChange={(e) => setFilters({ ...filters, jobType: e.target.value })}
+                className="px-3.5 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium focus:outline-none focus:border-[#0071e3] cursor-pointer"
+              >
+                <option value="all">All Employment Types</option>
+                <option value="Full-time">Full-time</option>
+                <option value="Part-time">Part-time</option>
+                <option value="Contract">Contract</option>
+                <option value="Freelance">Freelance</option>
+              </select>
 
-            <select
-              value={filters.locationType}
-              onChange={(e) => setFilters({ ...filters, locationType: e.target.value })}
-              className="px-3.5 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium focus:outline-none focus:border-[#0071e3] cursor-pointer"
-            >
-              <option value="all">All Environments</option>
-              <option value="Remote">Remote</option>
-              <option value="On-site">On-site</option>
-              <option value="Hybrid">Hybrid</option>
-            </select>
+              <select
+                value={filters.locationType}
+                onChange={(e) => setFilters({ ...filters, locationType: e.target.value })}
+                className="px-3.5 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] font-medium focus:outline-none focus:border-[#0071e3] cursor-pointer"
+              >
+                <option value="all">All Environments</option>
+                <option value="Remote">Remote</option>
+                <option value="On-site">On-site</option>
+                <option value="Hybrid">Hybrid</option>
+              </select>
 
-            <div className="relative">
-              <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={14} />
-              <input
-                type="text"
-                placeholder="Preferred location..."
-                value={filters.location}
-                onChange={(e) => setFilters({ ...filters, location: e.target.value })}
-                className="w-full pl-9 pr-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] font-medium focus:outline-none focus:border-[#0071e3]"
-              />
+              <div className="relative">
+                <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#86868b]" size={14} />
+                <input
+                  type="text"
+                  placeholder="Preferred location..."
+                  value={filters.location}
+                  onChange={(e) => setFilters({ ...filters, location: e.target.value })}
+                  className="w-full pl-9 pr-4 py-2.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl text-xs text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] font-medium focus:outline-none focus:border-[#0071e3]"
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -211,24 +355,43 @@ export default function JobsPage() {
         </div>
       ) : jobs.length === 0 ? (
         <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-12 text-center max-w-md mx-auto shadow-xs">
-          <Briefcase className="mx-auto mb-3 text-[#86868b]" size={28} />
-          <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white mb-1">No vacancies found</h3>
-          <p className="text-[#86868b] text-xs mb-4">No current listings match your specific search criteria.</p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setFilters({ jobType: 'all', locationType: 'all', location: '' });
-            }}
-            className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white hover:bg-[#e5e5ea] rounded-2xl text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Reset Filters
-          </button>
+          {activeTab === 'saved' ? (
+            <>
+              <Bookmark className="mx-auto mb-3 text-[#86868b]" size={28} />
+              <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white mb-1">No saved jobs yet</h3>
+              <p className="text-[#86868b] text-xs mb-4">
+                Bookmark job listings you find interesting to easily review and apply to them later.
+              </p>
+              <button
+                onClick={() => { setActiveTab('all'); setPage(1); }}
+                className="px-4 py-2 bg-[#0071e3] text-white hover:bg-[#0077ed] rounded-2xl text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+              >
+                Browse Vacancies
+              </button>
+            </>
+          ) : (
+            <>
+              <Briefcase className="mx-auto mb-3 text-[#86868b]" size={28} />
+              <h3 className="text-sm font-bold text-[#1d1d1f] dark:text-white mb-1">No vacancies found</h3>
+              <p className="text-[#86868b] text-xs mb-4">No current listings match your specific search criteria.</p>
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilters({ jobType: 'all', locationType: 'all', location: '' });
+                }}
+                className="px-4 py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white hover:bg-[#e5e5ea] rounded-2xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
             {jobs.map((job) => {
               const hasApplied = job.hasApplied === true;
+              const isSaved = savedJobIds.has(job.id);
               
               return (
                 <Link
@@ -254,11 +417,29 @@ export default function JobsPage() {
                         <p className="text-[10px] text-[#86868b] truncate mt-0.5 uppercase tracking-wide font-semibold">{job.company.industry || 'Technology'}</p>
                       </div>
                     </div>
-                    {job.company.verificationBadge === 'verified' && (
-                      <span className="shrink-0 text-[9px] font-bold text-[#34c759] bg-[#34c759]/10 border border-[#34c759]/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        Verified
-                      </span>
-                    )}
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {job.company.verificationBadge === 'verified' && (
+                        <span className="shrink-0 text-[9px] font-bold text-[#34c759] bg-[#34c759]/10 border border-[#34c759]/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                          Verified
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleSave(job, e)}
+                        title={isSaved ? 'Remove from Saved' : 'Save Job'}
+                        className={`p-2 rounded-xl border transition-all cursor-pointer ${
+                          isSaved
+                            ? 'bg-[#0071e3]/10 border-[#0071e3]/30 text-[#0071e3] shadow-xs'
+                            : 'bg-black/[0.02] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.08] text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:border-black/[0.12] dark:border-white/[0.16]'
+                        }`}
+                      >
+                        <Bookmark
+                          size={14}
+                          className={`transition-transform duration-200 ${isSaved ? 'fill-[#0071e3] scale-110' : 'group-hover:scale-105'}`}
+                        />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="mb-1">

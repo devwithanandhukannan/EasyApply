@@ -30,6 +30,8 @@ import {
   getKeywordSuggestions, restoreVersion, getInlineSuggestions, improveSelectedText,
   type ResumeListItem, type ResumeVersion,
 } from '@/app/lib/resumeApi';
+import api from '@/app/lib/axios';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 // ══════════════════════════════════════════════════════════════════════════
 // TipTap Extensions
@@ -729,22 +731,104 @@ function SuggestionsPanel({ resumeId, suggestions, loading, onFetch, onAccept, o
   );
 }
 
-function VersionsPanel({ versions, onRestore }: { versions: ResumeVersion[]; onRestore: (v: ResumeVersion) => void }) {
+function VersionsPanel({ 
+  versions, 
+  onRestore, 
+  onCreateSnapshot,
+  restoringId 
+}: { 
+  versions: ResumeVersion[]; 
+  onRestore: (v: ResumeVersion) => void;
+  onCreateSnapshot: (label: string) => Promise<void>;
+  restoringId: string | null;
+}) {
+  const [snapshotLabel, setSnapshotLabel] = useState('');
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
+  const [showInput, setShowInput] = useState(false);
+
+  const handleCreate = async () => {
+    if (!snapshotLabel.trim()) return;
+    setSavingSnapshot(true);
+    try {
+      await onCreateSnapshot(snapshotLabel.trim());
+      setSnapshotLabel('');
+      setShowInput(false);
+    } finally {
+      setSavingSnapshot(false);
+    }
+  };
+
   return (
-    <div className="p-4 space-y-2">
-      <p className="text-zinc-400 dark:text-gray-500 text-xs mb-3 font-semibold">{versions.length} version{versions.length !== 1 ? 's' : ''} saved</p>
+    <div className="p-4 space-y-3">
+      {/* Create Snapshot Button */}
+      <div className="bg-white dark:bg-[#141414] border border-zinc-200 dark:border-[#222] rounded-xl p-3 shadow-xs">
+        {showInput ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={snapshotLabel}
+              onChange={(e) => setSnapshotLabel(e.target.value)}
+              placeholder="e.g. Version before formatting..."
+              className="w-full text-xs px-2.5 py-1.5 bg-zinc-50 dark:bg-[#1a1a1a] border border-zinc-200 dark:border-[#333] rounded-lg text-zinc-900 dark:text-white focus:outline-none focus:border-[#0071e3]"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCreate}
+                disabled={savingSnapshot || !snapshotLabel.trim()}
+                className="flex-1 text-xs py-1.5 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-lg font-semibold transition disabled:opacity-50 flex items-center justify-center gap-1 cursor-pointer"
+              >
+                {savingSnapshot ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />}
+                <span>Save Snapshot</span>
+              </button>
+              <button
+                onClick={() => { setShowInput(false); setSnapshotLabel(''); }}
+                className="text-xs px-2.5 py-1.5 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 rounded-lg transition cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowInput(true)}
+            className="w-full flex items-center justify-center gap-1.5 text-xs py-2 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 border border-[#0071e3]/20 text-[#0071e3] dark:text-blue-300 rounded-lg font-semibold transition cursor-pointer"
+          >
+            <Sparkles size={12} />
+            <span>Save Current Version Snapshot</span>
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-zinc-400 dark:text-gray-500 font-semibold px-1">
+        <span>History Timeline</span>
+        <span>{versions.length} version{versions.length !== 1 ? 's' : ''}</span>
+      </div>
+
       {versions.length === 0 ? (
         <div className="text-center py-6">
           <History size={24} className="text-zinc-300 dark:text-gray-700 mx-auto mb-2" />
-          <p className="text-zinc-400 dark:text-gray-500 text-xs">No versions yet. Edit and save to create versions.</p>
+          <p className="text-zinc-400 dark:text-gray-500 text-xs">No version snapshots saved yet.</p>
         </div>
       ) : [...versions].reverse().map(v => (
-        <div key={v.id} className="bg-white dark:bg-[#111] border border-zinc-200 dark:border-[#222] rounded-xl p-3 shadow-xs">
-          <p className="text-zinc-900 dark:text-white text-xs font-semibold mb-0.5">{v.label}</p>
-          <p className="text-zinc-400 dark:text-gray-500 text-xs">{new Date(v.savedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
-          <button onClick={() => onRestore(v)}
-            className="mt-2 flex items-center gap-1 text-xs text-[#0071e3] hover:underline transition-colors cursor-pointer">
-            <RotateCcw size={11} />Restore
+        <div key={v.id} className="bg-white dark:bg-[#111] border border-zinc-200 dark:border-[#222] rounded-xl p-3 shadow-xs transition hover:border-zinc-300 dark:hover:border-[#333]">
+          <div className="flex items-start justify-between gap-2 mb-1">
+            <p className="text-zinc-900 dark:text-white text-xs font-bold leading-snug">{v.label}</p>
+            <span className="text-[10px] text-zinc-400 dark:text-gray-500 flex-shrink-0 font-medium">
+              {new Date(v.savedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </div>
+          <p className="text-zinc-400 dark:text-gray-500 text-[11px] mb-2">
+            {new Date(v.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </p>
+          <button 
+            onClick={() => onRestore(v)}
+            disabled={restoringId === v.id}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1 bg-zinc-100 hover:bg-zinc-200 dark:bg-white/5 dark:hover:bg-white/10 text-[#0071e3] dark:text-blue-400 rounded-lg font-semibold transition-colors cursor-pointer disabled:opacity-50"
+          >
+            {restoringId === v.id ? <Loader2 size={11} className="animate-spin" /> : <RotateCcw size={11} />}
+            <span>{restoringId === v.id ? 'Restoring…' : 'Restore this version'}</span>
           </button>
         </div>
       ))}
@@ -798,10 +882,17 @@ export default function ResumeEditorPage() {
   const params = useParams();
   const router = useRouter();
   const id = params.id as string;
+  const { showToast } = useGlassToast();
 
+  const [mounted, setMounted] = useState(false);
   const [resumeName, setResumeName] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [loading, setLoading] = useState(true);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [converting, setConverting] = useState(false);
@@ -811,6 +902,7 @@ export default function ResumeEditorPage() {
   const [isUploadedPdf, setIsUploadedPdf] = useState(false);
   const [keywordGaps, setKeywordGaps] = useState<string[]>([]);
   const [versions, setVersions] = useState<ResumeVersion[]>([]);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
 
   // Inline suggestions state
   const [inlineSuggestions, setInlineSuggestions] = useState<InlineSuggestion[]>([]);
@@ -899,18 +991,7 @@ export default function ResumeEditorPage() {
     };
   }, [editor]);
 
-  // Track content height to render correct number of A4 pages
-  useEffect(() => {
-    if (!editor) return;
-    const el = editor.view.dom;
-    const observer = new ResizeObserver(entries => {
-      for (let entry of entries) {
-        setContentHeight(Math.max(PAGE_H, entry.contentRect.height));
-      }
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [editor]);
+
 
   // ─── Selection detection ─────────────────────────────────────────────
   useEffect(() => {
@@ -1000,8 +1081,17 @@ export default function ResumeEditorPage() {
     if (!pm || !overlay) return;
 
     const children = Array.from(pm.children) as HTMLElement[];
-    const PAGE_FULL_H = PAGE_H + 32; // 32 is the GAP
-    
+    if (children.length === 0) {
+      styleRef.current.innerHTML = '';
+      setContentHeight(PAGE_H);
+      return;
+    }
+
+    const PAGE_FULL_H = PAGE_H + 32; // 32 is the screen gap between pages
+    const mTop = Number(margins.top) || 48;
+    const mBottom = Number(margins.bottom) || 48;
+    const PAGE_PRINT_H = PAGE_H - mTop - mBottom; // 1027px printable vertical space
+
     // Clear injected styles to read the purely natural layout
     styleRef.current.innerHTML = '';
     
@@ -1011,17 +1101,27 @@ export default function ResumeEditorPage() {
     const overlayRect = overlay.getBoundingClientRect();
     const scale = zoom / 100;
     
+    // Check if the entire resume naturally fits on 1 page (with 12px subpixel buffer)
+    const firstRect = children[0].getBoundingClientRect();
+    const lastRect = children[children.length - 1].getBoundingClientRect();
+    const totalNaturalHeight = (lastRect.bottom - firstRect.top) / scale;
+
+    if (totalNaturalHeight <= PAGE_PRINT_H + 12) {
+      // Entire document cleanly fits on 1 page - no artificial push needed!
+      styleRef.current.innerHTML = '';
+      setContentHeight(PAGE_H);
+      return;
+    }
+
     let cumulativePush = 0;
     let cssRules = '';
-    
-    const mTop = Number(margins.top) || 60;
-    const mBottom = Number(margins.bottom) || 60;
+    let maxPages = 1;
 
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
       const childRect = child.getBoundingClientRect();
       
-      // Calculate true visual top relative to the overlay without any scaling
+      // Calculate visual top relative to overlay
       const naturalTop = (childRect.top - overlayRect.top) / scale;
       const childHeight = childRect.height / scale;
 
@@ -1029,20 +1129,22 @@ export default function ResumeEditorPage() {
       const simulatedBottom = simulatedTop + childHeight;
 
       const pageIndex = Math.floor(simulatedTop / PAGE_FULL_H);
-      const bottomMarginY = pageIndex * PAGE_FULL_H + PAGE_H - mBottom;
+      const bottomLimitY = pageIndex * PAGE_FULL_H + PAGE_H - mBottom + 4; // 4px flex buffer
 
-      if (simulatedBottom > bottomMarginY) {
-        const nextPageTopMarginY = (pageIndex + 1) * PAGE_FULL_H + mTop;
-        const pushAmount = Math.max(0, nextPageTopMarginY - simulatedTop);
+      // Check if this child overflows the bottom printable boundary of the current page
+      if (simulatedBottom > bottomLimitY) {
+        // If it's a heading and near bottom, push it to next page
+        const nextPageTopY = (pageIndex + 1) * PAGE_FULL_H + mTop;
+        const pushAmount = Math.max(0, nextPageTopY - simulatedTop);
         
         if (pushAmount > 0) {
           cumulativePush += pushAmount;
+          maxPages = Math.max(maxPages, pageIndex + 2);
           
           const naturalMarginTop = parseFloat(window.getComputedStyle(child).marginTop) || 0;
           const prevChild = i > 0 ? children[i - 1] : null;
           const prevMarginBottom = prevChild ? parseFloat(window.getComputedStyle(prevChild).marginBottom) || 0 : 0;
           
-          // Compensate for CSS margin collapsing to ensure exact physical push
           const currentCollapsedMargin = Math.max(naturalMarginTop, prevMarginBottom);
           const targetMarginTop = currentCollapsedMargin + pushAmount;
           
@@ -1052,19 +1154,31 @@ export default function ResumeEditorPage() {
     }
     
     styleRef.current.innerHTML = cssRules;
+    setContentHeight(Math.max(1, maxPages) * PAGE_H);
   }, [margins, zoom]);
 
   useEffect(() => {
     if (!editor) return;
     const handler = () => updatePagination();
     editor.on('update', handler);
-    return () => { editor.off('update', handler); }
+    return () => { editor.off('update', handler); };
   }, [editor, updatePagination]);
 
   useEffect(() => {
     const timer = setTimeout(updatePagination, 50);
     return () => clearTimeout(timer);
-  }, [updatePagination, contentHeight]);
+  }, [updatePagination]);
+
+  // Sync pagination when editor DOM size changes
+  useEffect(() => {
+    if (!editor) return;
+    const el = editor.view.dom;
+    const observer = new ResizeObserver(() => {
+      updatePagination();
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [editor, updatePagination]);
 
   // ─── Load resume ─────────────────────────────────────────────────────
   const loadResume = useCallback(async () => {
@@ -1074,12 +1188,14 @@ export default function ResumeEditorPage() {
       let res = await getResume(id);
       let data = res.data.data;
 
-      if (data.source === 'uploaded') {
+      if (data.source === 'uploaded' && !data.content?.htmlContent) {
         setIsUploadedPdf(true);
         setResumeName(data.name);
         setLoading(false);
         return;
       }
+
+      setIsUploadedPdf(false);
 
       if (!data.content?.htmlContent) {
         setConverting(true);
@@ -1302,30 +1418,135 @@ export default function ResumeEditorPage() {
 
   // ─── Version restore ─────────────────────────────────────────────────
   const handleVersionRestore = useCallback(async (version: ResumeVersion) => {
-    if (!editor || !confirm(`Restore "${version.label}"?`)) return;
+    if (!editor) return;
+    setRestoringId(version.id);
+    showToast('Restoring Version', `Restoring snapshot "${version.label}"…`, 'info');
     try {
       const res = await restoreVersion(id, version.id);
-      editor.commands.setContent(res.data.data.htmlContent);
-      const refreshed = await getResume(id);
-      setVersions(refreshed.data.data.content?.versions ?? []);
-    } catch {}
-  }, [editor, id]);
+      if (res.data.data?.htmlContent) {
+        editor.commands.setContent(res.data.data.htmlContent);
+      }
+      if (res.data.data?.versions) {
+        setVersions(res.data.data.versions);
+      } else {
+        const refreshed = await getResume(id);
+        setVersions(refreshed.data.data.content?.versions ?? []);
+      }
+      showToast('Version Restored', `Restored to "${version.label}" successfully`, 'success');
+    } catch (err: any) {
+      console.error('Restore failed:', err);
+      showToast('Restore Failed', err.response?.data?.message || 'Failed to restore selected version', 'danger');
+    } finally {
+      setRestoringId(null);
+    }
+  }, [editor, id, showToast]);
 
-  // ─── Export ──────────────────────────────────────────────────────────
-  const handleExport = useCallback(() => {
+  // ─── Create Named Version Snapshot ──────────────────────────────────
+  const handleCreateSnapshot = useCallback(async (label: string) => {
     if (!editor) return;
-    const win = window.open('', '_blank')!;
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${resumeName}</title><style>
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Times New Roman",Times,serif;font-size:13.5px;line-height:1.35;color:#000;padding:${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px;max-width:${PAGE_W}px;margin:0 auto}
-h1{font-size:24px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#000;margin-bottom:2px;text-align:center}
-h2{font-size:14.5px;font-weight:700;color:#000;margin-top:10px;margin-bottom:2px;padding-bottom:2px;border-bottom:1px solid #000}
-p{margin-bottom:2px}ul,ol{margin-left:20px;margin-bottom:2px}li{margin-bottom:1px;padding-left:2px}
-a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margin:6px 0}strong{font-weight:700}em{font-style:italic}
-@media print{body{padding:20px}@page{margin:15mm}}
-</style></head><body>${editor.getHTML()}</body></html>`);
-    win.document.close();
-    setTimeout(() => { win.focus(); win.print(); }, 400);
-  }, [editor, resumeName, margins]);
+    showToast('Saving Snapshot', `Creating snapshot "${label}"…`, 'info');
+    try {
+      const res = await updateResume(id, {
+        htmlContent: editor.getHTML(),
+        name: resumeName || undefined,
+        margins,
+        versionLabel: label,
+      });
+      if (res.data.data?.versions) {
+        setVersions(res.data.data.versions);
+      } else {
+        const refreshed = await getResume(id);
+        setVersions(refreshed.data.data.content?.versions ?? []);
+      }
+      showToast('Snapshot Saved', `Version "${label}" saved to history`, 'success');
+    } catch (err: any) {
+      console.error('Failed to create snapshot:', err);
+      showToast('Snapshot Failed', 'Could not save version snapshot', 'danger');
+    }
+  }, [editor, id, resumeName, margins, showToast]);
+
+  // ─── Download Clean Vector PDF directly ──────────────────────────────
+  const handleDownloadPdf = useCallback(async () => {
+    if (!editor) return;
+    setDownloadingPdf(true);
+    showToast('Compiling PDF', 'Saving edits & rendering vector PDF...', 'info');
+    try {
+      // 1. Auto-save latest HTML first
+      await updateResume(id, {
+        htmlContent: editor.getHTML(),
+        name: resumeName || undefined,
+        margins,
+        versionLabel: 'Before PDF Download',
+      });
+      setSaveState('saved');
+      setTimeout(() => setSaveState('idle'), 2500);
+
+      // 2. Fetch compiled vector PDF blob
+      const res = await api.get(`/jobseeker/resumes/${id}/download-uploaded`, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      const safeName = (resumeName || 'Resume').trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume';
+      link.download = `${safeName}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+
+      showToast('Downloaded', `Saved ${safeName}.pdf successfully`, 'success');
+    } catch (err: any) {
+      console.error('PDF Download failed:', err);
+      showToast('Export Error', err.response?.data?.message || 'Failed to compile vector PDF. Opening print dialog...', 'danger');
+      handleExport();
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [editor, id, resumeName, margins, showToast]);
+
+  // ─── High-Definition Vector PDF Print Preview (100% 1:1 Page Breaks) ──────
+  const handleExport = useCallback(async () => {
+    if (!editor) return;
+    setDownloadingPdf(true);
+    showToast('Rendering PDF', 'Preparing vector print preview with exact margins...', 'info');
+    try {
+      // 1. Save latest state
+      await updateResume(id, {
+        htmlContent: editor.getHTML(),
+        name: resumeName || undefined,
+        margins,
+        versionLabel: 'Before Print Preview',
+      });
+      setSaveState('saved');
+      setTimeout(() => setSaveState('idle'), 2500);
+
+      // 2. Fetch compiled vector PDF blob
+      const res = await api.get(`/jobseeker/resumes/${id}/download-uploaded`, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const pdfUrl = URL.createObjectURL(blob);
+      const win = window.open(pdfUrl, '_blank');
+      if (!win) {
+        showToast('Notice', 'Popup blocked. Triggering direct PDF download...', 'info');
+        const link = document.createElement('a');
+        link.href = pdfUrl;
+        link.download = `${(resumeName || 'Resume').trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume'}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err: any) {
+      console.error('PDF print preview failed:', err);
+      showToast('Error', 'Failed to generate vector PDF preview', 'danger');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }, [editor, id, resumeName, margins, showToast]);
 
   const SaveIcon = saveState === 'saving' ? Loader2 : saveState === 'saved' ? CheckCheck : saveState === 'error' ? AlertCircle : Save;
   const saveLabel = { idle: 'Save', saving: 'Saving…', saved: 'Saved', error: 'Error' }[saveState];
@@ -1340,28 +1561,47 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
   ];
 
   const EDITOR_CSS = `
-    .ProseMirror { font-family: "Times New Roman", Times, serif; font-size: 13.5px; line-height: 1.35; color: #000; }
+    .ProseMirror { font-family: "Times New Roman", Times, serif; font-size: 13.5px; line-height: 1.35; color: #000; word-break: break-word; overflow-wrap: break-word; }
     .ProseMirror:focus { outline: none; }
     .ProseMirror ::selection { background: rgba(59,130,246,0.25); }
     .ProseMirror a { color: inherit; text-decoration: none; }
-    .ProseMirror strong { font-weight: 700; }
-    .ProseMirror em { font-style: italic; }
+    .ProseMirror strong, .ProseMirror b { font-weight: 700; }
+    .ProseMirror em, .ProseMirror i { font-style: italic; }
     .ProseMirror u { text-decoration: underline; }
-    .ProseMirror s { text-decoration: line-through; }
+    .ProseMirror s, .ProseMirror strike { text-decoration: line-through; }
     .ProseMirror mark { border-radius: 2px; padding: 0 2px; }
     
-    .ProseMirror h1 { font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #000; margin-bottom: 2px; text-align: center; }
-    .ProseMirror h2 { font-size: 14.5px; font-weight: 700; color: #000; margin-top: 10px; margin-bottom: 2px; padding-bottom: 2px; border-bottom: 1px solid #000; }
-    .ProseMirror h3 { font-size: 13.5px; font-weight: 700; color: #000; margin-top: 6px; margin-bottom: 2px; }
-    .ProseMirror p { margin-bottom: 2px; color: #000; }
-    .ProseMirror ul { list-style-type: disc; margin-left: 20px; margin-bottom: 2px; }
-    .ProseMirror ol { list-style-type: decimal; margin-left: 20px; margin-bottom: 2px; }
-    .ProseMirror li { margin-bottom: 1px; color: #000; padding-left: 2px; }
+    .ProseMirror h1 { font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #000; margin: 0 0 2px 0; text-align: center; }
+    .ProseMirror h2 { font-size: 14.5px; font-weight: 700; color: #000; margin: 10px 0 2px 0; padding-bottom: 2px; border-bottom: 1px solid #000; }
+    .ProseMirror h3 { font-size: 13.5px; font-weight: 700; color: #000; margin: 6px 0 2px 0; }
+    .ProseMirror p { margin: 0 0 2px 0; color: #000; }
+    .ProseMirror ul { list-style-type: disc; list-style-position: outside; margin: 0 0 2px 0; padding-left: 20px; }
+    .ProseMirror ol { list-style-type: decimal; list-style-position: outside; margin: 0 0 2px 0; padding-left: 20px; }
+    .ProseMirror li { margin: 0 0 1px 0; color: #000; padding-left: 2px; }
     .ProseMirror hr { border: none; border-top: 1px solid #000; margin: 6px 0; }
+    .ProseMirror span[style*="float: right"], .ProseMirror span[style*="float:right"], .ProseMirror .float-right { float: right !important; text-align: right !important; }
 
     @keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
     .animate-in { animation: slideDown 0.15s ease; }
   `;
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col h-screen bg-zinc-100 dark:bg-[#0a0a0a] overflow-hidden text-zinc-900 dark:text-zinc-100 font-sans">
+        <header className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-[#111] border-b border-zinc-200 dark:border-[#1e1e1e] z-40 flex-shrink-0">
+          <div className="flex items-center gap-1.5 text-zinc-400 text-sm font-medium">
+            <ChevronLeft size={16} />Back
+          </div>
+          <div className="w-px h-4 bg-zinc-200 dark:bg-[#2a2a2a]" />
+          <span className="text-zinc-400 text-sm font-semibold">Loading editor…</span>
+        </header>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+          <Loader2 size={28} className="text-[#0071e3] animate-spin" />
+          <p className="text-zinc-400 text-xs">Loading resume editor…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isUploadedPdf) {
     return (
@@ -1394,8 +1634,30 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
 
           <div className="flex flex-col sm:flex-row items-center gap-3 w-full pt-2">
             <button
+              onClick={async () => {
+                setConverting(true);
+                showToast('Converting Resume', 'Generating editable layout with AI...', 'info');
+                try {
+                  await convertToEditable(id);
+                  setIsUploadedPdf(false);
+                  await loadResume();
+                  showToast('Converted', 'Resume is now open in the visual editor', 'success');
+                } catch (e: any) {
+                  showToast('Error', e?.response?.data?.message || 'Failed to convert resume', 'danger');
+                } finally {
+                  setConverting(false);
+                }
+              }}
+              disabled={Boolean(converting)}
+              className="w-full sm:flex-1 bg-[#0071e3] hover:bg-[#0062c4] text-white font-bold py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
+            >
+              {converting ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+              <span>{converting ? 'Converting…' : 'Convert to Editable with AI'}</span>
+            </button>
+
+            <button
               onClick={() => window.open(`http://localhost:8000/api/jobseeker/resumes/${id}/download-uploaded`, '_blank')}
-              className="w-full sm:flex-1 bg-[#0071e3] hover:bg-[#0062c4] text-white font-bold py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+              className="w-full sm:flex-1 bg-white dark:bg-[#1c1c1e] hover:bg-zinc-100 dark:hover:bg-[#2c2c2e] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white font-bold py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
             >
               <Eye size={15} />
               <span>View Original PDF</span>
@@ -1403,9 +1665,9 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
 
             <button
               onClick={() => router.push('/dashboard/resumes')}
-              className="w-full sm:flex-1 bg-white dark:bg-[#1c1c1e] hover:bg-zinc-100 dark:hover:bg-[#2c2c2e] border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-white font-bold py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+              className="w-full sm:w-auto px-4 bg-zinc-100 dark:bg-white/5 hover:bg-zinc-200 dark:hover:bg-white/10 text-zinc-700 dark:text-zinc-300 font-bold py-3 rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
             >
-              <span>Back to Resume Hub</span>
+              <span>Back</span>
             </button>
           </div>
         </div>
@@ -1429,7 +1691,7 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
 
         {/* Analyse button */}
         <div className="flex items-center gap-1">
-          <button onClick={fetchInlineSuggestions} disabled={loadingSuggestions || loading}
+          <button onClick={fetchInlineSuggestions} disabled={Boolean(loadingSuggestions || loading)}
             className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] dark:text-blue-300 rounded-xl hover:bg-[#0071e3]/20 transition-colors disabled:opacity-40 flex-shrink-0 font-semibold cursor-pointer">
             {loadingSuggestions ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
             {loadingSuggestions ? 'Analysing…' : 'Analyse'}
@@ -1459,13 +1721,24 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
         </div>
 
         <div className="flex items-center gap-2">
-          <button onClick={() => handleSave('Manual save')} disabled={saveState === 'saving'}
+          <button onClick={() => handleSave('Manual save')} disabled={Boolean(saveState === 'saving')}
             className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl border transition-all flex-shrink-0 font-medium cursor-pointer shadow-xs ${saveClass}`}>
             <SaveIcon size={12} className={saveState === 'saving' ? 'animate-spin' : ''} />{saveLabel}
           </button>
-          <button onClick={handleExport}
-            className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-black rounded-xl dark:hover:bg-gray-100 transition-colors font-bold flex-shrink-0 cursor-pointer shadow-xs">
-            <Download size={12} />Export
+          <button
+            onClick={handleDownloadPdf}
+            disabled={Boolean(downloadingPdf)}
+            className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-xl transition-all font-bold flex-shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            {downloadingPdf ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+            <span>{downloadingPdf ? 'Downloading...' : 'Download PDF'}</span>
+          </button>
+          <button
+            onClick={handleExport}
+            title="Open browser print dialog"
+            className="flex items-center gap-1 text-xs px-2.5 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-[#1e1e1e] dark:hover:bg-[#2a2a2a] text-zinc-700 dark:text-zinc-300 rounded-xl transition-colors font-medium flex-shrink-0 cursor-pointer shadow-xs"
+          >
+            <span>Print</span>
           </button>
         </div>
       </header>
@@ -1517,7 +1790,14 @@ a{color:#000;text-decoration:none}hr{border:none;border-top:1px solid #000;margi
                   onDismiss={handleDismissSuggestion}
                 />
               )}
-              {activePanel === 'versions' && <VersionsPanel versions={versions} onRestore={handleVersionRestore} />}
+              {activePanel === 'versions' && (
+                <VersionsPanel
+                  versions={versions}
+                  onRestore={handleVersionRestore}
+                  onCreateSnapshot={handleCreateSnapshot}
+                  restoringId={restoringId}
+                />
+              )}
             </div>
           </div>
         )}

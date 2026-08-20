@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
@@ -18,8 +19,11 @@ import {
   CheckCircle2,
   Sun,
   Moon,
+  Shield,
+  KeyRound,
 } from 'lucide-react';
 import { useTheme } from '@/lib/theme';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 type Tab = 'payment' | 'email' | 'ai' | 'video' | 'general' | 'queue';
 
@@ -28,7 +32,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('payment');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { showToast } = useGlassToast();
 
   // Settings states
   // Payment
@@ -110,6 +114,7 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error(err);
+      showToast('Error', 'Failed to load settings', 'danger');
     } finally {
       setLoading(false);
     }
@@ -118,7 +123,6 @@ export default function SettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setMsg(null);
     try {
       let res;
       if (activeTab === 'payment') {
@@ -162,11 +166,11 @@ export default function SettingsPage() {
       }
 
       if (res?.data?.success) {
-        setMsg({ type: 'success', text: `${activeTab.toUpperCase()} settings saved and encrypted in database.` });
+        showToast('Saved', `${activeTab.toUpperCase()} configuration encrypted & saved.`, 'success');
         fetchSettings();
       }
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to save settings' });
+      showToast('Error', err.response?.data?.message || 'Failed to save settings', 'danger');
     } finally {
       setSaving(false);
     }
@@ -174,11 +178,10 @@ export default function SettingsPage() {
 
   const handleTestEmail = async () => {
     if (!testEmailRecipient) {
-      setMsg({ type: 'error', text: 'Please enter a test email address below' });
+      showToast('Validation', 'Please enter a test email address', 'warning');
       return;
     }
     setTestingEmail(true);
-    setMsg(null);
     try {
       const res = await api.post('/admin/settings/email/test', {
         smtpHost,
@@ -189,12 +192,12 @@ export default function SettingsPage() {
         sendTo: testEmailRecipient,
       });
       if (res.data.success) {
-        setMsg({ type: 'success', text: res.data.message });
+        showToast('Success', res.data.message, 'success');
       } else {
-        setMsg({ type: 'error', text: res.data.message });
+        showToast('Failed', res.data.message, 'danger');
       }
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'SMTP test failed' });
+      showToast('Error', err.response?.data?.message || 'SMTP test failed', 'danger');
     } finally {
       setTestingEmail(false);
     }
@@ -202,107 +205,88 @@ export default function SettingsPage() {
 
   const handleTestPayment = async () => {
     setTestingPayment(true);
-    setMsg(null);
     try {
       const res = await api.post('/admin/settings/payment/test', {
         razorpayKeyId,
         razorpayKeySecret,
       });
       if (res.data.success) {
-        setMsg({ type: 'success', text: res.data.message });
+        showToast('Verified', res.data.message, 'success');
       } else {
-        setMsg({ type: 'error', text: res.data.message });
+        showToast('Error', res.data.message, 'danger');
       }
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'Razorpay test failed' });
+      showToast('Error', err.response?.data?.message || 'Razorpay connection failed', 'danger');
     } finally {
       setTestingPayment(false);
     }
   };
 
   const tabs: { id: Tab; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
-    { id: 'payment', label: 'Razorpay / Payment', icon: CreditCard },
-    { id: 'email', label: 'SMTP / Email', icon: Mail },
-    { id: 'ai', label: 'AI Configuration (Groq)', icon: Bot },
-    { id: 'video', label: 'LiveKit Video', icon: Video },
-    { id: 'general', label: 'General & Maintenance', icon: Sliders },
-    { id: 'queue', label: 'Walk-In Queue Policy', icon: Users },
+    { id: 'payment', label: 'Payment Gateway', icon: CreditCard },
+    { id: 'email', label: 'SMTP Email', icon: Mail },
+    { id: 'ai', label: 'Groq AI Model', icon: Bot },
+    { id: 'video', label: 'LiveKit Streaming', icon: Video },
+    { id: 'general', label: 'Platform & Flags', icon: Sliders },
+    { id: 'queue', label: 'Queue Capacity', icon: Users },
   ];
 
   return (
-    <div style={{ width: '100%' }}>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+    <div className="w-full space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Platform Configuration Hub</h1>
-          <p className="page-subtitle">Manage platform-wide API secrets, SMTP, AI models and system parameters</p>
-        </div>
-
-        {/* Theme Mode Toggle */}
-        <div style={{ display: 'inline-flex', padding: '4px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '12px', gap: '4px' }}>
-          <button
-            type="button"
-            onClick={() => setMode('dark')}
-            className={`btn btn-sm ${mode === 'dark' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ padding: '6px 12px', fontSize: '12px' }}
-          >
-            <Moon size={14} />
-            <span>Dark</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('light')}
-            className={`btn btn-sm ${mode === 'light' ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ padding: '6px 12px', fontSize: '12px' }}
-          >
-            <Sun size={14} />
-            <span>Light</span>
-          </button>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+            Platform Configuration
+          </h1>
+          <p className="text-xs sm:text-sm text-[#6b7280] dark:text-zinc-400 mt-1">
+            Encrypted credentials, SMTP relays, Groq AI model selection, and maintenance gates
+          </p>
         </div>
       </div>
 
-      {msg && (
-        <div className={`alert ${msg.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{msg.text}</span>
-          <button style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => setMsg(null)}>
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', marginBottom: '24px', paddingBottom: '4px', width: '100%' }}>
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
         {tabs.map((t) => {
           const Icon = t.icon;
+          const isActive = activeTab === t.id;
           return (
             <button
               key={t.id}
-              className={`settings-tab ${activeTab === t.id ? 'active' : ''}`}
-              onClick={() => { setActiveTab(t.id); setMsg(null); }}
+              onClick={() => setActiveTab(t.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-[#0071e3] text-white shadow-xs'
+                  : 'bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-[#181b2e]'
+              }`}
             >
-              <Icon size={16} />
+              <Icon size={15} />
               <span>{t.label}</span>
             </button>
           );
         })}
       </div>
 
+      {/* Main Settings Card */}
       {loading ? (
-        <div className="glass" style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)', width: '100%' }}>
-          Loading credentials...
+        <div className="glass-card rounded-3xl p-16 text-center text-zinc-400">
+          <div className="inline-block w-6 h-6 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin mb-2" />
+          <p className="text-xs font-medium">Decrypting platform credentials...</p>
         </div>
       ) : (
-        <form onSubmit={handleSave} className="glass" style={{ padding: '32px', width: '100%', boxSizing: 'border-box' }}>
+        <form onSubmit={handleSave} className="glass-card rounded-3xl p-6 sm:p-8 bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] shadow-xs space-y-6">
+          
           {/* PAYMENT TAB */}
           {activeTab === 'payment' && (
-            <div>
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 4px 0' }}>Razorpay Gateway Details</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
-                  Credentials used for company subscription checkout and payment verification. Secrets are AES-256 encrypted.
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Razorpay Payment Gateway</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Credentials for company subscription checkout and automated verification. Secrets are encrypted with AES-256 in PostgreSQL.
                 </p>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Razorpay Key ID</label>
                   <input
@@ -313,21 +297,21 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">Gateway Mode</label>
-                  <select className="input" value={razorpayMode} onChange={(e) => setRazorpayMode(e.target.value)}>
-                    <option value="test">Test Mode (Sandbox)</option>
+                  <label className="label">Environment Mode</label>
+                  <select className="select" value={razorpayMode} onChange={(e) => setRazorpayMode(e.target.value)}>
+                    <option value="test">Test Mode (Sandbox / Development)</option>
                     <option value="live">Live Mode (Production)</option>
                   </select>
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Razorpay Key Secret (Encrypted)</label>
                   <input
                     className="input"
                     type="password"
-                    placeholder="Enter new key secret (or leave masked)"
+                    placeholder="••••••••••••••••"
                     value={razorpayKeySecret}
                     onChange={(e) => setRazorpayKeySecret(e.target.value)}
                   />
@@ -337,17 +321,22 @@ export default function SettingsPage() {
                   <input
                     className="input"
                     type="password"
-                    placeholder="Enter webhook secret (or leave masked)"
+                    placeholder="••••••••••••••••"
                     value={razorpayWebhookSecret}
                     onChange={(e) => setRazorpayWebhookSecret(e.target.value)}
                   />
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <button type="button" className="btn btn-ghost" onClick={handleTestPayment} disabled={testingPayment} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {testingPayment ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-                  <span>{testingPayment ? 'Testing...' : 'Test Connection'}</span>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleTestPayment}
+                  disabled={testingPayment}
+                  className="btn-secondary text-xs flex items-center gap-1.5"
+                >
+                  {testingPayment ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
+                  <span>{testingPayment ? 'Testing Connection...' : 'Test Razorpay Connection'}</span>
                 </button>
               </div>
             </div>
@@ -355,63 +344,67 @@ export default function SettingsPage() {
 
           {/* EMAIL TAB */}
           {activeTab === 'email' && (
-            <div>
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 4px 0' }}>SMTP / Transactional Email</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
-                  Configured for system emails (interview links, verification tokens, offer letters).
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">SMTP Relay / System Email</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Sends transactional notifications, verification codes, and interview invites.
                 </p>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '20px' }}>
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
                   <label className="label">SMTP Host</label>
                   <input className="input" value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} placeholder="smtp.gmail.com" />
                 </div>
                 <div>
-                  <label className="label">SMTP Port</label>
+                  <label className="label">Port</label>
                   <input className="input" type="number" value={smtpPort} onChange={(e) => setSmtpPort(Number(e.target.value))} placeholder="587" />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">SMTP Username / Email</label>
                   <input className="input" value={smtpUser} onChange={(e) => setSmtpUser(e.target.value)} placeholder="workbridge.anandhu@gmail.com" />
                 </div>
                 <div>
-                  <label className="label">SMTP Password / App Password (Encrypted)</label>
+                  <label className="label">App Password (Encrypted)</label>
                   <input className="input" type="password" value={smtpPass} onChange={(e) => setSmtpPass(e.target.value)} placeholder="••••••••••••" />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">From Address</label>
                   <input className="input" value={emailFrom} onChange={(e) => setEmailFrom(e.target.value)} placeholder="noreply@easyapply.com" />
                 </div>
                 <div>
-                  <label className="label">From Sender Name</label>
+                  <label className="label">Sender Display Name</label>
                   <input className="input" value={emailFromName} onChange={(e) => setEmailFromName(e.target.value)} placeholder="EasyApply" />
                 </div>
               </div>
 
-              {/* Test Email Section */}
-              <div style={{ background: 'var(--surface2)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '12px' }}>
-                  <Send size={16} className="text-indigo-400" />
-                  <h4 style={{ fontSize: '14px', fontWeight: '600', margin: 0 }}>Send Live Test Email</h4>
+              {/* Test Email Box */}
+              <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06] space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-zinc-900 dark:text-white">
+                  <Send size={14} className="text-[#0071e3]" />
+                  <span>Send Live Test Email</span>
                 </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div className="flex gap-2">
                   <input
-                    className="input"
-                    placeholder="Enter recipient email (e.g. your@gmail.com)"
+                    className="input text-xs"
+                    placeholder="Enter your email to receive a test message..."
                     value={testEmailRecipient}
                     onChange={(e) => setTestEmailRecipient(e.target.value)}
-                    style={{ flex: 1 }}
                   />
-                  <button type="button" className="btn btn-ghost" onClick={handleTestEmail} disabled={testingEmail} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    {testingEmail ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                  <button
+                    type="button"
+                    onClick={handleTestEmail}
+                    disabled={testingEmail}
+                    className="btn-secondary text-xs shrink-0 flex items-center gap-1.5"
+                  >
+                    {testingEmail ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                     <span>{testingEmail ? 'Sending...' : 'Send Test'}</span>
                   </button>
                 </div>
@@ -421,15 +414,15 @@ export default function SettingsPage() {
 
           {/* AI TAB */}
           {activeTab === 'ai' && (
-            <div>
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 4px 0' }}>Groq AI LLM Settings</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
-                  Powers ATS resume scoring, job match evaluation, and profile auto-parsing.
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Groq AI LLM Engine</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Powers instant resume score analysis, ATS parsing, and AI CV generation.
                 </p>
               </div>
 
-              <div style={{ marginBottom: '20px' }}>
+              <div>
                 <label className="label">Groq API Key (Encrypted)</label>
                 <input
                   className="input"
@@ -440,52 +433,56 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div style={{ marginBottom: '24px' }}>
+              <div>
                 <label className="label">Inference Model</label>
-                <select className="input" value={groqModel} onChange={(e) => setGroqModel(e.target.value)}>
-                  <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (Recommended - High Accuracy)</option>
-                  <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b (Fast & Accurate)</option>
-                  <option value="openai/gpt-oss-20b">openai/gpt-oss-20b (Fastest)</option>
-                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Legacy)</option>
+                <select className="select" value={groqModel} onChange={(e) => setGroqModel(e.target.value)}>
+                  <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Recommended - High Accuracy)</option>
+                  <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
+                  <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b (Fast & Precise)</option>
                 </select>
               </div>
 
-              <div style={{ background: 'var(--surface2)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Bot size={20} className="text-blue-400" />
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06]">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center">
+                    <Bot size={16} />
+                  </div>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: '600' }}>Allow Candidate AI Resume Creation (Platform-Wide)</div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Master switch to enable or lock AI resume generation across all job seekers</div>
+                    <div className="text-xs font-bold text-zinc-900 dark:text-white">Allow Seeker AI Resume Creation</div>
+                    <div className="text-[11px] text-zinc-400">Master switch allowing candidates to generate and enhance resumes</div>
                   </div>
                 </div>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={allowSeekerAiResumeCreation}
-                    onChange={(e) => setAllowSeekerAiResumeCreation(e.target.checked)}
-                  />
-                  <span className="toggle-slider"></span>
-                </label>
+                <input
+                  type="checkbox"
+                  checked={allowSeekerAiResumeCreation}
+                  onChange={(e) => setAllowSeekerAiResumeCreation(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
+                />
               </div>
             </div>
           )}
 
           {/* VIDEO TAB */}
           {activeTab === 'video' && (
-            <div>
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 4px 0' }}>LiveKit Video Streaming Infrastructure</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
-                  Powers walk-in instant rooms and scheduled live technical interview rooms.
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">LiveKit Video Streaming</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  WebRTC rooms for walk-in queues and live scheduled interviews.
                 </p>
               </div>
 
-              <div style={{ marginBottom: '20px' }}>
-                <label className="label">LiveKit API Server URL</label>
-                <input className="input" value={livekitApiUrl} onChange={(e) => setLivekitApiUrl(e.target.value)} placeholder="https://livekit.interviewer.stibe.in" />
+              <div>
+                <label className="label">LiveKit Server URL</label>
+                <input
+                  className="input"
+                  value={livekitApiUrl}
+                  onChange={(e) => setLivekitApiUrl(e.target.value)}
+                  placeholder="https://livekit.example.com"
+                />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">LiveKit API Key</label>
                   <input className="input" value={livekitApiKey} onChange={(e) => setLivekitApiKey(e.target.value)} placeholder="devkey" />
@@ -500,15 +497,15 @@ export default function SettingsPage() {
 
           {/* GENERAL TAB */}
           {activeTab === 'general' && (
-            <div>
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 4px 0' }}>General & Platform Controls</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
-                  Brand identity, support routing, and platform registration gate controls.
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">General &amp; Platform Controls</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Brand name, support routing, and platform registration gate switches.
                 </p>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Platform Name</label>
                   <input className="input" value={platformName} onChange={(e) => setPlatformName(e.target.value)} placeholder="EasyApply" />
@@ -519,66 +516,53 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: '24px' }}>
-                <label className="label">Platform Logo Image URL</label>
-                <input className="input" value={platformLogoUrl} onChange={(e) => setPlatformLogoUrl(e.target.value)} placeholder="https://..." />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px', background: 'var(--surface2)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <AlertTriangle size={18} className="text-amber-400" />
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06]">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle size={18} className="text-amber-500" />
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: '600' }}>Maintenance Mode</div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Shows maintenance banner across frontends</div>
+                      <div className="text-xs font-bold text-zinc-900 dark:text-white">Maintenance Mode</div>
+                      <div className="text-[11px] text-zinc-400">Displays a maintenance screen across candidate &amp; company portals</div>
                     </div>
                   </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={maintenanceMode} onChange={(e) => setMaintenanceMode(e.target.checked)} />
-                    <span className="toggle-slider"></span>
-                  </label>
+                  <input
+                    type="checkbox"
+                    checked={maintenanceMode}
+                    onChange={(e) => setMaintenanceMode(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
+                  />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Building2 size={18} className="text-indigo-400" />
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06]">
+                  <div className="flex items-center gap-3">
+                    <Building2 size={18} className="text-[#0071e3]" />
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: '600' }}>Allow New Company Signups</div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>When disabled, new employer registrations are blocked</div>
+                      <div className="text-xs font-bold text-zinc-900 dark:text-white">Allow New Company Registrations</div>
+                      <div className="text-[11px] text-zinc-400">When disabled, new employer signups are temporarily blocked</div>
                     </div>
                   </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={allowNewCompanyReg} onChange={(e) => setAllowNewCompanyReg(e.target.checked)} />
-                    <span className="toggle-slider"></span>
-                  </label>
+                  <input
+                    type="checkbox"
+                    checked={allowNewCompanyReg}
+                    onChange={(e) => setAllowNewCompanyReg(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
+                  />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Users size={18} className="text-purple-400" />
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06]">
+                  <div className="flex items-center gap-3">
+                    <Users size={18} className="text-purple-500" />
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: '600' }}>Allow New Job Seeker Signups</div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>When disabled, candidate registrations are blocked</div>
+                      <div className="text-xs font-bold text-zinc-900 dark:text-white">Allow New Job Seeker Registrations</div>
+                      <div className="text-[11px] text-zinc-400">When disabled, candidate onboarding is temporarily paused</div>
                     </div>
                   </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={allowNewSeekerReg} onChange={(e) => setAllowNewSeekerReg(e.target.checked)} />
-                    <span className="toggle-slider"></span>
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Bot size={18} className="text-blue-400" />
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: '600' }}>Enable Job Seeker AI Resume Creation</div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)' }}>Allow candidates to use AI resume generation & enhancement tools</div>
-                    </div>
-                  </div>
-                  <label className="toggle">
-                    <input type="checkbox" checked={allowSeekerAiResumeCreation} onChange={(e) => setAllowSeekerAiResumeCreation(e.target.checked)} />
-                    <span className="toggle-slider"></span>
-                  </label>
+                  <input
+                    type="checkbox"
+                    checked={allowNewSeekerReg}
+                    onChange={(e) => setAllowNewSeekerReg(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
+                  />
                 </div>
               </div>
             </div>
@@ -586,15 +570,15 @@ export default function SettingsPage() {
 
           {/* QUEUE TAB */}
           {activeTab === 'queue' && (
-            <div>
-              <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: '700', margin: '0 0 4px 0' }}>Walk-In Queue Platform Limits</h3>
-                <p style={{ color: 'var(--muted)', fontSize: '13px', margin: 0 }}>
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Walk-In Queue Platform Limits</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
                   Global capacity constraints. Employers cannot set room capacity exceeding this platform ceiling.
                 </p>
               </div>
 
-              <div style={{ marginBottom: '24px' }}>
+              <div>
                 <label className="label">Global Maximum Room Queue Capacity</label>
                 <input
                   className="input"
@@ -604,17 +588,22 @@ export default function SettingsPage() {
                   min={10}
                   max={1000}
                 />
-                <p style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '6px' }}>
-                  Default is 200 candidates per room. Companies can choose room size ≤ this value.
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Default is 200 candidates per room. Companies can choose room size &le; this value.
                 </p>
               </div>
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '20px', marginTop: '20px' }}>
-            <button type="submit" className="btn btn-primary" disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              <span>{saving ? 'Encrypting & Saving...' : 'Save Settings'}</span>
+          {/* Save Button Footer */}
+          <div className="flex justify-end pt-4 border-t border-black/[0.06] dark:border-white/[0.08]">
+            <button
+              type="submit"
+              disabled={saving}
+              className="btn-primary text-xs flex items-center gap-1.5"
+            >
+              {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              <span>{saving ? 'Encrypting & Saving...' : 'Save Configuration'}</span>
             </button>
           </div>
         </form>

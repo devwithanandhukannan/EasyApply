@@ -204,7 +204,7 @@ export default function ApplicationsPage() {
 
     try {
       setProcessingWithdrawal(applicationId);
-      const response = await api.put(`/jobseeker/applications/${applicationId}/withdraw`);
+      const response = await api.post(`/jobseeker/applications/${applicationId}/withdraw`);
       if (response.data.success) {
         showToast('Application Withdrawn', 'Application has been withdrawn successfully.', 'info');
         fetchApplications();

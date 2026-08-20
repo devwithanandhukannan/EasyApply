@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../contexts/AuthContext';
 import { FcmProvider } from '../contexts/FcmContext';
@@ -19,7 +19,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           style={{ backgroundColor: 'var(--bg-base)', color: 'var(--foreground)' }}
         >
           {/* Structural Nav Layer */}
-          <Sidebar user={user} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+          <Suspense fallback={<aside className="w-64 bg-white dark:bg-[#1c1c1e] shrink-0" />}>
+            <Sidebar user={user} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
+          </Suspense>
           
           {/* Content Stream Pipeline */}
           <main className="flex-1 min-w-0 overflow-y-auto pt-14 md:pt-0 custom-scrollbar">

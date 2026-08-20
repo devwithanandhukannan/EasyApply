@@ -86,7 +86,7 @@ export default function SettingsPage() {
 
     try {
       setIsSubmitting(true);
-      const res = await api.patch('/profile/password', {
+      const res = await api.patch('/jobseeker/profile/password', {
         currentPassword: currentPassword.trim(),
         newPassword: newPassword.trim(),
       });

@@ -94,7 +94,7 @@ export const getKeywordSuggestions = (id: string) =>
   );
 
 export const restoreVersion = (id: string, versionId: string) =>
-  api.patch<{ success: boolean; data: { htmlContent: string } }>(
+  api.patch<{ success: boolean; data: { htmlContent: string; versions?: ResumeVersion[] } }>(
     `/jobseeker/resumes/${id}/restore/${versionId}`
   );
 
@@ -112,7 +112,7 @@ export const updateResume = (id: string, payload: {
   template?: string;
   versionLabel?: string;
 }) =>
-  api.put<{ success: boolean }>(`/jobseeker/resumes/${id}`, payload);
+  api.put<{ success: boolean; data?: { versions?: ResumeVersion[] } }>(`/jobseeker/resumes/${id}`, payload);
 
 export const deleteResume = (id: string) =>
   api.delete<{ success: boolean }>(`/jobseeker/resumes/${id}`);

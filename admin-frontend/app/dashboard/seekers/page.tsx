@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
@@ -10,10 +11,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  MapPin,
   Sparkles,
-  Lock,
-  Unlock,
 } from 'lucide-react';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 interface Seeker {
   id: string;
@@ -37,7 +38,7 @@ export default function SeekersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { showToast } = useGlassToast();
 
   useEffect(() => {
     fetchSeekers();
@@ -54,6 +55,7 @@ export default function SeekersPage() {
       }
     } catch (err) {
       console.error(err);
+      showToast('Error', 'Failed to fetch job seekers', 'danger');
     } finally {
       setLoading(false);
     }
@@ -68,165 +70,174 @@ export default function SeekersPage() {
         aiResumeBuilderEnabled: nextVal,
       });
       if (res.data.success) {
-        setMsg({
-          type: 'success',
-          text: `AI Resume Builder for ${s.fullName} is now ${nextVal ? 'ENABLED' : 'LOCKED'}.`
-        });
-        setTimeout(() => setMsg(null), 4000);
+        showToast(
+          'Updated',
+          `AI Resume Builder for ${s.fullName} is now ${nextVal ? 'ENABLED' : 'LOCKED'}.`,
+          'success'
+        );
       }
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to update AI Resume Builder status' });
+      showToast('Error', err.response?.data?.message || 'Failed to update status', 'danger');
       fetchSeekers();
     }
   };
 
   return (
-    <div style={{ width: '100%' }}>
-      {msg && (
-        <div
-          className={`banner ${msg.type === 'success' ? 'banner-success' : 'banner-danger'}`}
-          style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-        >
-          <span>{msg.text}</span>
-          <button onClick={() => setMsg(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>✕</button>
-        </div>
-      )}
-
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+    <div className="w-full space-y-6">
+      {/* Header & Search */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Job Seeker Directory</h1>
-          <p className="page-subtitle">Manage candidate discovery profiles, platform access, and AI resume builder permissions</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+            Job Seeker Directory
+          </h1>
+          <p className="text-xs sm:text-sm text-[#6b7280] dark:text-zinc-400 mt-1">
+            Manage candidate profiles, discovery opt-in states, and AI CV builder permissions
+          </p>
         </div>
-        <div style={{ width: '340px' }}>
-          <div className="search-wrapper">
-            <Search size={16} className="search-icon" />
-            <input
-              className="input search-input"
-              placeholder="Search seekers by name or email..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            />
-          </div>
+
+        <div className="relative w-full sm:w-80">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input
+            className="input pl-10 pr-4 py-2 text-xs rounded-2xl"
+            placeholder="Search seekers by name or email..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
         </div>
       </div>
 
-      <div className="table-wrapper glass" style={{ width: '100%' }}>
-        <table>
-          <thead>
-            <tr>
-              <th>Candidate</th>
-              <th>Location</th>
-              <th>Availability</th>
-              <th>Discovery Opt-In</th>
-              <th>Applications</th>
-              <th>AI Resume Builder</th>
-              <th>Plan</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
+      {/* Seekers Table Card */}
+      <div className="glass-card rounded-3xl overflow-hidden border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#121422] shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-[#f9fafb] dark:bg-[#181b2e] border-b border-black/[0.06] dark:border-white/[0.08] text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
-                  Loading seekers...
-                </td>
+                <th className="py-3.5 px-5">Candidate</th>
+                <th className="py-3.5 px-4">Location &amp; Skills</th>
+                <th className="py-3.5 px-4">Availability</th>
+                <th className="py-3.5 px-4">Discovery Opt-In</th>
+                <th className="py-3.5 px-4">Applications</th>
+                <th className="py-3.5 px-4 text-center">AI CV Builder</th>
+                <th className="py-3.5 px-5 text-right">Policy</th>
               </tr>
-            ) : seekers.length === 0 ? (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
-                  No job seekers found.
-                </td>
-              </tr>
-            ) : (
-              seekers.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <div style={{ fontWeight: '600', color: '#fff' }}>{s.fullName}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{s.email}</div>
-                  </td>
-                  <td>
-                    <div style={{ fontSize: '13px' }}>{s.location || 'Not specified'}</div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{s._count.skills} skills added</div>
-                  </td>
-                  <td>
-                    <span className={`badge ${s.availabilityStatus === 'available' ? 'badge-green' : 'badge-yellow'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      {s.availabilityStatus === 'available' ? <CheckCircle2 size={13} /> : <Clock size={13} />}
-                      <span>{s.availabilityStatus}</span>
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${s.discoverable ? 'badge-green' : 'badge-yellow'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      {s.discoverable ? (
-                        <>
-                          <Eye size={13} />
-                          <span>Opted-In (Visible to all)</span>
-                        </>
-                      ) : (
-                        <>
-                          <EyeOff size={13} />
-                          <span>Hidden (Private)</span>
-                        </>
-                      )}
-                    </span>
-                  </td>
-                  <td>
-                    <span style={{ fontWeight: '600' }}>{s._count.applications}</span>
-                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}> applied</span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <label className="toggle" title="Toggle AI resume builder lock for this candidate">
-                        <input
-                          type="checkbox"
-                          checked={s.aiResumeBuilderEnabled ?? true}
-                          onChange={() => handleToggleAiResume(s)}
-                        />
-                        <span className="toggle-slider"></span>
-                      </label>
-                      <span style={{ fontSize: '11px', color: s.aiResumeBuilderEnabled ?? true ? '#34c759' : '#8e8e93', fontWeight: 600 }}>
-                        {s.aiResumeBuilderEnabled ?? true ? 'Active' : 'Locked'}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="badge badge-blue" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <ShieldCheck size={13} />
-                      <span>100% Free Forever</span>
-                    </span>
+            </thead>
+            <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.06]">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-zinc-400 font-medium">
+                    <div className="inline-block w-5 h-5 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin mb-2" />
+                    <p>Loading candidate directory...</p>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', width: '100%' }}>
-        <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-          Showing {seekers.length} of {total} candidates
+              ) : seekers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-16 text-center text-zinc-400">
+                    No job seekers found matching your query.
+                  </td>
+                </tr>
+              ) : (
+                seekers.map((s) => (
+                  <tr key={s.id} className="hover:bg-zinc-50/80 dark:hover:bg-white/[0.02] transition-colors">
+                    <td className="py-4 px-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold text-xs shrink-0">
+                          {s.fullName ? s.fullName.slice(0, 2).toUpperCase() : 'CA'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-zinc-900 dark:text-white truncate max-w-xs">{s.fullName || 'Anonymous Candidate'}</div>
+                          <div className="text-[11px] text-zinc-400 truncate">{s.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-zinc-700 dark:text-zinc-300">
+                      <div className="flex items-center gap-1 font-semibold">
+                        <MapPin size={12} className="text-zinc-400" />
+                        <span>{s.location || 'Remote / Not specified'}</span>
+                      </div>
+                      <div className="text-[11px] text-zinc-400">{s._count.skills} verified skills</div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                        s.availabilityStatus === 'available'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                      }`}>
+                        {s.availabilityStatus === 'available' ? <CheckCircle2 size={12} /> : <Clock size={12} />}
+                        <span className="capitalize">{s.availabilityStatus}</span>
+                      </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                        s.discoverable
+                          ? 'bg-[#0071e3]/10 text-[#0071e3] dark:text-[#2997ff] border border-[#0071e3]/20'
+                          : 'bg-zinc-100 dark:bg-white/10 text-zinc-500'
+                      }`}>
+                        {s.discoverable ? (
+                          <>
+                            <Eye size={12} />
+                            <span>Opted-In</span>
+                          </>
+                        ) : (
+                          <>
+                            <EyeOff size={12} />
+                            <span>Private</span>
+                          </>
+                        )}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 font-semibold text-zinc-800 dark:text-zinc-200">
+                      <span>{s._count.applications}</span>
+                      <span className="text-[11px] font-normal text-zinc-400"> applied</span>
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <button
+                        onClick={() => handleToggleAiResume(s)}
+                        className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-colors cursor-pointer ${
+                          (s.aiResumeBuilderEnabled ?? true)
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                        }`}
+                      >
+                        {(s.aiResumeBuilderEnabled ?? true) ? 'Active' : 'Locked'}
+                      </button>
+                    </td>
+                    <td className="py-4 px-5 text-right">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold bg-zinc-100 dark:bg-white/10 text-zinc-600 dark:text-zinc-300">
+                        <ShieldCheck size={12} className="text-[#0071e3]" />
+                        <span>Free Forever</span>
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            className="btn btn-ghost btn-sm"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          >
-            <ChevronLeft size={16} />
-            <span>Previous</span>
-          </button>
-          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0 12px', fontSize: '13px', color: 'var(--muted)' }}>
-            Page {page} of {totalPages || 1}
-          </span>
-          <button
-            className="btn btn-ghost btn-sm"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          >
-            <span>Next</span>
-            <ChevronRight size={16} />
-          </button>
+
+        {/* Pagination Footer */}
+        <div className="flex items-center justify-between p-4 border-t border-black/[0.06] dark:border-white/[0.08] bg-[#fbfbfd] dark:bg-[#15182a] text-xs text-zinc-500">
+          <div>
+            Showing <span className="font-bold text-zinc-800 dark:text-zinc-200">{seekers.length}</span> of <span className="font-bold text-zinc-800 dark:text-zinc-200">{total}</span> candidates
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="px-3 py-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#181b2e] hover:bg-zinc-50 dark:hover:bg-[#22263d] disabled:opacity-40 disabled:cursor-not-allowed font-semibold flex items-center gap-1 cursor-pointer"
+            >
+              <ChevronLeft size={14} />
+              <span>Previous</span>
+            </button>
+            <span className="px-2 font-semibold">Page {page} of {totalPages || 1}</span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="px-3 py-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#181b2e] hover:bg-zinc-50 dark:hover:bg-[#22263d] disabled:opacity-40 disabled:cursor-not-allowed font-semibold flex items-center gap-1 cursor-pointer"
+            >
+              <span>Next</span>
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

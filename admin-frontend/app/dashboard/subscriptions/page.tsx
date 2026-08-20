@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import {
@@ -17,7 +18,11 @@ import {
   Send,
   CheckCircle2,
   XCircle,
+  Eye,
+  EyeOff,
+  Trash2,
 } from 'lucide-react';
+import { useGlassToast } from '@/app/components/GlassToastContainer';
 
 interface Plan {
   id: string;
@@ -81,7 +86,7 @@ export default function SubscriptionsPage() {
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const { showToast } = useGlassToast();
 
   // Form states
   const [name, setName] = useState('');
@@ -107,6 +112,7 @@ export default function SubscriptionsPage() {
       }
     } catch (err) {
       console.error(err);
+      showToast('Error', 'Failed to fetch plans', 'danger');
     } finally {
       setLoading(false);
     }
@@ -131,7 +137,7 @@ export default function SubscriptionsPage() {
     setMaxJobPostings(10);
     setMaxTeamMembers(5);
     setIsCustom(true);
-    setIsPublic(false); // Default custom packages to private/not on landing
+    setIsPublic(false);
     const initialFeatures: Record<string, boolean> = {};
     ALL_FEATURES.forEach((f) => { initialFeatures[f.key] = true; });
     setFeatures(initialFeatures);
@@ -146,7 +152,7 @@ export default function SubscriptionsPage() {
     setMaxJobPostings(15);
     setMaxTeamMembers(10);
     setIsCustom(true);
-    setIsPublic(false); // Hidden from public landing
+    setIsPublic(false);
     const initialFeatures: Record<string, boolean> = {};
     ALL_FEATURES.forEach((f) => {
       initialFeatures[f.key] = !!req.requestedFeatures[f.key];
@@ -185,18 +191,18 @@ export default function SubscriptionsPage() {
       if (editingPlan) {
         const res = await api.put(`/admin/subscriptions/${editingPlan.id}`, payload);
         if (res.data.success) {
-          setMsg({ type: 'success', text: `Plan ${name} updated successfully.` });
+          showToast('Success', `Plan ${name} updated successfully.`, 'success');
         }
       } else {
         const res = await api.post('/admin/subscriptions', payload);
         if (res.data.success) {
-          setMsg({ type: 'success', text: `Plan ${name} created successfully.` });
+          showToast('Success', `Plan ${name} created successfully.`, 'success');
         }
       }
       setModalOpen(false);
       fetchPlans();
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to save plan' });
+      showToast('Error', err.response?.data?.message || 'Failed to save plan', 'danger');
     }
   };
 
@@ -204,11 +210,11 @@ export default function SubscriptionsPage() {
     try {
       const res = await api.put(`/admin/subscriptions/${p.id}`, { isActive: !p.isActive });
       if (res.data.success) {
-        setMsg({ type: 'success', text: `Plan ${p.name} status updated.` });
+        showToast('Success', `Plan ${p.name} status updated.`, 'success');
         fetchPlans();
       }
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'Update failed' });
+      showToast('Error', err.response?.data?.message || 'Update failed', 'danger');
     }
   };
 
@@ -216,57 +222,64 @@ export default function SubscriptionsPage() {
     try {
       const res = await api.put(`/admin/feature-requests/${requestId}/status`, { status });
       if (res.data.success) {
-        setMsg({ type: 'success', text: `Request marked as ${status}.` });
+        showToast('Updated', `Request marked as ${status}.`, 'success');
         fetchFeatureRequests();
       }
     } catch (err: any) {
-      setMsg({ type: 'error', text: err.response?.data?.message || 'Update failed' });
+      showToast('Error', err.response?.data?.message || 'Update failed', 'danger');
     }
   };
 
   const pendingRequestsCount = featureRequests.filter(r => r.status === 'PENDING').length;
 
   return (
-    <div style={{ width: '100%' }}>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+    <div className="w-full space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">Subscription & Pricing Plans</h1>
-          <p className="page-subtitle">Configure public landing tiers, feature locks, & custom enterprise packages</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-white tracking-tight">
+            Subscription &amp; Pricing Packages
+          </h1>
+          <p className="text-xs sm:text-sm text-[#6b7280] dark:text-zinc-400 mt-1">
+            Configure public landing tiers, feature limits, and custom enterprise packages
+          </p>
         </div>
-        <button className="btn btn-primary" onClick={openCreateModal} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <Plus size={16} />
-          <span>Create Custom Package</span>
+
+        <button
+          onClick={openCreateModal}
+          className="btn-primary text-xs flex items-center gap-1.5 self-start sm:self-auto"
+        >
+          <Plus size={15} />
+          <span>Create Package</span>
         </button>
       </div>
 
-      {msg && (
-        <div className={`alert ${msg.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <span>{msg.text}</span>
-          <button style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center' }} onClick={() => setMsg(null)}>
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
-      {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '24px' }}>
+      {/* Tab Navigation */}
+      <div className="flex items-center gap-2 border-b border-black/[0.06] dark:border-white/[0.08] pb-3">
         <button
           onClick={() => setActiveTab('plans')}
-          className={`btn ${activeTab === 'plans' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'plans'
+              ? 'bg-[#0071e3] text-white shadow-xs'
+              : 'bg-zinc-100 dark:bg-white/10 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200'
+          }`}
         >
-          <Sparkles size={15} />
-          <span>Subscription Plans ({plans.length})</span>
+          <Sparkles size={14} />
+          <span>Active Plans ({plans.length})</span>
         </button>
+
         <button
           onClick={() => setActiveTab('requests')}
-          className={`btn ${activeTab === 'requests' ? 'btn-primary' : 'btn-ghost'}`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'requests'
+              ? 'bg-[#0071e3] text-white shadow-xs'
+              : 'bg-zinc-100 dark:bg-white/10 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200'
+          }`}
         >
-          <Building2 size={15} />
-          <span>Company Custom Requests</span>
+          <Building2 size={14} />
+          <span>Custom Requests</span>
           {pendingRequestsCount > 0 && (
-            <span style={{ background: '#ef4444', color: '#fff', fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '999px' }}>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500 text-white animate-pulse">
               {pendingRequestsCount} new
             </span>
           )}
@@ -275,189 +288,160 @@ export default function SubscriptionsPage() {
 
       {activeTab === 'plans' ? (
         /* Plan Cards Grid */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px', marginBottom: '32px', width: '100%' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {loading ? (
-            <div style={{ color: 'var(--muted)', textAlign: 'center', gridColumn: '1/-1', padding: '40px' }}>
-              Loading subscription plans...
+            <div className="col-span-full py-20 text-center text-zinc-400">
+              <div className="inline-block w-6 h-6 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin mb-2" />
+              <p className="text-xs font-medium">Loading subscription tiers...</p>
             </div>
           ) : (
             plans.map((p) => (
-              <div key={p.id} className="glass" style={{ padding: '28px', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '20px', fontWeight: '700', margin: '0 0 4px 0' }}>{p.name}</h3>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                      {p.isCustom ? 'Custom Tailored Package' : 'Standard Tier'}
+              <div
+                key={p.id}
+                className="glass-card rounded-3xl p-6 bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] flex flex-col justify-between shadow-xs hover:shadow-lg transition-all duration-200"
+              >
+                <div>
+                  {/* Top Bar */}
+                  <div className="flex items-start justify-between gap-2 mb-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-zinc-900 dark:text-white">{p.name}</h3>
+                        {p.name === 'Free' && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-[#0071e3] border border-blue-500/20">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {p.isCustom ? 'Custom Enterprise Tier' : 'Standard Public Tier'}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleToggleActive(p)}
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                          p.isActive
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                        }`}
+                      >
+                        {p.isActive ? 'Active' : 'Inactive'}
+                      </button>
+                      <button
+                        onClick={() => openEditModal(p)}
+                        className="w-7 h-7 rounded-xl flex items-center justify-center bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 text-zinc-600 dark:text-zinc-300 transition-colors cursor-pointer"
+                        title="Edit Plan"
+                      >
+                        <Pencil size={13} />
+                      </button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <span className={`badge ${p.isActive ? 'badge-green' : 'badge-red'}`}>
-                        {p.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                      {p.name === 'Free' && <span className="badge badge-blue">Default Free</span>}
+
+                  {/* Price */}
+                  <div className="mb-4">
+                    <div className="text-2xl font-extrabold text-zinc-900 dark:text-white">
+                      {p.price ? `₹${Number(p.price).toLocaleString()}` : 'Free'}
+                      {p.price ? <span className="text-xs font-normal text-zinc-400">/mo</span> : ''}
                     </div>
-                    {p.isPublic ? (
-                      <span style={{ fontSize: '10px', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: 4, fontWeight: '600' }}>
-                        <Globe size={11} /> Public Landing
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '10px', color: '#c084fc', display: 'flex', alignItems: 'center', gap: 4, fontWeight: '600' }}>
-                        <Lock size={11} /> Custom Package Only
-                      </span>
+                    {p.description && (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">
+                        {p.description}
+                      </p>
                     )}
                   </div>
-                </div>
 
-                <div style={{ fontSize: '28px', fontWeight: '800', marginBottom: '12px', color: '#fff' }}>
-                  {p.price ? `₹${p.price}` : 'Free'}
-                  {p.price && <span style={{ fontSize: '14px', fontWeight: '400', color: 'var(--muted)' }}> /month</span>}
-                </div>
-
-                <p style={{ color: 'var(--muted)', fontSize: '13px', minHeight: '38px', marginBottom: '20px' }}>
-                  {p.description || 'No description provided.'}
-                </p>
-
-                {/* Limits */}
-                <div style={{ background: 'var(--surface2)', padding: '12px 16px', borderRadius: '8px', marginBottom: '20px', fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Briefcase size={14} className="text-indigo-400" />
-                    <span>Max Jobs: <strong style={{ color: '#fff' }}>{p.maxJobPostings >= 9999 ? 'Unlimited' : p.maxJobPostings}</strong></span>
+                  {/* Metrics Badges */}
+                  <div className="grid grid-cols-2 gap-2 mb-5 p-3 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.04]">
+                    <div className="flex items-center gap-2">
+                      <Briefcase size={14} className="text-[#0071e3]" />
+                      <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{p.maxJobPostings} Jobs</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Users size={14} className="text-purple-500" />
+                      <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{p.maxTeamMembers} Team</span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Users size={14} className="text-purple-400" />
-                    <span>Team Size: <strong style={{ color: '#fff' }}>{p.maxTeamMembers >= 9999 ? 'Unlimited' : p.maxTeamMembers}</strong></span>
-                  </div>
-                </div>
 
-                {/* Features List */}
-                <div style={{ flex: 1, marginBottom: '24px' }}>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '10px' }}>
-                    Included Features ({Object.values(p.features || {}).filter(Boolean).length}/{ALL_FEATURES.length})
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
-                    {ALL_FEATURES.map((f) => {
-                      const enabled = p.features && p.features[f.key];
+                  {/* Features List */}
+                  <div className="space-y-2 mb-6">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Features Included</div>
+                    {ALL_FEATURES.slice(0, 6).map((f) => {
+                      const enabled = !!p.features?.[f.key];
                       return (
-                        <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: enabled ? 'var(--text)' : 'var(--muted)', opacity: enabled ? 1 : 0.45 }}>
-                          {enabled ? <Check size={14} style={{ color: 'var(--success)', flexShrink: 0 }} /> : <X size={14} style={{ color: 'var(--muted)', flexShrink: 0 }} />}
-                          <span>{f.label}</span>
+                        <div key={f.key} className="flex items-center gap-2 text-xs">
+                          {enabled ? (
+                            <Check size={14} className="text-emerald-500 shrink-0" />
+                          ) : (
+                            <X size={14} className="text-zinc-300 dark:text-zinc-600 shrink-0" />
+                          )}
+                          <span className={enabled ? 'text-zinc-700 dark:text-zinc-300' : 'text-zinc-400 dark:text-zinc-600 line-through'}>
+                            {f.label}
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Footer */}
-                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '12px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Building2 size={14} />
-                    <span>{p._count?.companySubscriptions ?? 0} companies</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openEditModal(p)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <Pencil size={14} />
-                      <span>Edit</span>
-                    </button>
-                    {p.name !== 'Free' && (
-                      <button
-                        className={`btn btn-sm ${p.isActive ? 'btn-ghost' : 'btn-success'}`}
-                        onClick={() => handleToggleActive(p)}
-                      >
-                        {p.isActive ? 'Deactivate' : 'Activate'}
-                      </button>
-                    )}
-                  </div>
+                {/* Footer status */}
+                <div className="pt-4 border-t border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between text-[11px] text-zinc-400">
+                  <span className="flex items-center gap-1">
+                    {p.isPublic ? <Globe size={12} className="text-emerald-500" /> : <Lock size={12} className="text-amber-500" />}
+                    <span>{p.isPublic ? 'Public Landing' : 'Private Custom'}</span>
+                  </span>
+                  <span className="font-semibold text-zinc-600 dark:text-zinc-300">
+                    {p._count?.companySubscriptions ?? 0} companies
+                  </span>
                 </div>
               </div>
             ))
           )}
         </div>
       ) : (
-        /* Company Custom Feature Requests View */
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        /* Feature Requests Tab */
+        <div className="space-y-4">
           {featureRequests.length === 0 ? (
-            <div className="glass" style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
-              <Building2 size={32} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
-              <h3>No Feature Requests Yet</h3>
-              <p style={{ fontSize: '13px', marginTop: '6px' }}>When companies request custom business features or packages from their workspace, they will appear here.</p>
+            <div className="p-16 rounded-3xl bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] text-center text-zinc-400">
+              No custom package feature requests from companies yet.
             </div>
           ) : (
             featureRequests.map((req) => (
-              <div key={req.id} className="glass" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>{req.company.name}</h3>
-                      <span className={`badge ${
-                        req.status === 'PENDING' ? 'badge-red' :
-                        req.status === 'FULFILLED' ? 'badge-green' : 'badge-blue'
-                      }`}>
-                        {req.status}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>
-                      {req.company.email} · {req.company.industry} · Current Plan: <strong style={{ color: '#fff' }}>{req.company.subscription?.plan?.name || 'Free'}</strong>
-                    </div>
+              <div
+                key={req.id}
+                className="glass-card rounded-3xl p-6 bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-xs"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">{req.company.name}</h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                      {req.status}
+                    </span>
                   </div>
-
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => openCreateModalForRequest(req)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    >
-                      <Plus size={14} />
-                      <span>Create Package for {req.company.name}</span>
-                    </button>
-                    {req.status !== 'FULFILLED' && (
-                      <button
-                        className="btn btn-success btn-sm"
-                        onClick={() => handleUpdateRequestStatus(req.id, 'FULFILLED')}
-                      >
-                        Mark Fulfilled
-                      </button>
-                    )}
-                    {req.status === 'PENDING' && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => handleUpdateRequestStatus(req.id, 'REJECTED')}
-                      >
-                        Reject
-                      </button>
-                    )}
-                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {req.message || 'No additional notes provided.'}
+                  </p>
+                  {req.budgetRange && (
+                    <div className="text-xs font-semibold text-[#0071e3]">
+                      Budget: {req.budgetRange}
+                    </div>
+                  )}
                 </div>
 
-                {/* Requested Modules */}
-                <div>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                    Requested Modules:
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {ALL_FEATURES.filter(f => req.requestedFeatures[f.key]).map(f => (
-                      <span key={f.key} style={{ background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#818cf8', fontSize: '11px', padding: '4px 10px', borderRadius: '6px', fontWeight: '600' }}>
-                        ✓ {f.label}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Message and Budget */}
-                {(req.message || req.budgetRange) && (
-                  <div style={{ background: 'var(--surface2)', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {req.budgetRange && (
-                      <div><strong>Budget Range:</strong> <span style={{ color: '#34d399' }}>{req.budgetRange}</span></div>
-                    )}
-                    {req.message && (
-                      <div><strong>Requirements Note:</strong> <em>"{req.message}"</em></div>
-                    )}
-                  </div>
-                )}
-
-                <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Clock size={12} />
-                  <span>Submitted on {new Date(req.createdAt).toLocaleDateString()} at {new Date(req.createdAt).toLocaleTimeString()}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openCreateModalForRequest(req)}
+                    className="btn-primary text-xs flex items-center gap-1.5"
+                  >
+                    <Plus size={13} />
+                    <span>Create Custom Tier</span>
+                  </button>
+                  <button
+                    onClick={() => handleUpdateRequestStatus(req.id, 'FULFILLED')}
+                    className="btn-secondary text-xs"
+                  >
+                    Mark Fulfilled
+                  </button>
                 </div>
               </div>
             ))
@@ -467,138 +451,122 @@ export default function SubscriptionsPage() {
 
       {/* Create / Edit Plan Modal */}
       {modalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <form onSubmit={handleSavePlan} className="glass" style={{ width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', padding: '32px', background: 'var(--surface)' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '8px' }}>
-              {editingPlan ? `Edit Plan: ${editingPlan.name}` : 'Create Subscription Package'}
-            </h2>
-            <p style={{ color: 'var(--muted)', fontSize: '14px', marginBottom: '24px' }}>
-              Define plan pricing, landing page visibility, and toggle exact modules on/off.
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="glass-card rounded-3xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 sm:p-7 bg-white dark:bg-[#181b2e] border border-black/[0.08] dark:border-white/[0.1] shadow-2xl space-y-5">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="label">Plan Name *</label>
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
+                  {editingPlan ? `Edit Package: ${editingPlan.name}` : 'Create Subscription Package'}
+                </h2>
+                <p className="text-xs text-zinc-400 mt-1">Configure pricing tier parameters, limits, and module permissions</p>
+              </div>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-zinc-100 dark:bg-white/10 hover:bg-zinc-200 text-zinc-400 flex items-center justify-center cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlan} className="space-y-4">
+              <div>
+                <label className="label">Package Name</label>
                 <input
                   className="input"
-                  placeholder="e.g. Startup Pro / Custom VIP"
+                  required
+                  placeholder="e.g. Growth Pro Tier"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  required
                 />
               </div>
+
               <div>
-                <label className="label">Price (INR / month) (Leave empty for Free)</label>
+                <label className="label">Monthly Price (INR ₹)</label>
                 <input
                   className="input"
                   type="number"
-                  placeholder="e.g. 2999"
+                  placeholder="e.g. 2999 (Leave blank for Free)"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                 />
               </div>
-            </div>
 
-            {/* Public Landing Visibility Toggle */}
-            <div style={{ marginBottom: '16px', background: 'var(--surface2)', padding: '14px 16px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '600', color: '#fff' }}>
-                  Visible on Public Landing & Pricing Pages
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Max Active Jobs</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={maxJobPostings}
+                    onChange={(e) => setMaxJobPostings(Number(e.target.value))}
+                  />
                 </div>
-                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                  Toggle ON for standard public tiers. Toggle OFF for private/custom packages assigned to specific companies.
+                <div>
+                  <label className="label">Max Team Members</label>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    value={maxTeamMembers}
+                    onChange={(e) => setMaxTeamMembers(Number(e.target.value))}
+                  />
                 </div>
               </div>
-              <label className="toggle" style={{ marginLeft: '12px' }}>
-                <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => setIsPublic(e.target.checked)}
-                />
-                <span className="toggle-slider"></span>
-              </label>
-            </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label className="label">Description</label>
-              <textarea
-                className="input"
-                style={{ resize: 'vertical', minHeight: '60px' }}
-                placeholder="Short description of who this plan is for..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
               <div>
-                <label className="label">Max Active Job Postings</label>
-                <input
-                  className="input"
-                  type="number"
-                  value={maxJobPostings}
-                  onChange={(e) => setMaxJobPostings(Number(e.target.value))}
-                  required
-                />
+                <label className="label">Public Visibility</label>
+                <div className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-50 dark:bg-[#121422] border border-black/[0.04] dark:border-white/[0.06]">
+                  <input
+                    type="checkbox"
+                    id="isPublic"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                    className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
+                  />
+                  <label htmlFor="isPublic" className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 cursor-pointer">
+                    Showcase this tier on public landing &amp; pricing pages
+                  </label>
+                </div>
               </div>
-              <div>
-                <label className="label">Max Team Members</label>
-                <input
-                  className="input"
-                  type="number"
-                  value={maxTeamMembers}
-                  onChange={(e) => setMaxTeamMembers(Number(e.target.value))}
-                  required
-                />
-              </div>
-            </div>
 
-            {/* Feature Toggle Matrix */}
-            <div style={{ marginBottom: '28px' }}>
-              <label className="label" style={{ marginBottom: '12px', fontSize: '14px', fontWeight: '600' }}>
-                Included Features & Modules
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                {ALL_FEATURES.map((f) => {
-                  const isEnabled = !!features[f.key];
-                  return (
-                    <div
+              <div>
+                <label className="label">Included Features &amp; Modules</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-zinc-50/50 dark:bg-[#121422]">
+                  {ALL_FEATURES.map((f) => (
+                    <label
                       key={f.key}
-                      onClick={() => setFeatures({ ...features, [f.key]: !isEnabled })}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '12px 16px',
-                        background: isEnabled ? 'rgba(99, 102, 241, 0.08)' : 'var(--surface2)',
-                        borderRadius: '10px',
-                        border: `1px solid ${isEnabled ? 'rgba(99, 102, 241, 0.3)' : 'var(--border)'}`,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                      }}
+                      className="flex items-center gap-2 p-2 rounded-xl hover:bg-white dark:hover:bg-white/5 cursor-pointer text-xs"
                     >
-                      <span style={{ fontSize: '13px', fontWeight: '500', color: isEnabled ? '#fff' : 'var(--text)', paddingRight: '8px' }}>
-                        {f.label}
-                      </span>
-                      <label className="toggle" style={{ pointerEvents: 'none', marginLeft: '8px' }}>
-                        <input
-                          type="checkbox"
-                          checked={isEnabled}
-                          readOnly
-                        />
-                        <span className="toggle-slider"></span>
-                      </label>
-                    </div>
-                  );
-                })}
+                      <input
+                        type="checkbox"
+                        checked={!!features[f.key]}
+                        onChange={(e) => setFeatures({ ...features, [f.key]: e.target.checked })}
+                        className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3]"
+                      />
+                      <span className="font-medium text-zinc-800 dark:text-zinc-200">{f.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Package</button>
-            </div>
-          </form>
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-black/[0.06] dark:border-white/[0.08]">
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(false)}
+                  className="btn-secondary text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary text-xs"
+                >
+                  {editingPlan ? 'Save Changes' : 'Create Package'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

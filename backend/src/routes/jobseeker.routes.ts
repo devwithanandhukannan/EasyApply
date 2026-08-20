@@ -50,6 +50,7 @@ import { getSalaryComparison } from '../controllers/offer.controller.ts';
 import { saveNotificationToken } from '../controllers/notification.controller.ts';
 import { SpotJobController } from '../controllers/spotJob.controller.ts';
 import { parseAndLoadResume } from '../controllers/resumeParser.controller.ts';
+import { toggleSaveJob, getSavedJobs, getSavedJobIds } from '../controllers/savedJob.controller.ts';
 import { aiLimiter } from '../middleware/rateLimiter.ts';
 
 const router = express.Router();
@@ -107,14 +108,11 @@ const resumeStorage = multer.diskStorage({
 const resumeUpload = multer({
   storage: resumeStorage,
   fileFilter: (_req, file, cb) => {
-    const allowed = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
-    allowed.includes(file.mimetype)
-      ? cb(null, true)
-      : cb(new Error('Only PDF/DOCX allowed'));
+    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed. Please upload a valid PDF document.'));
+    }
   },
   limits: { fileSize: 10 * 1024 * 1024 },
 });
@@ -155,6 +153,7 @@ router.get('/applications/tracker/timeline', getApplicationsTracker);
 router.get('/tracker/:applicationId', authenticateToken, getSingleApplicationDetails);
 router.patch('/applications/:id/notes', updateApplicationNotes);
 router.post('/applications/:id/withdraw', withdrawApplicationTracker);
+router.put('/applications/:id/withdraw', withdrawApplicationTracker);
 
 router.use('/offers', offerRoutes);
 
@@ -168,5 +167,11 @@ router.get('/spot-jobs/invitations', authenticateToken, requireJobSeeker, SpotJo
 router.patch('/spot-jobs/respond/:bookingId', authenticateToken, requireJobSeeker, SpotJobController.respondToBooking);
 router.get('/spot-jobs/toggle-status', authenticateToken, requireJobSeeker, SpotJobController.getSpotToggleStatus);
 router.patch('/spot-jobs/toggle-status', authenticateToken, requireJobSeeker, SpotJobController.updateSpotToggleStatus);
+
+// ─── SAVED JOBS (BOOKMARKS) ──────────────────────────────────────────────
+router.get('/saved-jobs/ids', getSavedJobIds);
+router.get('/saved-jobs', getSavedJobs);
+router.post('/saved-jobs/:jobPostingId', toggleSaveJob);
+router.delete('/saved-jobs/:jobPostingId', toggleSaveJob);
 
 export default router;
