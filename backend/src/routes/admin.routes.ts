@@ -4,7 +4,7 @@ import { adminAuth } from '../middleware/adminAuth.middleware.ts';
 import {
   getPlatformStats, listCompanies, getCompanyDetail,
   verifyCompany, updateCompanyFeatures, overrideWalkInRoomMaxQueue, listSeekers,
-  toggleSeekerAiResumeBuilder
+  toggleSeekerAiResumeBuilder, listWalkInRooms, updateWalkInRoomStatus, deleteWalkInRoom
 } from '../controllers/admin.controller.ts';
 import {
   listPlans, createPlan, updatePlan, deactivatePlan,
@@ -27,6 +27,12 @@ router.get('/auth/me', adminAuth, getAdminProfile);
 // ─── PLATFORM STATS ───────────────────────────────────────────────────────────
 router.get('/stats', adminAuth, getPlatformStats);
 
+// ─── WALK-IN LIVE ROOMS MANAGEMENT ───────────────────────────────────────────
+router.get('/walkin/rooms', adminAuth, listWalkInRooms);
+router.put('/walkin/rooms/:roomId/status', adminAuth, updateWalkInRoomStatus);
+router.delete('/walkin/rooms/:roomId', adminAuth, deleteWalkInRoom);
+router.put('/walkin/rooms/:roomId/max-queue', adminAuth, overrideWalkInRoomMaxQueue);
+
 // ─── COMPANIES ────────────────────────────────────────────────────────────────
 router.get('/companies', adminAuth, listCompanies);
 router.get('/companies/:id', adminAuth, getCompanyDetail);
@@ -34,7 +40,6 @@ router.put('/companies/:id/verify', adminAuth, verifyCompany);
 router.put('/companies/:id/features', adminAuth, updateCompanyFeatures);
 router.put('/companies/:companyId/subscription', adminAuth, assignSubscription);
 router.put('/companies/:companyId/subscription/features', adminAuth, updateCompanyFeatureOverride);
-router.put('/walkin/rooms/:roomId/max-queue', adminAuth, overrideWalkInRoomMaxQueue);
 
 // ─── SEEKERS ──────────────────────────────────────────────────────────────────
 router.get('/seekers', adminAuth, listSeekers);

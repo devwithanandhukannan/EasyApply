@@ -83,7 +83,7 @@ export default function LiveKitMeetingRoom({
         }}
         connectOptions={{
           autoSubscribe: true,
-          rtcConfig: { iceServers: iceServers }
+          ...(Array.isArray(iceServers) && iceServers.length > 0 ? { rtcConfig: { iceServers } } : {}),
         }}
         className="flex flex-col h-full"
       >
@@ -128,7 +128,7 @@ export default function LiveKitMeetingRoom({
 
         {/* Bottom Meeting Controls */}
         <div className="border-t border-white/[0.08] bg-[#121214]/95 p-3 flex justify-center items-center">
-          <ControlBar variation="minimal" controls={{ leave: true, screenShare: true }} />
+          <ControlBar variation="minimal" controls={{ microphone: true, camera: true, screenShare: true, leave: true, chat: false, settings: false }} />
         </div>
       </LiveKitRoom>
     </div>

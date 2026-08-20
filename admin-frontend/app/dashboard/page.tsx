@@ -62,7 +62,7 @@ export default function DashboardPage() {
     { title: 'Applications', value: stats?.applications ?? 0, icon: FileText, href: '/dashboard/ats', iconColor: 'text-emerald-500', iconBg: 'bg-emerald-500/10', subtitle: 'Across all postings' },
     { title: 'Active Plans', value: stats?.subscriptions ?? 0, icon: CreditCard, href: '/dashboard/subscriptions', iconColor: 'text-amber-500', iconBg: 'bg-amber-500/10', subtitle: 'Monetized accounts' },
     { title: 'Job Postings', value: stats?.activeJobs ?? 0, icon: Briefcase, href: '/dashboard/companies', iconColor: 'text-cyan-500', iconBg: 'bg-cyan-500/10', subtitle: 'Published vacancies' },
-    { title: 'Live Walk-in Rooms', value: stats?.openWalkInRooms ?? 0, icon: Video, href: '/dashboard/companies', iconColor: 'text-rose-500', iconBg: 'bg-rose-500/10', subtitle: 'Active interview sessions' },
+    { title: 'Live Walk-in Rooms', value: stats?.openWalkInRooms ?? 0, icon: Video, href: '/dashboard/rooms', iconColor: 'text-rose-500', iconBg: 'bg-rose-500/10', subtitle: 'Active interview sessions' },
   ];
 
   return (

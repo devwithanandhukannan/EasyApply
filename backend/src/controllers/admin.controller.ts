@@ -179,3 +179,155 @@ export const toggleSeekerAiResumeBuilder = async (req: Request, res: Response) =
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+// ─── WALK-IN LIVE ROOMS MANAGEMENT ───────────────────────────────────────────
+
+export const listWalkInRooms = async (req: Request, res: Response) => {
+  try {
+    const page = parseInt((req.query.page as string) ?? '1');
+    const limit = parseInt((req.query.limit as string) ?? '20');
+    const search = ((req.query.search as string) ?? '').trim();
+    const status = (req.query.status as string) ?? 'ALL';
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (status && status !== 'ALL') {
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [
+        { roomCode: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
+        { company: { name: { contains: search, mode: 'insensitive' } } },
+        { requiredSkills: { hasSome: [search] } },
+      ];
+    }
+
+    const [rooms, total, totalOpen, totalPaused, totalClosed, totalQueueEntries] = await Promise.all([
+      prisma.walkInRoom.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              logo: true,
+              industry: true,
+            },
+          },
+          _count: {
+            select: {
+              queue: true,
+            },
+          },
+          queue: {
+            where: {
+              status: { in: ['waiting', 'priority', 'interviewing'] },
+            },
+            select: {
+              id: true,
+              status: true,
+              skillScore: true,
+              priorityScore: true,
+              waitingSince: true,
+              jobSeekerProfile: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true,
+                },
+              },
+            },
+            take: 5,
+            orderBy: { priorityScore: 'desc' },
+          },
+        },
+      }),
+      prisma.walkInRoom.count({ where }),
+      prisma.walkInRoom.count({ where: { status: 'OPEN' } }),
+      prisma.walkInRoom.count({ where: { status: 'PAUSED' } }),
+      prisma.walkInRoom.count({ where: { status: 'CLOSED' } }),
+      prisma.walkInQueueEntry.count({
+        where: { status: { in: ['waiting', 'priority', 'interviewing'] } },
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      rooms,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      stats: {
+        totalRooms: totalOpen + totalPaused + totalClosed,
+        openRooms: totalOpen,
+        pausedRooms: totalPaused,
+        closedRooms: totalClosed,
+        activeQueueCount: totalQueueEntries,
+      },
+    });
+  } catch (err) {
+    console.error('listWalkInRooms error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve walk-in rooms.' });
+  }
+};
+
+export const updateWalkInRoomStatus = async (req: Request, res: Response) => {
+  try {
+    const { roomId } = req.params;
+    const { status } = req.body;
+
+    if (!['OPEN', 'PAUSED', 'CLOSED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status. Must be OPEN, PAUSED, or CLOSED.' });
+    }
+
+    const room = await prisma.walkInRoom.update({
+      where: { id: roomId },
+      data: { status },
+      include: {
+        company: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    return res.json({ success: true, message: `Room status updated to ${status}`, room });
+  } catch (err) {
+    console.error('updateWalkInRoomStatus error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update walk-in room status.' });
+  }
+};
+
+export const deleteWalkInRoom = async (req: Request, res: Response) => {
+  try {
+    const { roomId } = req.params;
+
+    const existing = await prisma.walkInRoom.findUnique({
+      where: { id: roomId },
+      select: { id: true, roomCode: true, title: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Walk-in room not found.' });
+    }
+
+    // Cascade delete room and all queue entries
+    await prisma.walkInRoom.delete({
+      where: { id: roomId },
+    });
+
+    return res.json({
+      success: true,
+      message: `Walk-in room [${existing.roomCode}] "${existing.title}" deleted successfully.`,
+    });
+  } catch (err) {
+    console.error('deleteWalkInRoom error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete walk-in room.' });
+  }
+};

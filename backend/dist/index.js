@@ -11644,6 +11644,140 @@ var toggleSeekerAiResumeBuilder = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
+var listWalkInRooms = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page ?? "1");
+    const limit = parseInt(req.query.limit ?? "20");
+    const search = (req.query.search ?? "").trim();
+    const status = req.query.status ?? "ALL";
+    const skip = (page - 1) * limit;
+    const where = {};
+    if (status && status !== "ALL") {
+      where.status = status;
+    }
+    if (search) {
+      where.OR = [
+        { roomCode: { contains: search, mode: "insensitive" } },
+        { title: { contains: search, mode: "insensitive" } },
+        { company: { name: { contains: search, mode: "insensitive" } } },
+        { requiredSkills: { hasSome: [search] } }
+      ];
+    }
+    const [rooms, total, totalOpen, totalPaused, totalClosed, totalQueueEntries] = await Promise.all([
+      prisma.walkInRoom.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          company: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              logo: true,
+              industry: true
+            }
+          },
+          _count: {
+            select: {
+              queue: true
+            }
+          },
+          queue: {
+            where: {
+              status: { in: ["waiting", "priority", "interviewing"] }
+            },
+            select: {
+              id: true,
+              status: true,
+              skillScore: true,
+              priorityScore: true,
+              waitingSince: true,
+              jobSeekerProfile: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  email: true
+                }
+              }
+            },
+            take: 5,
+            orderBy: { priorityScore: "desc" }
+          }
+        }
+      }),
+      prisma.walkInRoom.count({ where }),
+      prisma.walkInRoom.count({ where: { status: "OPEN" } }),
+      prisma.walkInRoom.count({ where: { status: "PAUSED" } }),
+      prisma.walkInRoom.count({ where: { status: "CLOSED" } }),
+      prisma.walkInQueueEntry.count({
+        where: { status: { in: ["waiting", "priority", "interviewing"] } }
+      })
+    ]);
+    return res.json({
+      success: true,
+      rooms,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      stats: {
+        totalRooms: totalOpen + totalPaused + totalClosed,
+        openRooms: totalOpen,
+        pausedRooms: totalPaused,
+        closedRooms: totalClosed,
+        activeQueueCount: totalQueueEntries
+      }
+    });
+  } catch (err) {
+    console.error("listWalkInRooms error:", err);
+    return res.status(500).json({ success: false, message: "Failed to retrieve walk-in rooms." });
+  }
+};
+var updateWalkInRoomStatus = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { status } = req.body;
+    if (!["OPEN", "PAUSED", "CLOSED"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status. Must be OPEN, PAUSED, or CLOSED." });
+    }
+    const room = await prisma.walkInRoom.update({
+      where: { id: roomId },
+      data: { status },
+      include: {
+        company: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+    return res.json({ success: true, message: `Room status updated to ${status}`, room });
+  } catch (err) {
+    console.error("updateWalkInRoomStatus error:", err);
+    return res.status(500).json({ success: false, message: "Failed to update walk-in room status." });
+  }
+};
+var deleteWalkInRoom = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const existing = await prisma.walkInRoom.findUnique({
+      where: { id: roomId },
+      select: { id: true, roomCode: true, title: true }
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "Walk-in room not found." });
+    }
+    await prisma.walkInRoom.delete({
+      where: { id: roomId }
+    });
+    return res.json({
+      success: true,
+      message: `Walk-in room [${existing.roomCode}] "${existing.title}" deleted successfully.`
+    });
+  } catch (err) {
+    console.error("deleteWalkInRoom error:", err);
+    return res.status(500).json({ success: false, message: "Failed to delete walk-in room." });
+  }
+};
 
 // src/controllers/adminSettings.controller.ts
 import nodemailer2 from "nodemailer";
@@ -11916,13 +12050,16 @@ var router11 = Router5();
 router11.post("/auth/login", adminLogin);
 router11.get("/auth/me", adminAuth, getAdminProfile);
 router11.get("/stats", adminAuth, getPlatformStats);
+router11.get("/walkin/rooms", adminAuth, listWalkInRooms);
+router11.put("/walkin/rooms/:roomId/status", adminAuth, updateWalkInRoomStatus);
+router11.delete("/walkin/rooms/:roomId", adminAuth, deleteWalkInRoom);
+router11.put("/walkin/rooms/:roomId/max-queue", adminAuth, overrideWalkInRoomMaxQueue);
 router11.get("/companies", adminAuth, listCompanies);
 router11.get("/companies/:id", adminAuth, getCompanyDetail);
 router11.put("/companies/:id/verify", adminAuth, verifyCompany);
 router11.put("/companies/:id/features", adminAuth, updateCompanyFeatures);
 router11.put("/companies/:companyId/subscription", adminAuth, assignSubscription);
 router11.put("/companies/:companyId/subscription/features", adminAuth, updateCompanyFeatureOverride);
-router11.put("/walkin/rooms/:roomId/max-queue", adminAuth, overrideWalkInRoomMaxQueue);
 router11.get("/seekers", adminAuth, listSeekers);
 router11.put("/seekers/:id/ai-resume-builder", adminAuth, toggleSeekerAiResumeBuilder);
 router11.get("/subscriptions", adminAuth, listPlans);
@@ -12203,7 +12340,7 @@ var createWalkInRoom = async (req, res) => {
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };
-var listWalkInRooms = async (req, res) => {
+var listWalkInRooms2 = async (req, res) => {
   try {
     const companyId = req.company?.companyId;
     if (!companyId) return res.status(403).json({ success: false, message: "Company context required" });
@@ -13064,7 +13201,7 @@ var handleCvUpload = (req, res, next) => {
 router12.get("/active-rooms", publicLimiter, optionalAuth, listActiveWalkInRooms);
 router12.get("/rooms/:code/info", publicLimiter, optionalAuth, getWalkInRoomByCode);
 router12.post("/rooms", authenticateCompany, requirePermission("walkin", "create"), createWalkInRoom);
-router12.get("/rooms", authenticateCompany, requirePermission("walkin", "read"), listWalkInRooms);
+router12.get("/rooms", authenticateCompany, requirePermission("walkin", "read"), listWalkInRooms2);
 router12.get("/rooms/:code/queue", authenticateCompany, requirePermission("walkin", "read"), getQueueByRoom);
 router12.post("/rooms/:code/call-next", livekitLimiter, authenticateCompany, requirePermission("walkin", "manage"), callNextCandidate);
 router12.put("/rooms/:code/status", authenticateCompany, requirePermission("walkin", "manage"), updateRoomStatus);

@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Shield,
   Activity,
+  Video,
 } from 'lucide-react';
 import { ThemeProvider } from '@/lib/theme';
 import { ToastProvider } from '@/app/components/GlassToastContainer';
@@ -40,6 +41,7 @@ const NAV: NavItem[] = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Companies', href: '/dashboard/companies', icon: Building2 },
   { label: 'Job Seekers', href: '/dashboard/seekers', icon: Users },
+  { label: 'Walk-In Rooms', href: '/dashboard/rooms', icon: Video },
   { section: 'Monetization' },
   { label: 'Subscriptions', href: '/dashboard/subscriptions', icon: CreditCard },
   { section: 'Platform Config' },
