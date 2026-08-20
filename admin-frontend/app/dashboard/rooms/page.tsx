@@ -30,7 +30,7 @@ interface CompanyInfo {
   id: string;
   name: string;
   email: string;
-  logo: string | null;
+  logoUrl: string | null;
   industry: string | null;
 }
 
@@ -374,8 +374,8 @@ export default function AdminWalkInRoomsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="w-10 h-10 rounded-2xl bg-zinc-100 dark:bg-[#202022] border border-zinc-200 dark:border-white/10 flex items-center justify-center shrink-0 overflow-hidden font-bold text-sm text-[#0071e3]">
-                        {room.company?.logo ? (
-                          <img src={room.company.logo} alt={room.company.name} className="w-full h-full object-cover" />
+                        {room.company?.logoUrl ? (
+                          <img src={room.company.logoUrl} alt={room.company.name} className="w-full h-full object-cover" />
                         ) : (
                           <Building2 size={18} />
                         )}

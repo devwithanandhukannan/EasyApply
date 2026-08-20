@@ -119,7 +119,7 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
     ]);
 
     const completionFactors = [
-      !!profile?.fullName, !!profile?.email, !!profile?.phone,
+      !!(profile?.fullName && profile.fullName !== 'Candidate'), !!profile?.email, !!profile?.phone,
       !!profile?.location, !!profile?.bio, (profile?.skills?.length ?? 0) >= 3,
       !!primaryResume
     ];
@@ -153,9 +153,9 @@ export const getJobSeekerDashboard = async (req: Request, res: Response) => {
       data: {
         profile: {
           id: profile?.id,
-          fullName: profile?.fullName,
-          email: profile?.email,
-          location: profile?.location,
+          fullName: profile?.fullName === 'Candidate' ? '' : (profile?.fullName || ''),
+          email: profile?.email || '',
+          location: profile?.location || '',
           profilePhotoUrl: profile?.profilePhotoUrl,
           availabilityStatus: profile?.availabilityStatus,
           skills: profile?.skills?.map(s => s.name) ?? [],

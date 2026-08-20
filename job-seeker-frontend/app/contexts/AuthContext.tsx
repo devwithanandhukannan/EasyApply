@@ -7,7 +7,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: any;
-  login: (user: any) => void;
+  login: (user: any, token?: string) => void;
   logout: () => void;
 }
 
@@ -53,7 +53,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [isAuthenticated, isLoading, pathname, router]);
 
-  const login = (userData: any) => {
+  const login = (userData: any, token?: string) => {
+    if (token) {
+      setAccessToken(token);
+    }
     setUser(userData);
     setIsAuthenticated(true);
     router.push('/dashboard');
@@ -65,6 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Logout error', e);
     } finally {
+      setAccessToken('');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('seeker_access_token');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        sessionStorage.clear();
+      }
       setIsAuthenticated(false);
       setUser(null);
       router.push('/login');

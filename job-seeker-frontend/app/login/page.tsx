@@ -85,7 +85,7 @@ function LoginPageComponent() {
         setStep('profile_setup');
       } else {
         console.log('✅ Profile complete, logging in');
-        login(user);
+        login(user, token);
       }
     } catch (error: any) {
       console.log('❌ OTP verification error:', error);

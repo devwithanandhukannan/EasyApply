@@ -165,10 +165,14 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
                 <>
                   <div className="flex-1 text-left min-w-0">
                     <p className="text-[#1d1d1f] dark:text-[#f5f5f7] text-xs font-semibold truncate tracking-tight">
-                      {user?.fullName || user?.jobSeekerProfile?.fullName || user?.name || 'User Profile'}
+                      {user?.fullName && user.fullName !== 'Candidate'
+                        ? user.fullName
+                        : user?.mobileNumber
+                        ? `+${user.mobileNumber}`
+                        : 'Candidate'}
                     </p>
                     <p className="text-[#86868b] text-[10px] truncate mt-0.5 font-medium">
-                      {user?.email || user?.jobSeekerProfile?.email || 'user@easyapply.io'}
+                      {user?.email || (user?.mobileNumber ? `+${user.mobileNumber}` : 'Account Settings')}
                     </p>
                   </div>
                   <ChevronDown className={`w-3 h-3 text-[#86868b] transition-transform duration-200 ${showUserMenu ? 'rotate-180 text-[#1d1d1f] dark:text-white' : ''}`} />
@@ -236,8 +240,16 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
               )}
             </div>
             <div className="min-w-0">
-              <h2 className="font-semibold text-xs text-[#1d1d1f] dark:text-white truncate">{user?.fullName || user?.jobSeekerProfile?.fullName || 'Candidate'}</h2>
-              <p className="text-[10px] text-[#86868b] truncate">{user?.email || user?.jobSeekerProfile?.email || 'user@easyapply.io'}</p>
+              <h2 className="font-semibold text-xs text-[#1d1d1f] dark:text-white truncate">
+                {user?.fullName && user.fullName !== 'Candidate'
+                  ? user.fullName
+                  : user?.mobileNumber
+                  ? `+${user.mobileNumber}`
+                  : 'Candidate'}
+              </h2>
+              <p className="text-[10px] text-[#86868b] truncate">
+                {user?.email || (user?.mobileNumber ? `+${user.mobileNumber}` : 'Account Settings')}
+              </p>
             </div>
           </div>
           <button 

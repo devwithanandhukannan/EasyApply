@@ -115,7 +115,7 @@ export default function DashboardPage() {
       <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#1d1d1f] dark:text-white">
-            Welcome back, {profile?.fullName || 'there'} 
+            Welcome back, {profile?.fullName && profile.fullName !== 'Candidate' ? profile.fullName : 'there'}
           </h1>
           <p className="text-xs sm:text-sm text-[#86868b] font-medium mt-0.5">
             Here is a summary of your job search activity and applications.

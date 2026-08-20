@@ -2,10 +2,25 @@ import type { Request, Response } from 'express';
 import { prisma } from '../utils/prisma.ts';
 
 const getProfileId = async (userId: string) => {
-  const profile = await prisma.jobSeekerProfile.findUnique({
+  let profile = await prisma.jobSeekerProfile.findUnique({
     where: { userId },
     select: { id: true },
   });
+
+  if (!profile) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user) {
+      profile = await prisma.jobSeekerProfile.create({
+        data: {
+          userId: user.id,
+          fullName: 'Candidate',
+          email: user.email || '',
+        },
+        select: { id: true },
+      });
+    }
+  }
+
   return profile?.id ?? null;
 };
 
@@ -110,7 +125,16 @@ export const getSavedJobs = async (req: Request, res: Response) => {
 
     const profileId = await getProfileId(userId);
     if (!profileId) {
-      return res.status(404).json({ success: false, message: 'Job seeker profile not found' });
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 12,
+          total: 0,
+          totalPages: 1,
+        },
+      });
     }
 
     const page = parseInt(req.query.page as string) || 1;

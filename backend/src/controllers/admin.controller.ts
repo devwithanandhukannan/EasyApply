@@ -217,7 +217,7 @@ export const listWalkInRooms = async (req: Request, res: Response) => {
               id: true,
               name: true,
               email: true,
-              logo: true,
+              logoUrl: true,
               industry: true,
             },
           },

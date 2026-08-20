@@ -75,7 +75,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
       aiResumeBuilderEnabled,
       aiResumeBuilderLockedReason: !isGlobalAllowed ? 'disabled_platform_wide' : (!isCandidateAllowed ? 'locked_by_admin' : null),
       availabilityStatus: profile.availabilityStatus || 'available', // ✅ FIXED: Added this field
-      fullName: profile.fullName || '',
+      fullName: profile.fullName === 'Candidate' ? '' : (profile.fullName || ''),
       email: profile.email || '',
       phone: profile.phone || '',
       location: profile.location || '',

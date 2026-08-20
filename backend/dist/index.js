@@ -720,7 +720,7 @@ var getProfile = async (req, res) => {
       aiResumeBuilderLockedReason: !isGlobalAllowed ? "disabled_platform_wide" : !isCandidateAllowed ? "locked_by_admin" : null,
       availabilityStatus: profile.availabilityStatus || "available",
       // ✅ FIXED: Added this field
-      fullName: profile.fullName || "",
+      fullName: profile.fullName === "Candidate" ? "" : profile.fullName || "",
       email: profile.email || "",
       phone: profile.phone || "",
       location: profile.location || "",
@@ -6192,7 +6192,7 @@ var getJobSeekerDashboard = async (req, res) => {
       prisma.resume.count({ where: { jobSeekerProfileId: profileId } })
     ]);
     const completionFactors = [
-      !!profile?.fullName,
+      !!(profile?.fullName && profile.fullName !== "Candidate"),
       !!profile?.email,
       !!profile?.phone,
       !!profile?.location,
@@ -6225,9 +6225,9 @@ var getJobSeekerDashboard = async (req, res) => {
       data: {
         profile: {
           id: profile?.id,
-          fullName: profile?.fullName,
-          email: profile?.email,
-          location: profile?.location,
+          fullName: profile?.fullName === "Candidate" ? "" : profile?.fullName || "",
+          email: profile?.email || "",
+          location: profile?.location || "",
           profilePhotoUrl: profile?.profilePhotoUrl,
           availabilityStatus: profile?.availabilityStatus,
           skills: profile?.skills?.map((s) => s.name) ?? [],
@@ -7098,10 +7098,23 @@ var parseAndLoadResume = async (req, res) => {
 
 // src/controllers/savedJob.controller.ts
 var getProfileId5 = async (userId) => {
-  const profile = await prisma.jobSeekerProfile.findUnique({
+  let profile = await prisma.jobSeekerProfile.findUnique({
     where: { userId },
     select: { id: true }
   });
+  if (!profile) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (user) {
+      profile = await prisma.jobSeekerProfile.create({
+        data: {
+          userId: user.id,
+          fullName: "Candidate",
+          email: user.email || ""
+        },
+        select: { id: true }
+      });
+    }
+  }
   return profile?.id ?? null;
 };
 var toggleSaveJob = async (req, res) => {
@@ -7189,7 +7202,16 @@ var getSavedJobs = async (req, res) => {
     }
     const profileId = await getProfileId5(userId);
     if (!profileId) {
-      return res.status(404).json({ success: false, message: "Job seeker profile not found" });
+      return res.status(200).json({
+        success: true,
+        data: [],
+        pagination: {
+          page: 1,
+          limit: 12,
+          total: 0,
+          totalPages: 1
+        }
+      });
     }
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 12;
@@ -11675,7 +11697,7 @@ var listWalkInRooms = async (req, res) => {
               id: true,
               name: true,
               email: true,
-              logo: true,
+              logoUrl: true,
               industry: true
             }
           },
