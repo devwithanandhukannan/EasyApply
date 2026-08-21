@@ -144,9 +144,9 @@ app.get('/api/admin/stats', async (c) => {
 app.get('/api/admin/companies', async (c) => {
   try {
     const companiesResult = await c.env.DB.prepare(`
-      SELECT c.*, s.id as subId, s.planId, s.features as subFeatures, s.status as subStatus, p.name as planName
+      SELECT c.*, s.id as subId, s.planId, s.features as subFeatures, s.isActive as subStatus, p.name as planName
       FROM "Company" c
-      LEFT JOIN "Subscription" s ON c.id = s.companyId
+      LEFT JOIN "CompanySubscription" s ON c.id = s.companyId
       LEFT JOIN "SubscriptionPlan" p ON s.planId = p.id
       ORDER BY c.createdAt DESC LIMIT 100
     `).all().catch(async () => {
@@ -161,7 +161,7 @@ app.get('/api/admin/companies', async (c) => {
       subscription: comp.planId ? {
         id: comp.subId,
         planId: comp.planId,
-        status: comp.subStatus || 'active',
+        status: comp.subStatus !== 0 ? 'active' : 'inactive',
         features: typeof comp.subFeatures === 'string' ? JSON.parse(comp.subFeatures) : (comp.subFeatures || {}),
         plan: {
           id: comp.planId,
@@ -192,17 +192,17 @@ app.put('/api/admin/companies/:id/subscription', async (c) => {
     if (!planId) return c.json({ success: false, message: 'Plan ID is required' }, 400);
 
     const now = new Date().toISOString();
-    const existingSub: any = await c.env.DB.prepare('SELECT id FROM "Subscription" WHERE companyId = ?').bind(id).first();
+    const existingSub: any = await c.env.DB.prepare('SELECT id FROM "CompanySubscription" WHERE companyId = ?').bind(id).first();
 
     if (existingSub) {
       await c.env.DB.prepare(
-        'UPDATE "Subscription" SET planId = ?, updatedAt = ? WHERE companyId = ?'
+        'UPDATE "CompanySubscription" SET planId = ?, isActive = 1, updatedAt = ? WHERE companyId = ?'
       ).bind(planId, now, id).run();
     } else {
       const subId = crypto.randomUUID();
       await c.env.DB.prepare(
-        'INSERT INTO "Subscription" (id, companyId, planId, status, currentPeriodStart, currentPeriodEnd, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(subId, id, planId, 'active', now, new Date(Date.now() + 365*24*60*60*1000).toISOString(), now, now).run();
+        'INSERT INTO "CompanySubscription" (id, companyId, planId, isActive, startsAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(subId, id, planId, 1, now, now, now).run();
     }
 
     return c.json({ success: true, message: 'Subscription plan assigned successfully' });
@@ -218,16 +218,16 @@ app.put('/api/admin/companies/:id/subscription/features', async (c) => {
     const featuresJson = JSON.stringify(features || {});
     const now = new Date().toISOString();
 
-    const existingSub: any = await c.env.DB.prepare('SELECT id FROM "Subscription" WHERE companyId = ?').bind(id).first();
+    const existingSub: any = await c.env.DB.prepare('SELECT id FROM "CompanySubscription" WHERE companyId = ?').bind(id).first();
     if (existingSub) {
       await c.env.DB.prepare(
-        'UPDATE "Subscription" SET features = ?, updatedAt = ? WHERE companyId = ?'
+        'UPDATE "CompanySubscription" SET features = ?, updatedAt = ? WHERE companyId = ?'
       ).bind(featuresJson, now, id).run();
     } else {
       const subId = crypto.randomUUID();
       await c.env.DB.prepare(
-        'INSERT INTO "Subscription" (id, companyId, planId, features, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(subId, id, 'free', featuresJson, 'active', now, now).run();
+        'INSERT INTO "CompanySubscription" (id, companyId, planId, features, isActive, startsAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(subId, id, 'free', featuresJson, 1, now, now, now).run();
     }
 
     return c.json({ success: true, message: 'Feature overrides updated successfully' });
