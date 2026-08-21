@@ -822,6 +822,30 @@ app.get('/api/jobseeker/saved-jobs', async (c) => c.json({ success: true, data: 
 app.get('/api/jobseeker/spot-jobs/invitations', async (c) => c.json({ success: true, data: [] }));
 app.get('/api/jobseeker/spot-jobs/toggle-status', async (c) => c.json({ success: true, status: 'available' }));
 app.get('/api/jobseeker/interviews', async (c) => c.json({ success: true, data: [] }));
+app.get('/api/jobseeker/insights', async (c) => c.json({
+  success: true,
+  data: {
+    totalApplications: 0,
+    shortlistedCount: 0,
+    interviewsScheduled: 0,
+    offersReceived: 0,
+    applicationTrend: [],
+    statusBreakdown: [],
+    topSkillsMatched: [],
+  },
+}));
+app.get('/api/walkin/my-queues', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded) return c.json({ success: true, queues: [] });
+    const queues = await c.env.DB.prepare(
+      'SELECT q.*, w.title, w.status as roomStatus, c.name as companyName FROM "WalkInQueueEntry" q JOIN "WalkInRoom" w ON q.walkInRoomId = w.id JOIN "Company" c ON w.companyId = c.id WHERE q.userId = ? ORDER BY q.createdAt DESC LIMIT 20'
+    ).bind(decoded.userId).all();
+    return c.json({ success: true, queues: queues.results });
+  } catch (err: any) {
+    return c.json({ success: true, queues: [] });
+  }
+});
 
 // ─── PUBLIC SETTINGS, JOBS, PLANS ────────────────────────
 app.get('/api/public/settings', async (c) => {

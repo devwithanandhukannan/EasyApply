@@ -23,26 +23,29 @@ export const FcmProvider = ({ children }: { children: React.ReactNode }) => {
     const initializeFcm = async () => {
       if (typeof window === "undefined" || !("Notification" in window)) return;
       
-      setPermissionStatus(Notification.permission);
+      const currentPermission = Notification.permission;
+      setPermissionStatus(currentPermission);
 
-      const token = await requestNotificationPermission();
-      if (token) {
-        console.log("FCM Token Successfully Registered:", token);
-        setFcmToken(token);
-        setPermissionStatus(Notification.permission);
-        
-        try {
-          await api.post("/jobseeker/notification/token", {
-            token
-          });
-          console.log("FCM Token successfully synced to your database record ✅");
-        } catch (error) {
-          console.error("Failed to send FCM token to backend database context:", error);
+      // Only request permission if not yet decided (never auto-request on denied/granted)
+      if (currentPermission !== 'default') {
+        if (currentPermission === 'granted') {
+          // Already granted — just get token silently
+          const token = await requestNotificationPermission();
+          if (token) {
+            setFcmToken(token);
+            try { await api.post("/jobseeker/notification/token", { token }); } catch {}
+          }
         }
+        return; // Don't auto-prompt — let user trigger it
       }
+
+      // Don't auto-request — permission request must come from user interaction
+      // We expose a function that UI can call on a button click
     };
 
-    initializeFcm();
+    // Delay to avoid triggering during SSR hydration / initial mount
+    const timer = setTimeout(initializeFcm, 3000);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {

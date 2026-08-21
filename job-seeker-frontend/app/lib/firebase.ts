@@ -16,7 +16,8 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 // 2. Browser-only initializations (prevents Node.js server-side crashes)
-export const analytics: Analytics | null = typeof window !== "undefined" ? getAnalytics(app) : null;
+// Note: Analytics disabled — _ga cookies cause cross-domain rejection on *.pages.dev vs *.workers.dev
+export const analytics: null = null; // getAnalytics disabled to prevent _ga cookie errors
 export const messaging: Messaging | null = typeof window !== "undefined" ? getMessaging(app) : null;
 
 /**
