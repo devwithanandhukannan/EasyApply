@@ -289,14 +289,14 @@ app.post('/api/company/auth/check-phone', async (c) => {
     const phone = (body.phone || body.mobileNumber || '').trim();
     if (!phone) return c.json({ success: false, exists: false });
 
-    const company: any = await c.env.DB.prepare('SELECT id FROM "Company" WHERE phone = ?').bind(phone).first();
-    if (company) {
-      return c.json({ success: true, exists: true, message: 'A company with this mobile number already exists.' });
-    }
-
     const user: any = await c.env.DB.prepare('SELECT id FROM "User" WHERE mobileNumber = ?').bind(phone).first();
     if (user) {
       return c.json({ success: true, exists: true, message: 'An account with this mobile number already exists.' });
+    }
+
+    const company: any = await c.env.DB.prepare('SELECT id FROM "Company" WHERE pendingMobile = ?').bind(phone).first();
+    if (company) {
+      return c.json({ success: true, exists: true, message: 'A company with this mobile number already exists.' });
     }
 
     return c.json({ success: true, exists: false });
@@ -324,8 +324,12 @@ app.post('/api/company/auth/send-otp', async (c) => {
     // Check if phone already registered
     if (mobileNumber) {
       const cleanPhone = mobileNumber.trim();
-      const existingPhone = await c.env.DB.prepare('SELECT id FROM "Company" WHERE phone = ?').bind(cleanPhone).first();
-      if (existingPhone) {
+      const existingUser = await c.env.DB.prepare('SELECT id FROM "User" WHERE mobileNumber = ?').bind(cleanPhone).first();
+      if (existingUser) {
+        return c.json({ success: false, message: 'An account with this mobile number already exists.' }, 409);
+      }
+      const existingCompany = await c.env.DB.prepare('SELECT id FROM "Company" WHERE pendingMobile = ?').bind(cleanPhone).first();
+      if (existingCompany) {
         return c.json({ success: false, message: 'A company with this mobile number already exists.' }, 409);
       }
     }
