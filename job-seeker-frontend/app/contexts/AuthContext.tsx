@@ -23,6 +23,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        const storedToken = typeof window !== 'undefined' ? (localStorage.getItem('seeker_access_token') || localStorage.getItem('token')) : null;
+        if (!storedToken) {
+          setIsAuthenticated(false);
+          setUser(null);
+          setIsLoading(false);
+          return;
+        }
         const response = await api.get('/auth/me');
         if (response.data.success) {
           setIsAuthenticated(true);

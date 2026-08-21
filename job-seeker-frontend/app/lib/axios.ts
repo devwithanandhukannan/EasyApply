@@ -85,6 +85,7 @@ api.interceptors.response.use(
 
     // Skip retry on auth endpoints to prevent infinite refresh loops
     if (
+      originalRequest?.url?.includes('/auth/me') ||
       originalRequest?.url?.includes('/auth/refresh') ||
       originalRequest?.url?.includes('/auth/logout') ||
       originalRequest?.url?.includes('/auth/send-otp') ||
