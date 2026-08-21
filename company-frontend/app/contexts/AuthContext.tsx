@@ -217,8 +217,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [isAuthenticated, isLoading, pathname, router]);
 
   const login = (loginPayload: any) => {
-    if (loginPayload.accessToken) {
-      setAccessToken(loginPayload.accessToken);
+    const token = loginPayload.token || loginPayload.accessToken;
+    if (token) {
+      setAccessToken(token);
     }
     if (loginPayload.user && loginPayload.company) {
       setUser({

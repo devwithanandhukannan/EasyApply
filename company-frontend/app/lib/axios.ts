@@ -2,12 +2,29 @@ import axios from 'axios';
 
 let accessToken = '';
 
+if (typeof window !== 'undefined') {
+  accessToken = localStorage.getItem('companyToken') || localStorage.getItem('token') || '';
+}
+
 export const setAccessToken = (token: string) => {
   accessToken = token;
+  if (typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem('companyToken', token);
+      localStorage.setItem('token', token);
+    } else {
+      localStorage.removeItem('companyToken');
+      localStorage.removeItem('token');
+    }
+  }
 };
 
 export const getAccessToken = () => {
-  return accessToken;
+  if (accessToken) return accessToken;
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('companyToken') || localStorage.getItem('token') || '';
+  }
+  return '';
 };
 
 const getApiUrl = () => {
@@ -30,11 +47,12 @@ const api = axios.create({
   withCredentials: true, 
 });
 
-// Request Interceptor: Attach the in-memory access token
+// Request Interceptor: Attach the access token from memory or localStorage
 api.interceptors.request.use(
   (config) => {
-    if (accessToken) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
+    const token = getAccessToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -52,7 +70,9 @@ api.interceptors.response.use(
       originalRequest?.url?.includes('/company/auth/session') || 
       originalRequest?.url?.includes('/auth/refresh') ||
       originalRequest?.url?.includes('/company/auth/forgot-password') ||
-      originalRequest?.url?.includes('/company/auth/reset-password')
+      originalRequest?.url?.includes('/company/auth/reset-password') ||
+      originalRequest?.url?.includes('/company/auth/login') ||
+      originalRequest?.url?.includes('/company/auth/register')
     ) {
       return Promise.reject(error);
     }
@@ -72,15 +92,14 @@ api.interceptors.response.use(
           { withCredentials: true }
         );
         
-        const newAccessToken = refreshResponse.data.accessToken;
-        setAccessToken(newAccessToken);
-        
-        // Update authorization header for the original request retry
-        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-        
-        return api(originalRequest);
+        const newAccessToken = refreshResponse.data.accessToken || refreshResponse.data.token;
+        if (newAccessToken) {
+          setAccessToken(newAccessToken);
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          return api(originalRequest);
+        }
       } catch (refreshError) {
-        setAccessToken(''); // Clear token on failure
+        // Do not aggressively clear token unless it fails repeatedly
         return Promise.reject(refreshError);
       }
     }
