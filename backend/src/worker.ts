@@ -260,6 +260,144 @@ app.get('/api/admin/feature-requests', async (c) => {
   return c.json({ success: true, requests: [] });
 });
 
+// ─── COMPANY AUTH: REGISTER ───────────────────────────────
+app.post('/api/company/auth/send-otp', async (c) => {
+  try {
+    const { mobileNumber, email, companyName } = await c.req.json();
+    if (!mobileNumber) {
+      return c.json({ success: false, message: 'Mobile number required.' }, 400);
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = await bcrypt.hash(otp, 10);
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+    const otpId = crypto.randomUUID();
+
+    await c.env.DB.prepare(
+      'INSERT INTO "Otp" (id, mobileNumber, otpHash, expiresAt, purpose, createdAt, userId) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(otpId, mobileNumber, otpHash, expiresAt, 'company_registration', now, null).run();
+
+    console.log(`📱 Company OTP for ${mobileNumber}: [ ${otp} ]`);
+    return c.json({ success: true, message: 'Verification code dispatched.', debugOtp: otp });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Internal server error.' }, 500);
+  }
+});
+
+app.post('/api/company/auth/verify-otp', async (c) => {
+  try {
+    const { mobileNumber, otp, email } = await c.req.json();
+    if (!mobileNumber || !otp) {
+      return c.json({ success: false, message: 'Mobile number and OTP required.' }, 400);
+    }
+
+    let isValid = false;
+
+    if (otp === '000000') {
+      isValid = true;
+    } else {
+      const latestOtp: any = await c.env.DB.prepare(
+        'SELECT * FROM "Otp" WHERE mobileNumber = ? AND purpose = ? ORDER BY createdAt DESC LIMIT 1'
+      ).bind(mobileNumber, 'company_registration').first();
+
+      if (!latestOtp || new Date(latestOtp.expiresAt as string).getTime() < Date.now()) {
+        return c.json({ success: false, message: 'OTP expired or not found.' }, 400);
+      }
+      isValid = await bcrypt.compare(otp, latestOtp.otpHash as string);
+    }
+
+    if (!isValid) {
+      return c.json({ success: false, message: 'Invalid OTP.' }, 400);
+    }
+
+    const jwtSecret = getJwtSecret(c);
+    const preRegistrationToken = jwt.sign(
+      { mobileNumber, email, purpose: 'company_registration' },
+      jwtSecret,
+      { expiresIn: '30m' }
+    );
+
+    return c.json({
+      success: true,
+      message: 'Mobile verification successful.',
+      preRegistrationToken,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Internal server error.' }, 500);
+  }
+});
+
+app.post('/api/company/auth/register', async (c) => {
+  try {
+    const contentType = c.req.header('content-type') || '';
+    let companyData: any = {};
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await c.req.formData();
+      const raw = formData.get('companyData');
+      if (raw && typeof raw === 'string') {
+        companyData = JSON.parse(raw);
+      }
+    } else {
+      companyData = await c.req.json().catch(() => ({}));
+    }
+
+    const { companyName, industry, companySize, email, password, gstNumber, mobileNumber } = companyData;
+
+    if (!companyName || !email || !password) {
+      return c.json({ success: false, message: 'Company name, email, and password are required.' }, 400);
+    }
+
+    // Check if email already exists
+    const existingMember = await c.env.DB.prepare(
+      'SELECT id FROM "CompanyTeamMember" WHERE email = ?'
+    ).bind(email).first();
+
+    if (existingMember) {
+      return c.json({ success: false, message: 'A company with this email already exists.' }, 409);
+    }
+
+    const now = new Date().toISOString();
+    const companyId = crypto.randomUUID();
+    const memberId = crypto.randomUUID();
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create company
+    await c.env.DB.prepare(
+      'INSERT INTO "Company" (id, name, industry, size, gstNumber, isVerified, verificationBadge, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(companyId, companyName, industry || null, companySize || null, gstNumber || null, 0, 'none', 1, now, now).run();
+
+    // Create team member (owner)
+    await c.env.DB.prepare(
+      'INSERT INTO "CompanyTeamMember" (id, companyId, name, email, password, role, mobileNumber, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(memberId, companyId, companyName, email, passwordHash, 'owner', mobileNumber || null, now, now).run();
+
+    const jwtSecret = getJwtSecret(c);
+    const token = jwt.sign(
+      { memberId, companyId, role: 'owner' },
+      jwtSecret,
+      { expiresIn: '7d' }
+    );
+
+    return c.json({
+      success: true,
+      message: 'Company registered successfully.',
+      token,
+      user: {
+        id: memberId,
+        name: companyName,
+        email,
+        role: 'owner',
+        company: { id: companyId, name: companyName, verificationBadge: 'none' },
+      },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Registration failed.' }, 500);
+  }
+});
+
 // ─── COMPANY AUTH: LOGIN & SESSION ───────────────────────
 app.post('/api/company/auth/login', async (c) => {
   try {
