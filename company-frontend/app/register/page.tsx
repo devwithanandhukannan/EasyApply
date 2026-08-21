@@ -112,10 +112,39 @@ function RegisterPageComponent() {
     }
   };
 
+  const [nameError, setNameError] = useState<string>('');
+  const [isCheckingName, setIsCheckingName] = useState<boolean>(false);
   const [emailError, setEmailError] = useState<string>('');
   const [isCheckingEmail, setIsCheckingEmail] = useState<boolean>(false);
   const [phoneError, setPhoneError] = useState<string>('');
   const [isCheckingPhone, setIsCheckingPhone] = useState<boolean>(false);
+
+  // Real-time Company Name Availability Check
+  useEffect(() => {
+    const cleanName = formData.companyName.trim();
+    if (!cleanName || cleanName.length < 2) {
+      setNameError('');
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setIsCheckingName(true);
+      try {
+        const response = await api.post('/company/auth/check-name', { companyName: cleanName });
+        if (response.data?.exists) {
+          setNameError(response.data.message || 'A company with this name is already registered.');
+        } else {
+          setNameError('');
+        }
+      } catch (err) {
+        console.error('Company name check failed:', err);
+      } finally {
+        setIsCheckingName(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.companyName]);
 
   // Real-time Email Availability Check
   useEffect(() => {
@@ -175,6 +204,14 @@ function RegisterPageComponent() {
     e.preventDefault();
     if (!formData.companyName.trim() || !formData.industry || !formData.companySize) {
       setErrorMessage('Please fill in all company information fields.');
+      return;
+    }
+    if (nameError) {
+      setErrorMessage(nameError);
+      return;
+    }
+    if (isCheckingName) {
+      setErrorMessage('Please wait while we check company name availability.');
       return;
     }
     setErrorMessage(null);
@@ -426,10 +463,26 @@ function RegisterPageComponent() {
                     value={formData.companyName}
                     onChange={(e) => updateFormData('companyName', e.target.value)}
                     placeholder="e.g. Acme Corporation"
-                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
+                    className={`w-full pl-12 pr-10 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border ${
+                      nameError
+                        ? 'border-[#ff3b30] focus:border-[#ff3b30]'
+                        : 'border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3]'
+                    } rounded-2xl focus:outline-none transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium`}
                     required
                   />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {isCheckingName && <Loader2 className="animate-spin text-[#0071e3]" size={18} />}
+                    {!isCheckingName && nameError && <AlertCircle className="text-[#ff3b30]" size={18} />}
+                    {!isCheckingName && !nameError && formData.companyName.trim().length >= 2 && (
+                      <CheckCircle2 className="text-[#34c759]" size={18} />
+                    )}
+                  </div>
                 </div>
+                {nameError && (
+                  <p className="text-[11px] text-[#ff3b30] mt-1.5 font-semibold flex items-center gap-1">
+                    <AlertCircle size={12} /> {nameError}
+                  </p>
+                )}
               </div>
 
               <div>

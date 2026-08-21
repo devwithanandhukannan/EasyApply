@@ -261,6 +261,23 @@ app.get('/api/admin/feature-requests', async (c) => {
 });
 
 // ─── COMPANY AUTH: REALTIME CHECKS & REGISTER ─────────────
+app.post('/api/company/auth/check-name', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const targetName = (body.companyName || body.name || '').trim();
+    if (!targetName) return c.json({ success: false, exists: false });
+
+    const existing: any = await c.env.DB.prepare('SELECT id FROM "Company" WHERE LOWER(name) = ?').bind(targetName.toLowerCase()).first();
+    if (existing) {
+      return c.json({ success: true, exists: true, message: 'A company with this name is already registered.' });
+    }
+
+    return c.json({ success: true, exists: false });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
 app.post('/api/company/auth/check-email', async (c) => {
   try {
     const { email } = await c.req.json().catch(() => ({}));
@@ -416,12 +433,23 @@ app.post('/api/company/auth/register', async (c) => {
     }
 
     // Check if company email already exists
+    const cleanEmail = email.trim().toLowerCase();
     const existingCompany = await c.env.DB.prepare(
-      'SELECT id FROM "Company" WHERE email = ?'
-    ).bind(email).first();
+      'SELECT id FROM "Company" WHERE LOWER(email) = ?'
+    ).bind(cleanEmail).first();
 
     if (existingCompany) {
       return c.json({ success: false, message: 'A company with this email already exists.' }, 409);
+    }
+
+    // Check if company name already exists
+    const cleanName = companyName.trim().toLowerCase();
+    const existingName = await c.env.DB.prepare(
+      'SELECT id FROM "Company" WHERE LOWER(name) = ?'
+    ).bind(cleanName).first();
+
+    if (existingName) {
+      return c.json({ success: false, message: 'A company with this name is already registered. Please choose a different company name.' }, 409);
     }
 
     const now = new Date().toISOString();
@@ -466,6 +494,12 @@ app.post('/api/company/auth/register', async (c) => {
       },
     });
   } catch (err: any) {
+    if (err?.message?.includes('UNIQUE constraint failed: Company.name')) {
+      return c.json({ success: false, message: 'A company with this name is already registered. Please choose a different company name.' }, 409);
+    }
+    if (err?.message?.includes('UNIQUE constraint failed: Company.email')) {
+      return c.json({ success: false, message: 'A company with this email already exists.' }, 409);
+    }
     return c.json({ success: false, message: err.message || 'Registration failed.' }, 500);
   }
 });
