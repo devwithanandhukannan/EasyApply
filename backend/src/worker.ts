@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { extractText as extractPdfText } from 'unpdf';
 
 type Bindings = {
   DB: D1Database;
@@ -900,35 +901,131 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
     if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
 
     const contentType = c.req.header('content-type') || '';
-    let resumeText = '';
+    let rawText = '';
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await c.req.formData();
       const file = formData.get('resume') as File | null;
-      if (file && file.text) {
-        resumeText = await file.text();
+      if (file) {
+        const buffer = await file.arrayBuffer();
+        const fileName = (file.name || '').toLowerCase();
+        const isPdf = fileName.endsWith('.pdf') || (file.type || '').includes('pdf');
+
+        if (isPdf) {
+          try {
+            const { text } = await extractPdfText(new Uint8Array(buffer));
+            rawText = text || '';
+          } catch (pdfErr) {
+            console.warn('unpdf extraction warning, trying stream decoder fallback:', pdfErr);
+            // Stream decoder fallback for PDF text streams
+            const decodedStr = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+            const matches = decodedStr.match(/\(([^)]+)\)\s*T[jJ]/g) || decodedStr.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+            if (matches) {
+              rawText = matches.map(m => m.replace(/[\(\)]/g, '')).join(' ');
+            } else {
+              rawText = decodedStr.replace(/[^\x20-\x7E\n\r]/g, ' ');
+            }
+          }
+        } else {
+          rawText = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+        }
       }
     } else {
       const body = await c.req.json().catch(() => ({}));
-      resumeText = body.text || body.resumeText || '';
+      rawText = body.text || body.resumeText || '';
     }
 
-    // Use Cloudflare AI to extract resume data
-    try {
-      const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
-        messages: [
-          { role: 'system', content: 'Extract structured data from this resume. Return JSON with: fullName, email, phone, location, skills (array), experience (array with company, role, duration, description), education (array with institution, degree, year), languages (array), certifications (array).' },
-          { role: 'user', content: resumeText.slice(0, 3000) || 'No resume text provided.' }
-        ],
-        max_tokens: 800,
-      });
-      const parsed = JSON.parse(aiResult?.response || '{}');
-      return c.json({ success: true, data: parsed });
-    } catch {
-      return c.json({ success: true, data: { fullName: '', email: '', phone: '', skills: [], experience: [], education: [] }, message: 'AI parsing unavailable, manual entry required.' });
+    // Heuristic regex fallbacks
+    const emailMatch = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    const phoneMatch = rawText.match(/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+    const linkedinMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+/i);
+    const githubMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9_-]+/i);
+
+    const lines = rawText.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
+    const candidateName = lines[0] && lines[0].length < 40 && !lines[0].includes('@') ? lines[0] : '';
+
+    const heuristicData = {
+      fullName: candidateName,
+      email: emailMatch ? emailMatch[0] : '',
+      phone: phoneMatch ? phoneMatch[0] : '',
+      linkedin: linkedinMatch ? (linkedinMatch[0].startsWith('http') ? linkedinMatch[0] : `https://${linkedinMatch[0]}`) : '',
+      github: githubMatch ? (githubMatch[0].startsWith('http') ? githubMatch[0] : `https://${githubMatch[0]}`) : '',
+    };
+
+    let aiParsed: any = {};
+    if (rawText.trim().length > 20 && c.env.AI) {
+      try {
+        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            {
+              role: 'system',
+              content: `You are an ATS resume parser. Extract structured data from the resume text into JSON format only. Do not use markdown syntax or backticks. Return ONLY a valid JSON object matching this structure:
+{
+  "fullName": "Name",
+  "email": "email",
+  "phone": "phone",
+  "location": "City, Country",
+  "linkedin": "url",
+  "github": "url",
+  "portfolio": "url",
+  "bio": "Professional Summary",
+  "skills": ["Skill 1", "Skill 2"],
+  "education": [{"institution": "Univ", "degree": "Degree", "field": "Field", "location": "", "startYear": "", "endYear": "", "cgpa": ""}],
+  "experience": [{"company": "Company", "role": "Role", "location": "", "startYear": "", "endYear": "", "description": ""}],
+  "projects": [{"name": "Project", "description": "", "techStack": [], "githubLink": "", "liveLink": ""}],
+  "certifications": [{"name": "Cert", "issuer": "", "year": ""}],
+  "languages": [{"language": "Language", "proficiency": "Native"}],
+  "achievements": [{"title": "", "description": "", "year": ""}]
+}`
+            },
+            { role: 'user', content: `Resume Text:\n"""\n${rawText.slice(0, 4000)}\n"""` }
+          ],
+          max_tokens: 1200,
+        });
+
+        const respText = aiResult?.response || aiResult?.result?.response || '';
+        const jsonMatch = respText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          aiParsed = JSON.parse(jsonMatch[0]);
+        }
+      } catch (aiErr) {
+        console.warn('Cloudflare AI resume parse failed, falling back to heuristic parsing:', aiErr);
+      }
     }
+
+    const basicInfo = {
+      fullName: aiParsed.fullName || aiParsed.basicInfo?.fullName || heuristicData.fullName,
+      email: aiParsed.email || aiParsed.basicInfo?.email || heuristicData.email,
+      phone: aiParsed.phone || aiParsed.basicInfo?.phone || heuristicData.phone,
+      location: aiParsed.location || aiParsed.basicInfo?.location || '',
+      linkedin: aiParsed.linkedin || aiParsed.basicInfo?.linkedin || heuristicData.linkedin,
+      github: aiParsed.github || aiParsed.basicInfo?.github || heuristicData.github,
+      portfolio: aiParsed.portfolio || aiParsed.basicInfo?.portfolio || '',
+      bio: aiParsed.bio || aiParsed.basicInfo?.bio || aiParsed.summary || '',
+    };
+
+    const finalResult = {
+      basicInfo,
+      fullName: basicInfo.fullName,
+      email: basicInfo.email,
+      phone: basicInfo.phone,
+      location: basicInfo.location,
+      linkedin: basicInfo.linkedin,
+      github: basicInfo.github,
+      portfolio: basicInfo.portfolio,
+      bio: basicInfo.bio,
+      skills: Array.isArray(aiParsed.skills) ? aiParsed.skills : [],
+      education: Array.isArray(aiParsed.education) ? aiParsed.education : [],
+      experience: Array.isArray(aiParsed.experience) ? aiParsed.experience : [],
+      projects: Array.isArray(aiParsed.projects) ? aiParsed.projects : [],
+      certifications: Array.isArray(aiParsed.certifications) ? aiParsed.certifications : [],
+      languages: Array.isArray(aiParsed.languages) ? aiParsed.languages : [],
+      achievements: Array.isArray(aiParsed.achievements) ? aiParsed.achievements : [],
+    };
+
+    return c.json({ success: true, data: finalResult });
   } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
+    return c.json({ success: false, message: err.message || 'Failed to parse resume' }, 500);
   }
 });
 
