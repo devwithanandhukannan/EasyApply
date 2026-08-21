@@ -48,7 +48,7 @@ app.get('/api/health', async (c) => {
 // Helper for JWT
 const getJwtSecret = (c: any) => c.env.ACCESS_TOKEN_SECRET || 'your_access_secret_edge_easyapply';
 
-// Auth middleware helpers
+// Auth middleware helper
 const getAuthUser = async (c: any) => {
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -62,7 +62,7 @@ const getAuthUser = async (c: any) => {
   }
 };
 
-// ─── ADMIN AUTH: LOGIN ───────────────────────────────────
+// ─── ADMIN AUTH: LOGIN & PROFILE ─────────────────────────
 app.post('/api/admin/auth/login', async (c) => {
   try {
     const { email, password } = await c.req.json();
@@ -99,7 +99,6 @@ app.post('/api/admin/auth/login', async (c) => {
       admin: { id: admin.id, name: admin.name, email: admin.email },
     });
   } catch (err: any) {
-    console.error('Admin login error:', err);
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
 });
@@ -118,6 +117,7 @@ app.get('/api/admin/auth/me', async (c) => {
   }
 });
 
+// ─── ADMIN DASHBOARD APIS ────────────────────────────────
 app.get('/api/admin/stats', async (c) => {
   try {
     const companies = await c.env.DB.prepare('SELECT COUNT(*) as count FROM "Company"').first();
@@ -143,8 +143,24 @@ app.get('/api/admin/stats', async (c) => {
 
 app.get('/api/admin/companies', async (c) => {
   try {
-    const companies = await c.env.DB.prepare('SELECT * FROM "Company" ORDER BY createdAt DESC LIMIT 100').all();
-    return c.json({ success: true, companies: companies.results });
+    const companiesResult = await c.env.DB.prepare('SELECT * FROM "Company" ORDER BY createdAt DESC LIMIT 100').all();
+    const companies = (companiesResult.results || []).map((comp: any) => ({
+      ...comp,
+      isVerified: Boolean(comp.isVerified),
+      verificationBadge: comp.verificationBadge || 'none',
+      aiResumeBuilderEnabled: comp.aiResumeBuilderEnabled !== 0,
+      _count: {
+        jobPostings: 0,
+        teamMembers: 1,
+      },
+    }));
+
+    return c.json({
+      success: true,
+      companies,
+      total: companies.length,
+      totalPages: 1,
+    });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -152,10 +168,63 @@ app.get('/api/admin/companies', async (c) => {
 
 app.get('/api/admin/seekers', async (c) => {
   try {
-    const seekers = await c.env.DB.prepare(
-      'SELECT u.id, u.mobileNumber, u.createdAt, p.fullName, p.email, p.availabilityStatus FROM "User" u LEFT JOIN "JobSeekerProfile" p ON u.id = p.userId WHERE u.globalRoles = 1 ORDER BY u.createdAt DESC LIMIT 100'
+    const seekersResult = await c.env.DB.prepare(
+      'SELECT u.id, u.mobileNumber, u.createdAt, p.fullName, p.email, p.location, p.availabilityStatus, p.discoverable, p.aiResumeBuilderEnabled FROM "User" u LEFT JOIN "JobSeekerProfile" p ON u.id = p.userId WHERE u.globalRoles = 1 ORDER BY u.createdAt DESC LIMIT 100'
     ).all();
-    return c.json({ success: true, seekers: seekers.results });
+
+    const seekers = (seekersResult.results || []).map((s: any) => ({
+      id: s.id,
+      fullName: s.fullName === 'Candidate' ? '' : (s.fullName || 'Candidate'),
+      email: s.email || '',
+      location: s.location || null,
+      availabilityStatus: s.availabilityStatus || 'available',
+      discoverable: Boolean(s.discoverable),
+      aiResumeBuilderEnabled: s.aiResumeBuilderEnabled !== 0,
+      createdAt: s.createdAt,
+      _count: {
+        applications: 0,
+        skills: 0,
+      },
+    }));
+
+    return c.json({
+      success: true,
+      seekers,
+      total: seekers.length,
+      totalPages: 1,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/admin/seekers/:id/ai-resume-builder', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { aiResumeBuilderEnabled } = await c.req.json();
+    const val = aiResumeBuilderEnabled ? 1 : 0;
+    await c.env.DB.prepare('UPDATE "JobSeekerProfile" SET aiResumeBuilderEnabled = ? WHERE userId = ?').bind(val, id).run();
+    return c.json({ success: true, message: 'Status updated' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.get('/api/admin/walkin/rooms', async (c) => {
+  try {
+    return c.json({
+      success: true,
+      rooms: [],
+      total: 0,
+      totalPages: 1,
+      stats: {
+        totalRooms: 0,
+        openRooms: 0,
+        pausedRooms: 0,
+        closedRooms: 0,
+        activeQueueCount: 0,
+      },
+    });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -163,8 +232,12 @@ app.get('/api/admin/seekers', async (c) => {
 
 app.get('/api/admin/subscriptions', async (c) => {
   try {
-    const plans = await c.env.DB.prepare('SELECT * FROM "SubscriptionPlan" ORDER BY createdAt ASC').all();
-    return c.json({ success: true, plans: plans.results });
+    const plansResult = await c.env.DB.prepare('SELECT * FROM "SubscriptionPlan" ORDER BY createdAt ASC').all();
+    const plans = (plansResult.results || []).map((p: any) => ({
+      ...p,
+      features: typeof p.features === 'string' ? JSON.parse(p.features) : (p.features || {}),
+    }));
+    return c.json({ success: true, plans });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -179,7 +252,15 @@ app.get('/api/admin/settings', async (c) => {
   }
 });
 
-// ─── COMPANY AUTH: LOGIN & REGISTER ──────────────────────
+app.get('/api/admin/ats/jobs', async (c) => {
+  return c.json({ success: true, jobs: [] });
+});
+
+app.get('/api/admin/feature-requests', async (c) => {
+  return c.json({ success: true, requests: [] });
+});
+
+// ─── COMPANY AUTH: LOGIN & SESSION ───────────────────────
 app.post('/api/company/auth/login', async (c) => {
   try {
     const { email, password } = await c.req.json();
@@ -260,7 +341,7 @@ app.get('/api/company/auth/session', async (c) => {
   }
 });
 
-// ─── AUTH: SEND OTP ──────────────────────────────────────
+// ─── AUTH: SEND OTP & VERIFY OTP ─────────────────────────
 app.post('/api/auth/send-otp', async (c) => {
   try {
     const { mobileNumber, purpose } = await c.req.json();
@@ -288,7 +369,6 @@ app.post('/api/auth/send-otp', async (c) => {
   }
 });
 
-// ─── AUTH: VERIFY OTP ────────────────────────────────────
 app.post('/api/auth/verify-otp', async (c) => {
   try {
     const { mobileNumber, otp } = await c.req.json();
@@ -367,7 +447,6 @@ app.post('/api/auth/verify-otp', async (c) => {
   }
 });
 
-// ─── AUTH: CHECK ME (SESSION) ────────────────────────────
 app.get('/api/auth/me', async (c) => {
   try {
     const decoded = await getAuthUser(c);
@@ -403,7 +482,6 @@ app.get('/api/auth/me', async (c) => {
   }
 });
 
-// ─── AUTH: REFRESH TOKEN ────────────────────────────────
 app.post('/api/auth/refresh', async (c) => {
   try {
     const cookieHeader = c.req.header('Cookie') || '';
@@ -451,12 +529,10 @@ app.post('/api/auth/refresh', async (c) => {
   }
 });
 
-// ─── AUTH: LOGOUT ────────────────────────────────────────
 app.post('/api/auth/logout', (c) => {
   return c.json({ success: true, message: 'Logged out.' });
 });
 
-// ─── AUTH: CHECK EMAIL EXISTS ────────────────────────────
 app.post('/api/auth/check-email', async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -473,7 +549,7 @@ app.post('/api/auth/check-email', async (c) => {
   }
 });
 
-// ─── JOBSEEKER: GET & PUT PROFILE ────────────────────────
+// ─── JOBSEEKER: PROFILE & DASHBOARD ──────────────────────
 app.get('/api/jobseeker/profile', async (c) => {
   try {
     const decoded = await getAuthUser(c);
@@ -565,58 +641,32 @@ app.put('/api/jobseeker/profile', async (c) => {
       },
     });
   } catch (err: any) {
-    console.error('Profile update error:', err);
     return c.json({ success: false, message: err.message || 'Internal server error' }, 500);
   }
 });
 
-// ─── JOBSEEKER: DASHBOARD & METRICS ──────────────────────
 app.get('/api/jobseeker/dashboard', async (c) => {
-  try {
-    return c.json({
-      success: true,
-      data: {
-        applicationsCount: 0,
-        interviewsCount: 0,
-        savedJobsCount: 0,
-        resumesCount: 0,
-        recentApplications: [],
-        upcomingInterviews: [],
-        recommendedJobs: [],
-      },
-    });
-  } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
-  }
+  return c.json({
+    success: true,
+    data: {
+      applicationsCount: 0,
+      interviewsCount: 0,
+      savedJobsCount: 0,
+      resumesCount: 0,
+      recentApplications: [],
+      upcomingInterviews: [],
+      recommendedJobs: [],
+    },
+  });
 });
 
-app.get('/api/jobseeker/resumes', async (c) => {
-  return c.json({ success: true, data: [] });
-});
-
-app.get('/api/jobseeker/applications', async (c) => {
-  return c.json({ success: true, data: [] });
-});
-
-app.get('/api/jobseeker/saved-jobs/ids', async (c) => {
-  return c.json({ success: true, savedJobIds: [] });
-});
-
-app.get('/api/jobseeker/saved-jobs', async (c) => {
-  return c.json({ success: true, data: [], pagination: { totalPages: 1 } });
-});
-
-app.get('/api/jobseeker/spot-jobs/invitations', async (c) => {
-  return c.json({ success: true, data: [] });
-});
-
-app.get('/api/jobseeker/spot-jobs/toggle-status', async (c) => {
-  return c.json({ success: true, status: 'available' });
-});
-
-app.get('/api/jobseeker/interviews', async (c) => {
-  return c.json({ success: true, data: [] });
-});
+app.get('/api/jobseeker/resumes', async (c) => c.json({ success: true, data: [] }));
+app.get('/api/jobseeker/applications', async (c) => c.json({ success: true, data: [] }));
+app.get('/api/jobseeker/saved-jobs/ids', async (c) => c.json({ success: true, savedJobIds: [] }));
+app.get('/api/jobseeker/saved-jobs', async (c) => c.json({ success: true, data: [], pagination: { totalPages: 1 } }));
+app.get('/api/jobseeker/spot-jobs/invitations', async (c) => c.json({ success: true, data: [] }));
+app.get('/api/jobseeker/spot-jobs/toggle-status', async (c) => c.json({ success: true, status: 'available' }));
+app.get('/api/jobseeker/interviews', async (c) => c.json({ success: true, data: [] }));
 
 // ─── PUBLIC SETTINGS, JOBS, PLANS ────────────────────────
 app.get('/api/public/settings', async (c) => {
