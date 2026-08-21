@@ -566,14 +566,14 @@ app.get('/api/company/auth/session', async (c) => {
   try {
     const decoded = await getAuthUser(c);
     if (!decoded || !decoded.companyId) {
-      return c.json({ success: false, message: 'Session expired' }, 401);
+      return c.json({ success: false, user: null, message: 'Session expired' }, 200);
     }
 
     const company: any = await c.env.DB.prepare(
       'SELECT id, name, email, verificationBadge FROM "Company" WHERE id = ?'
     ).bind(decoded.companyId).first();
 
-    if (!company) return c.json({ success: false, message: 'Company not found' }, 401);
+    if (!company) return c.json({ success: false, user: null, message: 'Company not found' }, 200);
 
     return c.json({
       success: true,
@@ -590,7 +590,7 @@ app.get('/api/company/auth/session', async (c) => {
       },
     });
   } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 401);
+    return c.json({ success: false, user: null, message: err.message }, 200);
   }
 });
 

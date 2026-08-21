@@ -156,30 +156,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Session initialization - runs once on mount
   useEffect(() => {
     const initializeAuth = async () => {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('companyToken') || localStorage.getItem('token')) : null;
+      if (!token) {
+        setIsAuthenticated(false);
+        setUser(null);
+        setCompany(null);
+        setIsLoading(false);
+        return;
+      }
+
       try {
         const response = await api.get('/company/auth/session');
-        if (response.data.success) {
+        if (response.data.success && response.data.user) {
           setIsAuthenticated(true);
 
           setUser({
             id: response.data.user.id,
             userId: response.data.user.id,
-            name: response.data.user.name || response.data.company.name.split(' ')[0] + ' Team',
-            email: response.data.user.email || response.data.company.email,
+            name: response.data.user.name || (response.data.user.company?.name || 'Company') + ' Team',
+            email: response.data.user.email,
             avatar: response.data.user.avatar || null,
-            rolesMask: response.data.user.companyRoles,
-            globalRolesMask: response.data.user.globalRoles,
+            rolesMask: response.data.user.companyRoles || 2,
+            globalRolesMask: response.data.user.globalRoles || 2,
             status: 'active',
             permissions: response.data.user.permissions || null,
             allWorkspaces: response.data.user.allWorkspaces || []
           });
 
-          setCompany(response.data.company);
+          setCompany(response.data.user.company || response.data.company);
+        } else {
+          setIsAuthenticated(false);
+          setUser(null);
+          setCompany(null);
         }
       } catch (error: any) {
-        if (error?.response?.status !== 401) {
-          console.error('Auth initialization error:', error);
-        }
         setIsAuthenticated(false);
         setUser(null);
         setCompany(null);

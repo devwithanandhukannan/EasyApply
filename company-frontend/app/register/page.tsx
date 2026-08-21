@@ -702,13 +702,13 @@ function RegisterPageComponent() {
             </form>
           )}
 
-          {/* Step 3: Verify Mobile */}
+          {/* Step 3: Verify Email & Mobile */}
           {step === 'verify' && (
             <form onSubmit={handleOtpSubmit} className="space-y-5">
               <div className="border-b border-black/[0.06] dark:border-white/[0.08] pb-4 text-center">
-                <h2 className="text-base sm:text-lg font-bold text-[#1d1d1f] dark:text-white">Verify Phone Number</h2>
+                <h2 className="text-base sm:text-lg font-bold text-[#1d1d1f] dark:text-white">Email &amp; Security Verification</h2>
                 <p className="text-xs text-[#86868b] font-medium mt-0.5">
-                  Enter the 6-digit code sent to <strong className="text-[#1d1d1f] dark:text-white">{formData.mobileNumber}</strong>
+                  Enter the 6-digit verification code sent to <strong className="text-[#0071e3] dark:text-[#2997ff]">{formData.email}</strong> &amp; <strong className="text-[#1d1d1f] dark:text-white">{formData.mobileNumber}</strong>
                 </p>
               </div>
 
