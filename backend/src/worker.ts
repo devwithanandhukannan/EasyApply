@@ -1355,6 +1355,186 @@ app.get('/api/walkin/rooms/:roomCode/queue', async (c) => {
   }
 });
 
+app.post('/api/walkin/rooms/:roomCode/call-next', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { roomCode } = c.req.param();
+    const { targetEntryId } = await c.req.json().catch(() => ({}));
+
+    const room: any = await c.env.DB.prepare(
+      'SELECT id, roomCode, livekitRoom FROM "WalkInRoom" WHERE (roomCode = ? OR id = ?) AND companyId = ?'
+    ).bind(roomCode, roomCode, user.companyId).first();
+
+    if (!room) return c.json({ success: false, message: 'Walk-In Room not found.' }, 404);
+
+    let topCandidate: any = null;
+    if (targetEntryId) {
+      topCandidate = await c.env.DB.prepare(
+        'SELECT * FROM "WalkInQueueEntry" WHERE id = ? AND roomId = ?'
+      ).bind(targetEntryId, room.id).first();
+    } else {
+      topCandidate = await c.env.DB.prepare(`
+        SELECT * FROM "WalkInQueueEntry" 
+        WHERE roomId = ? AND status IN ("waiting", "priority") 
+        ORDER BY (priorityScore + agingBonus) DESC, waitingSince ASC 
+        LIMIT 1
+      `).bind(room.id).first();
+    }
+
+    if (!topCandidate) {
+      return c.json({ success: false, message: 'No candidates currently waiting in queue.' }, 404);
+    }
+
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      'UPDATE "WalkInQueueEntry" SET status = "interviewing", updatedAt = ? WHERE id = ?'
+    ).bind(now, topCandidate.id).run();
+
+    return c.json({
+      success: true,
+      message: 'Calling candidate now.',
+      candidate: topCandidate,
+      livekitRoom: room.livekitRoom,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/walkin/rooms/:roomCode/status', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { roomCode } = c.req.param();
+    const { status } = await c.req.json().catch(() => ({}));
+
+    if (!status) return c.json({ success: false, message: 'Status is required.' }, 400);
+
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      'UPDATE "WalkInRoom" SET status = ?, updatedAt = ? WHERE (roomCode = ? OR id = ?) AND companyId = ?'
+    ).bind(status, now, roomCode, roomCode, user.companyId).run();
+
+    return c.json({ success: true, message: `Room status updated to ${status}` });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/walkin/rooms/:roomCode/settings', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { roomCode } = c.req.param();
+    const { title, description, requiredSkills, minExperience, priorityThreshold, evaluationCriteria, maxQueue } = await c.req.json().catch(() => ({}));
+
+    const now = new Date().toISOString();
+    const skillsJson = JSON.stringify(Array.isArray(requiredSkills) ? requiredSkills : []);
+
+    await c.env.DB.prepare(`
+      UPDATE "WalkInRoom" 
+      SET title = COALESCE(?, title),
+          description = ?,
+          requiredSkills = ?,
+          minExperience = ?,
+          priorityThreshold = COALESCE(?, priorityThreshold),
+          evaluationCriteria = ?,
+          maxQueue = COALESCE(?, maxQueue),
+          updatedAt = ?
+      WHERE (roomCode = ? OR id = ?) AND companyId = ?
+    `).bind(
+      title || null,
+      description || null,
+      skillsJson,
+      minExperience || null,
+      priorityThreshold || null,
+      evaluationCriteria || null,
+      maxQueue || null,
+      now,
+      roomCode,
+      roomCode,
+      user.companyId
+    ).run();
+
+    return c.json({ success: true, message: 'Room settings updated successfully.' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/walkin/queue/:entryId/status', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { entryId } = c.req.param();
+    const { status, notes } = await c.req.json().catch(() => ({}));
+
+    if (!status) return c.json({ success: false, message: 'Status is required.' }, 400);
+
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      'UPDATE "WalkInQueueEntry" SET status = ?, notes = COALESCE(?, notes), updatedAt = ? WHERE id = ?'
+    ).bind(status, notes || null, now, entryId).run();
+
+    return c.json({ success: true, message: 'Queue entry updated.' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/walkin/queue/batch-status', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { entryIds, status, notes } = await c.req.json().catch(() => ({}));
+
+    if (!Array.isArray(entryIds) || entryIds.length === 0 || !status) {
+      return c.json({ success: false, message: 'Invalid entry IDs or status.' }, 400);
+    }
+
+    const now = new Date().toISOString();
+    for (const id of entryIds) {
+      await c.env.DB.prepare(
+        'UPDATE "WalkInQueueEntry" SET status = ?, notes = COALESCE(?, notes), updatedAt = ? WHERE id = ?'
+      ).bind(status, notes || null, now, id).run();
+    }
+
+    return c.json({ success: true, message: `${entryIds.length} entries updated successfully.` });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/walkin/queue/batch-status', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { entryIds, status, notes } = await c.req.json().catch(() => ({}));
+
+    if (!Array.isArray(entryIds) || entryIds.length === 0 || !status) {
+      return c.json({ success: false, message: 'Invalid entry IDs or status.' }, 400);
+    }
+
+    const now = new Date().toISOString();
+    for (const id of entryIds) {
+      await c.env.DB.prepare(
+        'UPDATE "WalkInQueueEntry" SET status = ?, notes = COALESCE(?, notes), updatedAt = ? WHERE id = ?'
+      ).bind(status, notes || null, now, id).run();
+    }
+
+    return c.json({ success: true, message: `${entryIds.length} entries updated successfully.` });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
 // ─── AUTH: SEND OTP & VERIFY OTP ─────────────────────────
 app.post('/api/auth/send-otp', async (c) => {
   try {
