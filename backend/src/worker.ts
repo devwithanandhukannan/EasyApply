@@ -451,12 +451,12 @@ app.get('/api/auth/me', async (c) => {
   try {
     const decoded = await getAuthUser(c);
     if (!decoded) {
-      return c.json({ success: false, message: 'Unauthorized.' }, 401);
+      return c.json({ success: false, isAuthenticated: false, user: null }, 200);
     }
 
     const user: any = await c.env.DB.prepare('SELECT * FROM "User" WHERE id = ?').bind(decoded.userId).first();
     if (!user) {
-      return c.json({ success: false, message: 'User not found.' }, 401);
+      return c.json({ success: false, isAuthenticated: false, user: null }, 200);
     }
 
     const profile: any = await c.env.DB.prepare('SELECT * FROM "JobSeekerProfile" WHERE userId = ?').bind(user.id).first();
@@ -465,6 +465,7 @@ app.get('/api/auth/me', async (c) => {
 
     return c.json({
       success: true,
+      isAuthenticated: true,
       user: {
         id: user.id,
         mobileNumber: user.mobileNumber,
@@ -478,7 +479,7 @@ app.get('/api/auth/me', async (c) => {
       },
     });
   } catch (err: any) {
-    return c.json({ success: false, message: 'Unauthorized or session expired.' }, 401);
+    return c.json({ success: false, isAuthenticated: false, user: null }, 200);
   }
 });
 
@@ -496,7 +497,7 @@ app.post('/api/auth/refresh', async (c) => {
     }
 
     if (!refreshToken) {
-      return c.json({ success: false, message: 'No refresh token provided.' }, 401);
+      return c.json({ success: false, message: 'No refresh token provided.' }, 200);
     }
 
     const refreshSecret = c.env.REFRESH_TOKEN_SECRET || 'your_refresh_secret_edge_easyapply';
@@ -504,12 +505,12 @@ app.post('/api/auth/refresh', async (c) => {
     try {
       decoded = jwt.verify(refreshToken, refreshSecret);
     } catch {
-      return c.json({ success: false, message: 'Invalid or expired refresh token.' }, 401);
+      return c.json({ success: false, message: 'Invalid or expired refresh token.' }, 200);
     }
 
     const user: any = await c.env.DB.prepare('SELECT id, globalRoles FROM "User" WHERE id = ?').bind(decoded.userId).first();
     if (!user) {
-      return c.json({ success: false, message: 'User context not found.' }, 401);
+      return c.json({ success: false, message: 'User context not found.' }, 200);
     }
 
     const jwtSecret = getJwtSecret(c);
@@ -525,7 +526,7 @@ app.post('/api/auth/refresh', async (c) => {
       accessToken: newAccessToken,
     });
   } catch (err: any) {
-    return c.json({ success: false, message: err.message || 'Internal server error' }, 401);
+    return c.json({ success: false, message: err.message || 'Internal server error' }, 200);
   }
 });
 
