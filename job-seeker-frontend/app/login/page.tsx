@@ -154,8 +154,17 @@ function LoginPageComponent() {
       const formData = new FormData();
       formData.append('profileData', JSON.stringify(payload));
 
+      // Re-sync token from localStorage before PUT (handles module re-initialization edge case)
+      const currentToken = typeof window !== 'undefined' ? localStorage.getItem('seeker_access_token') : '';
+      if (currentToken) {
+        setAccessToken(currentToken);
+      }
+
       await api.put('/jobseeker/profile', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...(currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}),
+        }
       });
 
       const savedToken = (typeof window !== 'undefined' ? localStorage.getItem('seeker_access_token') : '') || undefined;

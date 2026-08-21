@@ -576,7 +576,7 @@ app.post('/api/auth/verify-otp', async (c) => {
     const accessToken = jwt.sign(
       { userId: user.id, globalRoles: user.globalRoles },
       jwtSecret,
-      { expiresIn: '15m' }
+      { expiresIn: '7d' }
     );
 
     return c.json({
@@ -859,6 +859,84 @@ app.get('/api/public/search', async (c) => {
       data: jobs.results,
       pagination: { totalPages: 1, total: jobs.results.length },
     });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+// ─── PUBLIC: COMPANIES, JOBS, WALK-IN ──────────────────────
+app.get('/api/public/companies', async (c) => {
+  try {
+    const { search, industry, page } = c.req.query();
+    let query = 'SELECT id, name, industry, size, logoUrl, tagline, verificationBadge, isVerified FROM "Company" WHERE 1=1';
+    const params: any[] = [];
+    if (search) { query += ' AND name LIKE ?'; params.push(`%${search}%`); }
+    if (industry) { query += ' AND industry = ?'; params.push(industry); }
+    query += ' ORDER BY createdAt DESC LIMIT 50';
+    const companies = params.length
+      ? await c.env.DB.prepare(query).bind(...params).all()
+      : await c.env.DB.prepare(query).all();
+    return c.json({ success: true, data: companies.results, pagination: { totalPages: 1, total: companies.results.length } });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+app.get('/api/public/companies/:identifier', async (c) => {
+  try {
+    const { identifier } = c.req.param();
+    const company: any = await c.env.DB.prepare(
+      'SELECT id, name, industry, size, logoUrl, tagline, verificationBadge, isVerified, services, seoKeywords, coreValues, gallery, youtubeLink, officeLocations, socialMedia, corporateLink FROM "Company" WHERE id = ? OR name = ?'
+    ).bind(identifier, identifier).first();
+    if (!company) return c.json({ success: false, message: 'Company not found' }, 404);
+    return c.json({ success: true, data: company });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+app.get('/api/public/companies/:identifier/jobs', async (c) => {
+  try {
+    const { identifier } = c.req.param();
+    const company: any = await c.env.DB.prepare('SELECT id FROM "Company" WHERE id = ? OR name = ?').bind(identifier, identifier).first();
+    if (!company) return c.json({ success: true, data: [] });
+    const jobs = await c.env.DB.prepare(
+      'SELECT * FROM "JobPosting" WHERE companyId = ? AND status = ? ORDER BY createdAt DESC LIMIT 50'
+    ).bind(company.id, 'active').all();
+    return c.json({ success: true, data: jobs.results });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+app.get('/api/public/jobs', async (c) => {
+  try {
+    const { search, jobType, locationType, page } = c.req.query();
+    let query = 'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.status = \'active\'';
+    const params: any[] = [];
+    if (search) { query += ' AND (j.title LIKE ? OR j.description LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+    if (jobType) { query += ' AND j.jobType = ?'; params.push(jobType); }
+    if (locationType) { query += ' AND j.locationType = ?'; params.push(locationType); }
+    query += ' ORDER BY j.createdAt DESC LIMIT 50';
+    const jobs = params.length
+      ? await c.env.DB.prepare(query).bind(...params).all()
+      : await c.env.DB.prepare(query).all();
+    return c.json({ success: true, data: jobs.results, pagination: { totalPages: 1, total: jobs.results.length } });
+  } catch (err: any) {
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+app.get('/api/walkin/active-rooms', async (c) => {
+  try {
+    const { search } = c.req.query();
+    let query = 'SELECT w.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry FROM "WalkInRoom" w LEFT JOIN "Company" c ON w.companyId = c.id WHERE w.status = \'active\'';
+    const params: any[] = [];
+    if (search) { query += ' AND (w.title LIKE ? OR c.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+    query += ' ORDER BY w.createdAt DESC LIMIT 50';
+    const rooms = params.length
+      ? await c.env.DB.prepare(query).bind(...params).all()
+      : await c.env.DB.prepare(query).all();
+    return c.json({ success: true, data: rooms.results, pagination: { totalPages: 1, total: rooms.results.length } });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
