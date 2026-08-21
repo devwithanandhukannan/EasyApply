@@ -143,12 +143,31 @@ app.get('/api/admin/stats', async (c) => {
 
 app.get('/api/admin/companies', async (c) => {
   try {
-    const companiesResult = await c.env.DB.prepare('SELECT * FROM "Company" ORDER BY createdAt DESC LIMIT 100').all();
+    const companiesResult = await c.env.DB.prepare(`
+      SELECT c.*, s.id as subId, s.planId, s.features as subFeatures, s.status as subStatus, p.name as planName
+      FROM "Company" c
+      LEFT JOIN "Subscription" s ON c.id = s.companyId
+      LEFT JOIN "SubscriptionPlan" p ON s.planId = p.id
+      ORDER BY c.createdAt DESC LIMIT 100
+    `).all().catch(async () => {
+      return await c.env.DB.prepare('SELECT * FROM "Company" ORDER BY createdAt DESC LIMIT 100').all();
+    });
+
     const companies = (companiesResult.results || []).map((comp: any) => ({
       ...comp,
       isVerified: Boolean(comp.isVerified),
       verificationBadge: comp.verificationBadge || 'none',
       aiResumeBuilderEnabled: comp.aiResumeBuilderEnabled !== 0,
+      subscription: comp.planId ? {
+        id: comp.subId,
+        planId: comp.planId,
+        status: comp.subStatus || 'active',
+        features: typeof comp.subFeatures === 'string' ? JSON.parse(comp.subFeatures) : (comp.subFeatures || {}),
+        plan: {
+          id: comp.planId,
+          name: comp.planName || 'Free (Default)',
+        },
+      } : null,
       _count: {
         jobPostings: 0,
         teamMembers: 1,
@@ -161,6 +180,89 @@ app.get('/api/admin/companies', async (c) => {
       total: companies.length,
       totalPages: 1,
     });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/admin/companies/:id/subscription', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const { planId } = await c.req.json().catch(() => ({}));
+    if (!planId) return c.json({ success: false, message: 'Plan ID is required' }, 400);
+
+    const now = new Date().toISOString();
+    const existingSub: any = await c.env.DB.prepare('SELECT id FROM "Subscription" WHERE companyId = ?').bind(id).first();
+
+    if (existingSub) {
+      await c.env.DB.prepare(
+        'UPDATE "Subscription" SET planId = ?, updatedAt = ? WHERE companyId = ?'
+      ).bind(planId, now, id).run();
+    } else {
+      const subId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "Subscription" (id, companyId, planId, status, currentPeriodStart, currentPeriodEnd, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(subId, id, planId, 'active', now, new Date(Date.now() + 365*24*60*60*1000).toISOString(), now, now).run();
+    }
+
+    return c.json({ success: true, message: 'Subscription plan assigned successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/admin/companies/:id/subscription/features', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const { features } = await c.req.json().catch(() => ({}));
+    const featuresJson = JSON.stringify(features || {});
+    const now = new Date().toISOString();
+
+    const existingSub: any = await c.env.DB.prepare('SELECT id FROM "Subscription" WHERE companyId = ?').bind(id).first();
+    if (existingSub) {
+      await c.env.DB.prepare(
+        'UPDATE "Subscription" SET features = ?, updatedAt = ? WHERE companyId = ?'
+      ).bind(featuresJson, now, id).run();
+    } else {
+      const subId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "Subscription" (id, companyId, planId, features, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(subId, id, 'free', featuresJson, 'active', now, now).run();
+    }
+
+    return c.json({ success: true, message: 'Feature overrides updated successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/admin/companies/:id/verify', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const { isVerified, verificationBadge } = await c.req.json().catch(() => ({}));
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(
+      'UPDATE "Company" SET isVerified = ?, verificationBadge = ?, updatedAt = ? WHERE id = ?'
+    ).bind(isVerified ? 1 : 0, verificationBadge || (isVerified ? 'verified' : 'none'), now, id).run();
+
+    return c.json({ success: true, message: 'Company verification updated' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/admin/companies/:id/features', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const { aiResumeBuilderEnabled } = await c.req.json().catch(() => ({}));
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(
+      'UPDATE "Company" SET aiResumeBuilderEnabled = ?, updatedAt = ? WHERE id = ?'
+    ).bind(aiResumeBuilderEnabled ? 1 : 0, now, id).run();
+
+    return c.json({ success: true, message: 'AI CV features updated' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
