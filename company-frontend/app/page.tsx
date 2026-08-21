@@ -13,6 +13,10 @@ import {
   Laptop, ExternalLink
 } from 'lucide-react';
 
+const JOBSEEKER_URL = typeof window !== 'undefined' && (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply'))
+  ? 'https://cloudflare.easyapply-jobseeker.pages.dev'
+  : (process.env.NEXT_PUBLIC_JOBSEEKER_URL || 'http://localhost:3000');
+
 export default function CompanyFrontPage() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
@@ -135,7 +139,7 @@ export default function CompanyFrontPage() {
               How It Works
             </a>
             <a
-              href="http://localhost:3000/companies"
+              href={`${JOBSEEKER_URL}/companies`}
               target="_blank"
               rel="noopener noreferrer"
               className="px-4 py-1.5 rounded-xl text-xs font-semibold text-[#0071e3] hover:bg-white dark:hover:bg-[#2c2c2e] hover:shadow-xs transition-all flex items-center gap-1"
@@ -459,19 +463,19 @@ export default function CompanyFrontPage() {
               </h4>
               <ul className="space-y-2 text-xs text-[#86868b] font-medium">
                 <li>
-                  <a href="http://localhost:3000/companies" target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
+                  <a href={`${JOBSEEKER_URL}/companies`} target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
                     <span>Public Directory</span>
                     <ExternalLink className="w-3 h-3 opacity-60" />
                   </a>
                 </li>
                 <li>
-                  <a href="http://localhost:3000/companies?tab=walkin" target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
+                  <a href={`${JOBSEEKER_URL}/companies?tab=walkin`} target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
                     <span>Live Walk-In Rooms</span>
                     <ExternalLink className="w-3 h-3 opacity-60" />
                   </a>
                 </li>
                 <li>
-                  <a href="http://localhost:3000" target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
+                  <a href={JOBSEEKER_URL} target="_blank" rel="noreferrer" className="hover:text-[#0071e3] transition-colors flex items-center gap-1">
                     <span>Candidate Portal</span>
                     <ExternalLink className="w-3 h-3 opacity-60" />
                   </a>
@@ -507,8 +511,8 @@ export default function CompanyFrontPage() {
           <div className="pt-8 border-t border-black/[0.04] dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#86868b] font-medium">
             <p>© {new Date().getFullYear()} EasyApply Enterprise. All rights reserved.</p>
             <div className="flex items-center gap-4">
-              <a href="http://localhost:3000/companies" target="_blank" rel="noreferrer" className="hover:text-[#0071e3]">
-                http://localhost:3000/companies
+              <a href={`${JOBSEEKER_URL}/companies`} target="_blank" rel="noreferrer" className="hover:text-[#0071e3]">
+                {JOBSEEKER_URL}/companies
               </a>
             </div>
           </div>

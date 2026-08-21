@@ -150,7 +150,9 @@ export default function CompanySidebar({
       },
       { 
         name: 'Public Directory', 
-        href: 'http://localhost:3000/companies', 
+        href: typeof window !== 'undefined' && (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply'))
+          ? 'https://cloudflare.easyapply-jobseeker.pages.dev/companies'
+          : (process.env.NEXT_PUBLIC_JOBSEEKER_URL || 'http://localhost:3000') + '/companies', 
         icon: Globe, 
         visible: hasAccess,
         isLocked: false,
