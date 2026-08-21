@@ -43,6 +43,8 @@ import {
   Layers,
 } from 'lucide-react';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
+import { useAuth } from '@/app/contexts/AuthContext';
+import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
 
 interface ResumeData {
   id: string;
@@ -191,9 +193,6 @@ const KANBAN_COLUMNS: {
     icon: XCircle,
   },
 ];
-
-import { useAuth } from '@/app/contexts/AuthContext';
-import LockedFeaturePaywall from '@/app/components/LockedFeaturePaywall';
 
 export default function CompanyWalkInKanbanPage() {
   const router = useRouter();
