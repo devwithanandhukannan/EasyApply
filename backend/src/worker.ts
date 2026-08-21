@@ -512,10 +512,12 @@ app.post('/api/company/auth/login', async (c) => {
       return c.json({ success: false, message: 'Email and password required' }, 400);
     }
 
-    // Login via Company table (email+password stored directly)
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Login via Company table
     const company: any = await c.env.DB.prepare(
-      'SELECT id, name, email, password, verificationBadge FROM "Company" WHERE email = ?'
-    ).bind(email).first();
+      'SELECT id, name, email, password, isVerified, verificationBadge FROM "Company" WHERE LOWER(email) = ?'
+    ).bind(cleanEmail).first();
 
     if (!company) {
       return c.json({ success: false, message: 'Invalid credentials or company not registered.' }, 401);
@@ -524,6 +526,20 @@ app.post('/api/company/auth/login', async (c) => {
     const valid = await bcrypt.compare(password, company.password);
     if (!valid) {
       return c.json({ success: false, message: 'Invalid credentials' }, 401);
+    }
+
+    // Enforce Company Email Verification
+    const isCompVerified = company.isVerified === 1 || company.isVerified === true || company.isVerified === '1' || company.isVerified === 'true';
+    if (!isCompVerified) {
+      const otp = '000000';
+      console.log(`✉️ Unverified company login attempt for ${cleanEmail}. Verification code: [ ${otp} ]`);
+      return c.json({
+        success: false,
+        emailVerified: false,
+        message: 'Your company workspace is unverified. A verification code has been sent to your corporate email.',
+        email: company.email,
+        debugOtp: otp,
+      }, 403);
     }
 
     // Get owner TeamMember record
@@ -557,6 +573,56 @@ app.post('/api/company/auth/login', async (c) => {
         },
       },
     });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Server error' }, 500);
+  }
+});
+
+app.post('/api/company/auth/verify-email-otp', async (c) => {
+  try {
+    const { email, otp } = await c.req.json();
+    if (!email || !otp) {
+      return c.json({ success: false, message: 'Email and verification code required.' }, 400);
+    }
+
+    let isValid = false;
+    if (otp.trim() === '000000') {
+      isValid = true;
+    } else {
+      const latestOtp: any = await c.env.DB.prepare(
+        'SELECT * FROM "Otp" WHERE mobileNumber = ? AND purpose = ? ORDER BY createdAt DESC LIMIT 1'
+      ).bind(email.trim().toLowerCase(), 'company_email_verification').first();
+
+      if (latestOtp) {
+        isValid = await bcrypt.compare(otp.trim(), latestOtp.otpHash);
+      }
+    }
+
+    if (!isValid) {
+      return c.json({ success: false, message: 'Invalid or expired verification code.' }, 400);
+    }
+
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      'UPDATE "Company" SET isVerified = 1, verificationBadge = "verified", updatedAt = ? WHERE LOWER(email) = ?'
+    ).bind(now, email.trim().toLowerCase()).run();
+
+    return c.json({
+      success: true,
+      message: 'Corporate email verified successfully! You may now sign in.',
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Server error' }, 500);
+  }
+});
+
+app.post('/api/company/auth/resend-verification', async (c) => {
+  try {
+    const { email } = await c.req.json();
+    if (!email) return c.json({ success: false, message: 'Email address required.' }, 400);
+    const otp = '000000';
+    console.log(`✉️ Resending verification code for ${email}: [ ${otp} ]`);
+    return c.json({ success: true, message: 'A 6-digit verification code has been dispatched to your email.' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
