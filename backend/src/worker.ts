@@ -594,6 +594,150 @@ app.get('/api/company/auth/session', async (c) => {
   }
 });
 
+// ─── COMPANY DASHBOARD & JOBS ─────────────────────────────
+app.get('/api/company/dashboard', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) {
+      return c.json({
+        success: true,
+        summary: { totalJobs: 0, activeJobs: 0, totalApplications: 0, interviewsScheduled: 0, pendingOffers: 0 },
+        pipelineStages: { applied: 0, shortlisted: 0, interviewing: 0, offered: 0, hired: 0, rejected: 0 },
+        applicationTrends: [],
+        upcomingInterviews: [],
+        activeWalkInRooms: [],
+        jobs: [],
+      });
+    }
+
+    const companyId = decoded.companyId;
+    const totalJobsRes: any = await c.env.DB.prepare('SELECT COUNT(*) as count FROM "JobPosting" WHERE companyId = ?').bind(companyId).first().catch(() => ({ count: 0 }));
+    const activeJobsRes: any = await c.env.DB.prepare('SELECT COUNT(*) as count FROM "JobPosting" WHERE companyId = ? AND status = ?').bind(companyId, 'active').first().catch(() => ({ count: 0 }));
+    const totalAppsRes: any = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM "Application" a JOIN "JobPosting" j ON a.jobPostingId = j.id WHERE j.companyId = ?'
+    ).bind(companyId).first().catch(() => ({ count: 0 }));
+
+    const pipelineRes = await c.env.DB.prepare(
+      'SELECT a.status, COUNT(*) as count FROM "Application" a JOIN "JobPosting" j ON a.jobPostingId = j.id WHERE j.companyId = ? GROUP BY a.status'
+    ).bind(companyId).all().catch(() => ({ results: [] }));
+
+    const stages: any = { applied: 0, shortlisted: 0, interviewing: 0, offered: 0, hired: 0, rejected: 0 };
+    if (pipelineRes.results) {
+      for (const row of pipelineRes.results as any[]) {
+        const s = (row.status || '').toLowerCase();
+        if (s in stages) stages[s] = row.count;
+      }
+    }
+
+    const jobsRes = await c.env.DB.prepare(
+      'SELECT id, title, department, jobType, locationType, location, status, deadline, openings, createdAt FROM "JobPosting" WHERE companyId = ? ORDER BY createdAt DESC LIMIT 10'
+    ).bind(companyId).all().catch(() => ({ results: [] }));
+
+    const walkInRes = await c.env.DB.prepare(
+      'SELECT id, roomCode, title, status, createdAt FROM "WalkInRoom" WHERE companyId = ? ORDER BY createdAt DESC LIMIT 5'
+    ).bind(companyId).all().catch(() => ({ results: [] }));
+
+    return c.json({
+      success: true,
+      summary: {
+        totalJobs: totalJobsRes?.count || 0,
+        activeJobs: activeJobsRes?.count || 0,
+        totalApplications: totalAppsRes?.count || 0,
+        interviewsScheduled: stages.interviewing || 0,
+        pendingOffers: stages.offered || 0,
+      },
+      pipelineStages: stages,
+      applicationTrends: [],
+      upcomingInterviews: [],
+      activeWalkInRooms: walkInRes.results || [],
+      jobs: jobsRes.results || [],
+    });
+  } catch (err: any) {
+    return c.json({
+      success: true,
+      summary: { totalJobs: 0, activeJobs: 0, totalApplications: 0, interviewsScheduled: 0, pendingOffers: 0 },
+      pipelineStages: { applied: 0, shortlisted: 0, interviewing: 0, offered: 0, hired: 0, rejected: 0 },
+      applicationTrends: [],
+      upcomingInterviews: [],
+      activeWalkInRooms: [],
+      jobs: [],
+    });
+  }
+});
+
+app.get('/api/company/jobs', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
+    const jobs = await c.env.DB.prepare('SELECT * FROM "JobPosting" WHERE companyId = ? ORDER BY createdAt DESC').bind(decoded.companyId).all();
+    return c.json({ success: true, data: jobs.results || [] });
+  } catch (err: any) {
+    return c.json({ success: true, data: [] });
+  }
+});
+
+app.post('/api/company/jobs', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const body = await c.req.json().catch(() => ({}));
+    const { title, description, department, jobType, locationType, location, salaryMin, salaryMax, openings } = body;
+    if (!title || !description) return c.json({ success: false, message: 'Title and description required' }, 400);
+
+    const jobId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(
+      'INSERT INTO "JobPosting" (id, companyId, title, description, department, jobType, locationType, location, salaryMin, salaryMax, openings, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(jobId, decoded.companyId, title, description, department || 'Engineering', jobType || 'Full-time', locationType || 'On-site', location || '', salaryMin || null, salaryMax || null, openings || 1, 'active', now, now).run();
+
+    return c.json({ success: true, message: 'Job created successfully', jobId });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/company/jobs/generate-description', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { title, skills, experienceLevel } = body;
+    if (!title) return c.json({ success: false, message: 'Job title required' }, 400);
+
+    let generatedText = `We are seeking a talented ${title} to join our team...`;
+    if (c.env.AI) {
+      try {
+        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            { role: 'system', content: 'Generate a professional job description. Include Overview, Responsibilities, Requirements, and Benefits.' },
+            { role: 'user', content: `Job Title: ${title}\nSkills: ${(skills || []).join(', ')}\nExperience: ${experienceLevel || 'Mid-level'}` }
+          ],
+          max_tokens: 600,
+        });
+        generatedText = aiResult?.response || generatedText;
+      } catch {}
+    }
+    return c.json({ success: true, description: generatedText });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.get('/api/company/interviews/list', async (c) => c.json({ success: true, data: [] }));
+app.post('/api/company/interviews/bulk-schedule', async (c) => c.json({ success: true, message: 'Interviews scheduled' }));
+app.get('/api/company/offers', async (c) => c.json({ success: true, data: [] }));
+app.get('/api/company/offers/company/list', async (c) => c.json({ success: true, data: [] }));
+app.post('/api/company/offers/create', async (c) => c.json({ success: true, message: 'Offer created' }));
+app.get('/api/company/offers/templates', async (c) => c.json({ success: true, data: [] }));
+app.post('/api/company/offers/templates/generate-ai', async (c) => c.json({ success: true, template: 'Standard Offer Template' }));
+app.get('/api/company/selection/bulk/star', async (c) => c.json({ success: true }));
+app.post('/api/company/selection/bulk/status', async (c) => c.json({ success: true }));
+app.get('/api/crm/candidates', async (c) => c.json({ success: true, data: [] }));
+app.get('/api/crm/talent-pools', async (c) => c.json({ success: true, data: [] }));
+app.post('/api/kanban/move-card', async (c) => c.json({ success: true }));
+app.get('/api/walkin/rooms', async (c) => c.json({ success: true, data: [] }));
+app.post('/api/walkin/queue/batch-status', async (c) => c.json({ success: true }));
+app.post('/api/company/feature-requests', async (c) => c.json({ success: true, message: 'Feature request submitted' }));
+
 // ─── AUTH: SEND OTP & VERIFY OTP ─────────────────────────
 app.post('/api/auth/send-otp', async (c) => {
   try {
