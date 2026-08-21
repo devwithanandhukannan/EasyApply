@@ -673,24 +673,25 @@ export const updateCompanyProfile = async (req: Request, res: Response) => {
       }
     }
 
+    const updateData: Record<string, unknown> = {};
+    if (name?.trim()) updateData.name = name.trim();
+    if (industry) updateData.industry = industry;
+    if (size) updateData.size = size;
+    if (registrationNumber) updateData.registrationNumber = registrationNumber;
+    if (tagline?.trim()) updateData.tagline = tagline.trim();
+    if (Array.isArray(services)) updateData.services = services;
+    if (products !== undefined) updateData.products = products;
+    if (Array.isArray(seoKeywords)) updateData.seoKeywords = seoKeywords.map((k: string) => k.trim());
+    if (Array.isArray(coreValues)) updateData.coreValues = coreValues;
+    if (Array.isArray(gallery)) updateData.gallery = gallery;
+    if (youtubeLink?.trim()) updateData.youtubeLink = youtubeLink.trim();
+    if (officeLocations !== undefined) updateData.officeLocations = officeLocations;
+    if (socialMedia !== undefined) updateData.socialMedia = socialMedia;
+    if (corporateLink?.trim()) updateData.corporateLink = corporateLink.trim();
+
     const updatedCompany = await prisma.company.update({
       where: { id: membership.companyId },
-      data: {
-        name: name?.trim() || undefined,
-        industry: industry || undefined,
-        size: size || undefined,
-        registrationNumber: registrationNumber || undefined,
-        tagline: tagline?.trim() || undefined,
-        services: Array.isArray(services) ? services : undefined,
-        products: products !== undefined ? products : undefined,
-        seoKeywords: Array.isArray(seoKeywords) ? seoKeywords.map((k: string) => k.trim()) : undefined,
-        coreValues: Array.isArray(coreValues) ? coreValues : undefined,
-        gallery: Array.isArray(gallery) ? gallery : undefined,
-        youtubeLink: youtubeLink?.trim() || undefined,
-        officeLocations: officeLocations !== undefined ? officeLocations : undefined,
-        socialMedia: socialMedia !== undefined ? socialMedia : undefined,
-        corporateLink: corporateLink?.trim() || undefined,
-      }
+      data: updateData as any,
     });
 
     return res.status(200).json({

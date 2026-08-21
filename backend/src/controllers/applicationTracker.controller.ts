@@ -276,7 +276,7 @@ export const getSingleApplicationDetails = async (req: AuthRequest, res: Respons
     }
 
     // 2. Locate application payload and strictly isolate search scope via candidate key constraints
-    const application = await prisma.application.findFirst({
+    const application: any = await prisma.application.findFirst({
       where: { 
         id: applicationId,
         jobSeekerProfileId: profile.id 

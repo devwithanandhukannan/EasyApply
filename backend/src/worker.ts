@@ -349,34 +349,40 @@ app.post('/api/company/auth/register', async (c) => {
       return c.json({ success: false, message: 'Company name, email, and password are required.' }, 400);
     }
 
-    // Check if email already exists
-    const existingMember = await c.env.DB.prepare(
-      'SELECT id FROM "CompanyTeamMember" WHERE email = ?'
+    // Check if company email already exists
+    const existingCompany = await c.env.DB.prepare(
+      'SELECT id FROM "Company" WHERE email = ?'
     ).bind(email).first();
 
-    if (existingMember) {
+    if (existingCompany) {
       return c.json({ success: false, message: 'A company with this email already exists.' }, 409);
     }
 
     const now = new Date().toISOString();
     const companyId = crypto.randomUUID();
+    const userId = crypto.randomUUID();
     const memberId = crypto.randomUUID();
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Create company
+    // Create a User record for the company owner
     await c.env.DB.prepare(
-      'INSERT INTO "Company" (id, name, industry, size, gstNumber, isVerified, verificationBadge, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(companyId, companyName, industry || null, companySize || null, gstNumber || null, 0, 'none', 1, now, now).run();
+      'INSERT INTO "User" (id, mobileNumber, globalRoles, isVerified, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
+    ).bind(userId, mobileNumber || '', 2, 1, now, now).run();
 
-    // Create team member (owner)
+    // Create company (email+password stored directly on Company)
     await c.env.DB.prepare(
-      'INSERT INTO "CompanyTeamMember" (id, companyId, name, email, password, role, mobileNumber, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(memberId, companyId, companyName, email, passwordHash, 'owner', mobileNumber || null, now, now).run();
+      'INSERT INTO "Company" (id, name, email, password, industry, size, registrationNumber, isVerified, verificationBadge, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(companyId, companyName, email, passwordHash, industry || 'Other', companySize || 'small', gstNumber || null, false, 'none', true, now, now).run();
+
+    // Create TeamMember (owner) — roles=1 means owner/admin
+    await c.env.DB.prepare(
+      'INSERT INTO "TeamMember" (id, companyId, userId, roles, status, password, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(memberId, companyId, userId, 1, 'active', passwordHash, now, now).run();
 
     const jwtSecret = getJwtSecret(c);
     const token = jwt.sign(
-      { memberId, companyId, role: 'owner' },
+      { memberId, companyId, userId, role: 'owner' },
       jwtSecret,
       { expiresIn: '7d' }
     );
@@ -406,22 +412,31 @@ app.post('/api/company/auth/login', async (c) => {
       return c.json({ success: false, message: 'Email and password required' }, 400);
     }
 
-    const member: any = await c.env.DB.prepare(
-      'SELECT tm.*, c.id as companyId, c.name as companyName, c.verificationBadge FROM "CompanyTeamMember" tm JOIN "Company" c ON tm.companyId = c.id WHERE tm.email = ?'
+    // Login via Company table (email+password stored directly)
+    const company: any = await c.env.DB.prepare(
+      'SELECT id, name, email, password, verificationBadge FROM "Company" WHERE email = ?'
     ).bind(email).first();
 
-    if (!member) {
+    if (!company) {
       return c.json({ success: false, message: 'Invalid credentials or company not registered.' }, 401);
     }
 
-    const valid = await bcrypt.compare(password, member.password);
+    const valid = await bcrypt.compare(password, company.password);
     if (!valid) {
       return c.json({ success: false, message: 'Invalid credentials' }, 401);
     }
 
+    // Get owner TeamMember record
+    const member: any = await c.env.DB.prepare(
+      'SELECT id, userId FROM "TeamMember" WHERE companyId = ? AND roles = 1 LIMIT 1'
+    ).bind(company.id).first();
+
+    const memberId = member?.id || company.id;
+    const userId = member?.userId || null;
+
     const jwtSecret = getJwtSecret(c);
     const token = jwt.sign(
-      { memberId: member.id, companyId: member.companyId, role: member.role },
+      { memberId, companyId: company.id, userId, role: 'owner' },
       jwtSecret,
       { expiresIn: '7d' }
     );
@@ -431,14 +446,14 @@ app.post('/api/company/auth/login', async (c) => {
       message: 'Login successful',
       token,
       user: {
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: member.role,
+        id: memberId,
+        name: company.name,
+        email: company.email,
+        role: 'owner',
         company: {
-          id: member.companyId,
-          name: member.companyName,
-          verificationBadge: member.verificationBadge,
+          id: company.id,
+          name: company.name,
+          verificationBadge: company.verificationBadge || 'none',
         },
       },
     });
@@ -454,23 +469,23 @@ app.get('/api/company/auth/session', async (c) => {
       return c.json({ success: false, message: 'Session expired' }, 401);
     }
 
-    const member: any = await c.env.DB.prepare(
-      'SELECT tm.id, tm.name, tm.email, tm.role, c.id as companyId, c.name as companyName, c.verificationBadge FROM "CompanyTeamMember" tm JOIN "Company" c ON tm.companyId = c.id WHERE tm.id = ?'
-    ).bind(decoded.memberId).first();
+    const company: any = await c.env.DB.prepare(
+      'SELECT id, name, email, verificationBadge FROM "Company" WHERE id = ?'
+    ).bind(decoded.companyId).first();
 
-    if (!member) return c.json({ success: false, message: 'Member not found' }, 401);
+    if (!company) return c.json({ success: false, message: 'Company not found' }, 401);
 
     return c.json({
       success: true,
       user: {
-        id: member.id,
-        name: member.name,
-        email: member.email,
-        role: member.role,
+        id: decoded.memberId,
+        name: company.name,
+        email: company.email,
+        role: decoded.role || 'owner',
         company: {
-          id: member.companyId,
-          name: member.companyName,
-          verificationBadge: member.verificationBadge,
+          id: company.id,
+          name: company.name,
+          verificationBadge: company.verificationBadge || 'none',
         },
       },
     });
@@ -630,9 +645,9 @@ app.post('/api/auth/refresh', async (c) => {
     let refreshToken = '';
     const match = cookieHeader.match(/refreshToken=([^;]+)/);
     if (match) {
-      refreshToken = decodeURIComponent(match[1]);
+      refreshToken = decodeURIComponent(match[1] as string);
     } else if (authHeader && authHeader.startsWith('Bearer ')) {
-      refreshToken = authHeader.split(' ')[1];
+      refreshToken = (authHeader.split(' ')[1]) as string;
     }
 
     if (!refreshToken) {

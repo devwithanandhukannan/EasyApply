@@ -42,6 +42,7 @@
     "uuid": "^14.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260821.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
