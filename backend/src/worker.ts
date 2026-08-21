@@ -1141,33 +1141,6 @@ app.get('/api/interviews/:id', async (c) => {
   }
 });
 
-// ─── MISSING: PUBLIC JOB DETAIL ──────────────────────────
-app.get('/api/public/jobs/:id', async (c) => {
-  try {
-    const { id } = c.req.param();
-    const job: any = await c.env.DB.prepare(
-      'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.id = ?'
-    ).bind(id).first();
-    if (!job) return c.json({ success: false, message: 'Job not found' }, 404);
-    return c.json({ success: true, data: job });
-  } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
-  }
-});
-
-app.get('/api/public/:jobId', async (c) => {
-  try {
-    const { jobId } = c.req.param();
-    const job: any = await c.env.DB.prepare(
-      'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.id = ?'
-    ).bind(jobId).first();
-    if (!job) return c.json({ success: false, message: 'Job not found' }, 404);
-    return c.json({ success: true, data: job });
-  } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
-  }
-});
-
 // ─── MISSING: SAVED JOB ACTIONS ──────────────────────────
 app.post('/api/jobseeker/saved-jobs/:jobId', async (c) => c.json({ success: true, message: 'Job saved.' }));
 app.delete('/api/jobseeker/saved-jobs/:jobId', async (c) => c.json({ success: true, message: 'Job unsaved.' }));
@@ -1239,6 +1212,7 @@ app.get('/api/public/search', async (c) => {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
+
 // ─── PUBLIC: COMPANIES, JOBS, WALK-IN ──────────────────────
 app.get('/api/public/companies', async (c) => {
   try {
@@ -1299,6 +1273,33 @@ app.get('/api/public/jobs', async (c) => {
     return c.json({ success: true, data: jobs.results, pagination: { totalPages: 1, total: jobs.results.length } });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+app.get('/api/public/jobs/:id', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const job: any = await c.env.DB.prepare(
+      'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.id = ?'
+    ).bind(id).first();
+    if (!job) return c.json({ success: false, message: 'Job not found' }, 404);
+    return c.json({ success: true, data: job });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// Dynamic parameter route MUST be placed at the very end of /api/public routes
+app.get('/api/public/:jobId', async (c) => {
+  try {
+    const { jobId } = c.req.param();
+    const job: any = await c.env.DB.prepare(
+      'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.id = ?'
+    ).bind(jobId).first();
+    if (!job) return c.json({ success: false, message: 'Job not found' }, 404);
+    return c.json({ success: true, data: job });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
   }
 });
 
