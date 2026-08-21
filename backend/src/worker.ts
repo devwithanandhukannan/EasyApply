@@ -464,10 +464,10 @@ app.post('/api/company/auth/register', async (c) => {
       'INSERT INTO "User" (id, mobileNumber, globalRoles, isVerified, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
     ).bind(userId, mobileNumber || '', 2, 1, now, now).run();
 
-    // Create company (email+password stored directly on Company)
+    // Create company (email+password stored directly on Company, verified via mobile OTP)
     await c.env.DB.prepare(
       'INSERT INTO "Company" (id, name, email, password, industry, size, registrationNumber, isVerified, verificationBadge, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(companyId, companyName, email, passwordHash, industry || 'Other', companySize || 'small', gstNumber || null, false, 'none', true, now, now).run();
+    ).bind(companyId, companyName, email, passwordHash, industry || 'Other', companySize || 'small', gstNumber || null, true, 'verified', true, now, now).run();
 
     // Create TeamMember (owner) — roles=1 means owner/admin
     await c.env.DB.prepare(

@@ -335,6 +335,10 @@ function RegisterPageComponent() {
       });
 
       if (response.data.success) {
+        if (response.data.token) {
+          localStorage.setItem('companyToken', response.data.token);
+          localStorage.setItem('token', response.data.token);
+        }
         setStep('success');
       }
     } catch (error) {
@@ -825,12 +829,12 @@ function RegisterPageComponent() {
                 </p>
               </div>
 
-              <div className="bg-[#0071e3]/8 border border-[#0071e3]/20 rounded-2xl p-4 flex items-start space-x-3">
-                <Mail className="text-[#0071e3] shrink-0 mt-0.5" size={18} />
+              <div className="bg-[#34c759]/8 border border-[#34c759]/20 rounded-2xl p-4 flex items-start space-x-3">
+                <CheckCircle2 className="text-[#34c759] shrink-0 mt-0.5" size={18} />
                 <div>
-                  <p className="text-xs font-bold text-[#0071e3]">Email Activation Link</p>
+                  <p className="text-xs font-bold text-[#34c759]">Instant Workspace Activation</p>
                   <p className="text-[11px] text-[#86868b] mt-0.5">
-                    After registration, check your inbox at <strong className="text-[#1d1d1f] dark:text-white">{formData.email}</strong> to activate your workspace.
+                    Mobile verification is complete. Completing registration will immediately activate your company workspace at <strong className="text-[#1d1d1f] dark:text-white">{formData.email}</strong>.
                   </p>
                 </div>
               </div>
@@ -862,15 +866,21 @@ function RegisterPageComponent() {
               <div className="inline-flex items-center justify-center w-16 h-16 bg-[#34c759]/10 border border-[#34c759]/25 rounded-full text-[#34c759] mb-1">
                 <CheckCircle2 size={36} />
               </div>
-              <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white">Activation Link Sent!</h2>
+              <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white">Workspace Activated!</h2>
               <p className="text-xs sm:text-sm text-[#86868b] max-w-md mx-auto leading-relaxed font-medium">
-                We have sent an activation link to <strong className="text-[#1d1d1f] dark:text-white">{formData.email}</strong>. 
-                Please verify your corporate email to unlock your company workspace.
+                Your corporate account for <strong className="text-[#1d1d1f] dark:text-white">{formData.companyName}</strong> (<span className="text-[#0071e3] font-semibold">{formData.email}</span>) has been created and verified.
               </p>
-              <div className="pt-4">
+              <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all text-xs cursor-pointer flex items-center justify-center space-x-2"
+                >
+                  <span>Go to Company Dashboard</span>
+                  <ArrowRight size={16} />
+                </button>
                 <button
                   onClick={() => router.push('/login')}
-                  className="w-full sm:w-auto px-8 py-3.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all text-xs cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-2xl font-bold transition-all text-xs cursor-pointer"
                 >
                   Proceed to Sign In
                 </button>
