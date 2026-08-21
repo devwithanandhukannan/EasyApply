@@ -1227,9 +1227,133 @@ app.post('/api/company/selection/bulk/status', async (c) => c.json({ success: tr
 app.get('/api/crm/candidates', async (c) => c.json({ success: true, data: [] }));
 app.get('/api/crm/talent-pools', async (c) => c.json({ success: true, data: [] }));
 app.post('/api/kanban/move-card', async (c) => c.json({ success: true }));
-app.get('/api/walkin/rooms', async (c) => c.json({ success: true, data: [] }));
-app.post('/api/walkin/queue/batch-status', async (c) => c.json({ success: true }));
-app.post('/api/company/feature-requests', async (c) => c.json({ success: true, message: 'Feature request submitted' }));
+app.get('/api/walkin/rooms', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) {
+      return c.json({ success: false, message: 'Unauthorized' }, 401);
+    }
+
+    const roomsResult = await c.env.DB.prepare(
+      'SELECT * FROM "WalkInRoom" WHERE companyId = ? ORDER BY createdAt DESC'
+    ).bind(user.companyId).all();
+
+    const rooms = await Promise.all((roomsResult.results || []).map(async (r: any) => {
+      const qCount: any = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM "WalkInQueueEntry" WHERE roomId = ? AND status IN ("waiting", "priority", "interviewing")'
+      ).bind(r.id).first().catch(() => ({ count: 0 }));
+
+      return {
+        ...r,
+        requiredSkills: r.requiredSkills ? (typeof r.requiredSkills === 'string' ? JSON.parse(r.requiredSkills) : r.requiredSkills) : [],
+        _count: {
+          queue: qCount?.count || 0,
+        },
+      };
+    }));
+
+    return c.json({ success: true, rooms, data: rooms });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Failed to fetch rooms', rooms: [] }, 500);
+  }
+});
+
+app.post('/api/walkin/rooms', async (c) => {
+  try {
+    const user = await getAuthUser(c);
+    if (!user || !user.companyId) {
+      return c.json({ success: false, message: 'Unauthorized' }, 401);
+    }
+
+    const { title, description, requiredSkills, minExperience, priorityThreshold, evaluationCriteria, maxQueue } = await c.req.json().catch(() => ({}));
+
+    if (!title) {
+      return c.json({ success: false, message: 'Room title is required' }, 400);
+    }
+
+    const roomId = crypto.randomUUID();
+    const roomCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const livekitRoom = `walkin-${roomCode}`;
+    const now = new Date().toISOString();
+    const skillsJson = JSON.stringify(Array.isArray(requiredSkills) ? requiredSkills : []);
+
+    await c.env.DB.prepare(
+      'INSERT INTO "WalkInRoom" (id, companyId, title, description, requiredSkills, minExperience, priorityThreshold, evaluationCriteria, roomCode, livekitRoom, status, maxQueue, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(roomId, user.companyId, title, description || null, skillsJson, minExperience || null, priorityThreshold || 70, evaluationCriteria || null, roomCode, livekitRoom, 'OPEN', maxQueue || 50, now, now).run();
+
+    const newRoom = {
+      id: roomId,
+      companyId: user.companyId,
+      title,
+      description: description || null,
+      requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : [],
+      minExperience: minExperience || null,
+      priorityThreshold: priorityThreshold || 70,
+      evaluationCriteria: evaluationCriteria || null,
+      roomCode,
+      livekitRoom,
+      status: 'OPEN',
+      maxQueue: maxQueue || 50,
+      createdAt: now,
+      _count: { queue: 0 },
+    };
+
+    return c.json({ success: true, message: 'Walk-In Room created successfully', room: newRoom });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.get('/api/walkin/rooms/:roomCode/queue', async (c) => {
+  try {
+    const { roomCode } = c.req.param();
+    const room: any = await c.env.DB.prepare(
+      'SELECT id FROM "WalkInRoom" WHERE roomCode = ? OR id = ?'
+    ).bind(roomCode, roomCode).first();
+
+    if (!room) {
+      return c.json({ success: true, queue: [] });
+    }
+
+    const queueResult = await c.env.DB.prepare(`
+      SELECT q.*, p.fullName, p.email, p.profilePhotoUrl, p.location, p.phone, p.linkedin, p.github, p.bio
+      FROM "WalkInQueueEntry" q
+      LEFT JOIN "JobSeekerProfile" p ON q.jobSeekerProfileId = p.id
+      WHERE q.roomId = ?
+      ORDER BY q.waitingSince ASC
+    `).bind(room.id).all();
+
+    const queue = (queueResult.results || []).map((q: any) => ({
+      id: q.id,
+      status: q.status || 'waiting',
+      skillScore: q.skillScore || 0,
+      priorityScore: q.priorityScore || 0,
+      agingBonus: q.agingBonus || 0,
+      waitingSince: q.waitingSince,
+      livekitToken: q.livekitToken || null,
+      notes: q.notes || null,
+      resumeId: q.resumeId || null,
+      cvFileUrl: q.cvFileUrl || null,
+      cvAnalysis: q.cvAnalysis ? (typeof q.cvAnalysis === 'string' ? JSON.parse(q.cvAnalysis) : q.cvAnalysis) : null,
+      jobSeekerProfile: {
+        id: q.jobSeekerProfileId,
+        fullName: q.fullName || 'Candidate',
+        email: q.email || '',
+        profilePhotoUrl: q.profilePhotoUrl || null,
+        location: q.location || null,
+        phone: q.phone || null,
+        linkedin: q.linkedin || null,
+        github: q.github || null,
+        bio: q.bio || null,
+        skills: [],
+      },
+    }));
+
+    return c.json({ success: true, queue });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message, queue: [] }, 500);
+  }
+});
 
 // ─── AUTH: SEND OTP & VERIFY OTP ─────────────────────────
 app.post('/api/auth/send-otp', async (c) => {

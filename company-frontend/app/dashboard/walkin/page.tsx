@@ -283,9 +283,10 @@ export default function CompanyWalkInKanbanPage() {
       setLoading(true);
       const res = await api.get('/walkin/rooms');
       if (res.data?.success) {
-        setRooms(res.data.rooms);
-        if (res.data.rooms.length > 0 && !selectedRoom) {
-          setSelectedRoom(res.data.rooms[0]);
+        const roomsList = res.data.rooms || res.data.data || [];
+        setRooms(roomsList);
+        if (roomsList.length > 0 && !selectedRoom) {
+          setSelectedRoom(roomsList[0]);
         }
       }
     } catch (err: any) {
@@ -702,7 +703,7 @@ export default function CompanyWalkInKanbanPage() {
                 )}
 
                 {/* Skills tags */}
-                {selectedRoom.requiredSkills.length > 0 && (
+                {Array.isArray(selectedRoom.requiredSkills) && selectedRoom.requiredSkills.length > 0 && (
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     <span className="text-[11px] font-semibold text-[#86868b] mr-1">Required Skills:</span>
                     {selectedRoom.requiredSkills.map((s, idx) => (
