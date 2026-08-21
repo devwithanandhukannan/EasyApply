@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Building2, 
   Mail, 
@@ -15,7 +15,8 @@ import {
   MessageCircle,
   Shield,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import { AxiosError } from 'axios';
@@ -111,6 +112,65 @@ function RegisterPageComponent() {
     }
   };
 
+  const [emailError, setEmailError] = useState<string>('');
+  const [isCheckingEmail, setIsCheckingEmail] = useState<boolean>(false);
+  const [phoneError, setPhoneError] = useState<string>('');
+  const [isCheckingPhone, setIsCheckingPhone] = useState<boolean>(false);
+
+  // Real-time Email Availability Check
+  useEffect(() => {
+    const cleanEmail = formData.email.trim();
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setEmailError('');
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setIsCheckingEmail(true);
+      try {
+        const response = await api.post('/company/auth/check-email', { email: cleanEmail });
+        if (response.data?.exists) {
+          setEmailError(response.data.message || 'A company or user with this email already exists.');
+        } else {
+          setEmailError('');
+        }
+      } catch (err) {
+        console.error('Email availability check failed:', err);
+      } finally {
+        setIsCheckingEmail(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.email]);
+
+  // Real-time Phone Availability Check
+  useEffect(() => {
+    const cleanPhone = formData.mobileNumber.trim();
+    if (!cleanPhone || cleanPhone.length < 8) {
+      setPhoneError('');
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setIsCheckingPhone(true);
+      try {
+        const response = await api.post('/company/auth/check-phone', { phone: cleanPhone, mobileNumber: cleanPhone });
+        if (response.data?.exists) {
+          setPhoneError(response.data.message || 'A company or user with this mobile number already exists.');
+        } else {
+          setPhoneError('');
+        }
+      } catch (err) {
+        console.error('Phone availability check failed:', err);
+      } finally {
+        setIsCheckingPhone(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timeoutId);
+  }, [formData.mobileNumber]);
+
   const handleCompanySubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.companyName.trim() || !formData.industry || !formData.companySize) {
@@ -127,6 +187,21 @@ function RegisterPageComponent() {
 
     if (!formData.email.trim() || !formData.password || !formData.mobileNumber.trim()) {
       setErrorMessage('Please complete all contact & security details.');
+      return;
+    }
+
+    if (emailError) {
+      setErrorMessage(emailError);
+      return;
+    }
+
+    if (phoneError) {
+      setErrorMessage(phoneError);
+      return;
+    }
+
+    if (isCheckingEmail || isCheckingPhone) {
+      setErrorMessage('Please wait while we verify email and mobile availability.');
       return;
     }
 
@@ -438,11 +513,28 @@ function RegisterPageComponent() {
                     value={formData.email}
                     onChange={(e) => updateFormData('email', e.target.value)}
                     placeholder="admin@company.com"
-                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
+                    className={`w-full pl-12 pr-10 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border ${
+                      emailError
+                        ? 'border-[#ff3b30] focus:border-[#ff3b30]'
+                        : 'border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3]'
+                    } rounded-2xl focus:outline-none transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium`}
                     required
                   />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {isCheckingEmail && <Loader2 className="animate-spin text-[#0071e3]" size={18} />}
+                    {!isCheckingEmail && emailError && <AlertCircle className="text-[#ff3b30]" size={18} />}
+                    {!isCheckingEmail && !emailError && formData.email.includes('@') && formData.email.includes('.') && (
+                      <CheckCircle2 className="text-[#34c759]" size={18} />
+                    )}
+                  </div>
                 </div>
-                <p className="text-[11px] text-[#86868b] mt-1.5 font-medium">We will send an activation verification link to this email.</p>
+                {emailError ? (
+                  <p className="text-[11px] text-[#ff3b30] mt-1.5 font-semibold flex items-center gap-1">
+                    <AlertCircle size={12} /> {emailError}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-[#86868b] mt-1.5 font-medium">We will send an activation verification link to this email.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -500,10 +592,26 @@ function RegisterPageComponent() {
                     value={formData.mobileNumber}
                     onChange={(e) => updateFormData('mobileNumber', e.target.value)}
                     placeholder="+91 9999999999"
-                    className="w-full pl-12 pr-4 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.06] dark:border-white/[0.08] rounded-2xl focus:outline-none focus:border-[#0071e3] transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium"
+                    className={`w-full pl-12 pr-10 py-3 bg-[#f2f2f7] dark:bg-[#2c2c2e] border ${
+                      phoneError
+                        ? 'border-[#ff3b30] focus:border-[#ff3b30]'
+                        : 'border-black/[0.06] dark:border-white/[0.08] focus:border-[#0071e3]'
+                    } rounded-2xl focus:outline-none transition-colors text-[#1d1d1f] dark:text-[#f5f5f7] placeholder-[#86868b] text-sm font-medium`}
                     required
                   />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    {isCheckingPhone && <Loader2 className="animate-spin text-[#0071e3]" size={18} />}
+                    {!isCheckingPhone && phoneError && <AlertCircle className="text-[#ff3b30]" size={18} />}
+                    {!isCheckingPhone && !phoneError && formData.mobileNumber.trim().length >= 8 && (
+                      <CheckCircle2 className="text-[#34c759]" size={18} />
+                    )}
+                  </div>
                 </div>
+                {phoneError && (
+                  <p className="text-[11px] text-[#ff3b30] mt-1.5 font-semibold flex items-center gap-1">
+                    <AlertCircle size={12} /> {phoneError}
+                  </p>
+                )}
               </div>
 
               <div className="bg-[#34c759]/10 border border-[#34c759]/25 rounded-2xl p-4 flex items-start space-x-3">
@@ -520,18 +628,18 @@ function RegisterPageComponent() {
                 <button
                   type="button"
                   onClick={() => setStep('company')}
-                  className="flex-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-[#f5f5f7] py-3.5 rounded-2xl font-bold border border-black/[0.04] dark:border-white/[0.06] transition-colors flex items-center justify-center space-x-2 text-sm cursor-pointer"
+                  className="px-5 py-3.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#1d1d1f] dark:text-white rounded-2xl font-semibold text-sm hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] transition-all flex items-center justify-center space-x-2"
                 >
                   <ArrowLeft size={18} />
                   <span>Back</span>
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 bg-[#0071e3] hover:bg-[#0077ed] text-white py-3.5 rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer disabled:opacity-60"
+                  disabled={isSubmitting || Boolean(emailError) || Boolean(phoneError) || isCheckingEmail || isCheckingPhone}
+                  className="flex-1 bg-[#0071e3] hover:bg-[#0077ed] disabled:opacity-50 disabled:cursor-not-allowed text-white py-3.5 rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer"
                 >
-                  <span>{isSubmitting ? 'Sending Code...' : 'Send Code'}</span>
-                  {!isSubmitting && <ArrowRight size={18} />}
+                  <span>Send Code</span>
+                  <ArrowRight size={18} />
                 </button>
               </div>
             </form>

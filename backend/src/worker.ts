@@ -260,12 +260,74 @@ app.get('/api/admin/feature-requests', async (c) => {
   return c.json({ success: true, requests: [] });
 });
 
-// ─── COMPANY AUTH: REGISTER ───────────────────────────────
+// ─── COMPANY AUTH: REALTIME CHECKS & REGISTER ─────────────
+app.post('/api/company/auth/check-email', async (c) => {
+  try {
+    const { email } = await c.req.json().catch(() => ({}));
+    if (!email || typeof email !== 'string') return c.json({ success: false, exists: false });
+    const cleanEmail = email.trim().toLowerCase();
+
+    const company: any = await c.env.DB.prepare('SELECT id FROM "Company" WHERE LOWER(email) = ?').bind(cleanEmail).first();
+    if (company) {
+      return c.json({ success: true, exists: true, message: 'A company with this email already exists.' });
+    }
+
+    const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE LOWER(email) = ?').bind(cleanEmail).first();
+    if (profile) {
+      return c.json({ success: true, exists: true, message: 'An account with this email already exists.' });
+    }
+
+    return c.json({ success: true, exists: false });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/company/auth/check-phone', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const phone = (body.phone || body.mobileNumber || '').trim();
+    if (!phone) return c.json({ success: false, exists: false });
+
+    const company: any = await c.env.DB.prepare('SELECT id FROM "Company" WHERE phone = ?').bind(phone).first();
+    if (company) {
+      return c.json({ success: true, exists: true, message: 'A company with this mobile number already exists.' });
+    }
+
+    const user: any = await c.env.DB.prepare('SELECT id FROM "User" WHERE mobileNumber = ?').bind(phone).first();
+    if (user) {
+      return c.json({ success: true, exists: true, message: 'An account with this mobile number already exists.' });
+    }
+
+    return c.json({ success: true, exists: false });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
 app.post('/api/company/auth/send-otp', async (c) => {
   try {
     const { mobileNumber, email, companyName } = await c.req.json();
     if (!mobileNumber) {
       return c.json({ success: false, message: 'Mobile number required.' }, 400);
+    }
+
+    // Check if email already registered
+    if (email) {
+      const cleanEmail = email.trim().toLowerCase();
+      const existingCompany = await c.env.DB.prepare('SELECT id FROM "Company" WHERE LOWER(email) = ?').bind(cleanEmail).first();
+      if (existingCompany) {
+        return c.json({ success: false, message: 'A company with this email already exists.' }, 409);
+      }
+    }
+
+    // Check if phone already registered
+    if (mobileNumber) {
+      const cleanPhone = mobileNumber.trim();
+      const existingPhone = await c.env.DB.prepare('SELECT id FROM "Company" WHERE phone = ?').bind(cleanPhone).first();
+      if (existingPhone) {
+        return c.json({ success: false, message: 'A company with this mobile number already exists.' }, 409);
+      }
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
