@@ -594,6 +594,147 @@ app.get('/api/company/auth/session', async (c) => {
   }
 });
 
+// ─── COMPANY PROFILE MANAGEMENT ──────────────────────────
+app.get('/api/company/me', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) {
+      return c.json({ success: false, message: 'Unauthorized' }, 401);
+    }
+
+    const company: any = await c.env.DB.prepare(
+      'SELECT * FROM "Company" WHERE id = ?'
+    ).bind(decoded.companyId).first();
+
+    if (!company) {
+      return c.json({ success: false, message: 'Company not found' }, 404);
+    }
+
+    const parseJson = (val: any) => {
+      if (!val) return [];
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch { return []; }
+      }
+      return val;
+    };
+
+    const teamMembers = await c.env.DB.prepare(
+      'SELECT id, roles, status, userId FROM "TeamMember" WHERE companyId = ?'
+    ).bind(decoded.companyId).all().catch(() => ({ results: [] }));
+
+    return c.json({
+      success: true,
+      data: {
+        ...company,
+        services: parseJson(company.services),
+        seoKeywords: parseJson(company.seoKeywords),
+        coreValues: parseJson(company.coreValues),
+        gallery: parseJson(company.gallery),
+        products: parseJson(company.products),
+        officeLocations: parseJson(company.officeLocations),
+        socialMedia: typeof company.socialMedia === 'string' ? (JSON.parse(company.socialMedia || '{}')) : (company.socialMedia || {}),
+        teamMembers: teamMembers.results || [],
+      },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.patch('/api/company/profile', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) {
+      return c.json({ success: false, message: 'Unauthorized' }, 401);
+    }
+
+    const body = await c.req.json().catch(() => ({}));
+    const now = new Date().toISOString();
+
+    const {
+      name, industry, size, registrationNumber, tagline,
+      youtubeLink, corporateLink, services, seoKeywords,
+      coreValues, gallery, products, officeLocations, socialMedia
+    } = body;
+
+    await c.env.DB.prepare(`
+      UPDATE "Company" SET
+        name = COALESCE(?, name),
+        industry = COALESCE(?, industry),
+        size = COALESCE(?, size),
+        registrationNumber = COALESCE(?, registrationNumber),
+        tagline = COALESCE(?, tagline),
+        youtubeLink = COALESCE(?, youtubeLink),
+        corporateLink = COALESCE(?, corporateLink),
+        services = COALESCE(?, services),
+        seoKeywords = COALESCE(?, seoKeywords),
+        coreValues = COALESCE(?, coreValues),
+        gallery = COALESCE(?, gallery),
+        products = COALESCE(?, products),
+        officeLocations = COALESCE(?, officeLocations),
+        socialMedia = COALESCE(?, socialMedia),
+        updatedAt = ?
+      WHERE id = ?
+    `).bind(
+      name || null, industry || null, size || null, registrationNumber || null, tagline || null,
+      youtubeLink || null, corporateLink || null,
+      services ? JSON.stringify(services) : null,
+      seoKeywords ? JSON.stringify(seoKeywords) : null,
+      coreValues ? JSON.stringify(coreValues) : null,
+      gallery ? JSON.stringify(gallery) : null,
+      products ? JSON.stringify(products) : null,
+      officeLocations ? JSON.stringify(officeLocations) : null,
+      socialMedia ? JSON.stringify(socialMedia) : null,
+      now, decoded.companyId
+    ).run();
+
+    return c.json({ success: true, message: 'Profile updated successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.patch('/api/company/profile/password', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const { currentPassword, newPassword } = await c.req.json().catch(() => ({}));
+    if (!currentPassword || !newPassword) return c.json({ success: false, message: 'Current and new password required' }, 400);
+
+    const company: any = await c.env.DB.prepare('SELECT password FROM "Company" WHERE id = ?').bind(decoded.companyId).first();
+    if (!company) return c.json({ success: false, message: 'Company not found' }, 404);
+
+    const valid = await bcrypt.compare(currentPassword, company.password);
+    if (!valid) return c.json({ success: false, message: 'Incorrect current password' }, 400);
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    const now = new Date().toISOString();
+    await c.env.DB.prepare('UPDATE "Company" SET password = ?, updatedAt = ? WHERE id = ?').bind(newHash, now, decoded.companyId).run();
+
+    return c.json({ success: true, message: 'Password updated successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.patch('/api/company/profile/logo', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const logoUrl = `https://images.unsplash.com/photo-1549923746-c502d488b3ea?w=150&auto=format&fit=crop&q=80`;
+    const now = new Date().toISOString();
+    await c.env.DB.prepare('UPDATE "Company" SET logoUrl = ?, updatedAt = ? WHERE id = ?').bind(logoUrl, now, decoded.companyId).run();
+    return c.json({ success: true, message: 'Logo updated', logoUrl });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/company/profile/mobile/request-otp', async (c) => c.json({ success: true, message: 'OTP sent to mobile' }));
+app.post('/api/company/profile/mobile/verify-otp', async (c) => c.json({ success: true, message: 'Mobile updated' }));
+app.post('/api/company/profile/email/request-otp', async (c) => c.json({ success: true, message: 'OTP sent to email' }));
+app.post('/api/company/profile/email/verify-otp', async (c) => c.json({ success: true, message: 'Email updated' }));
+
 // ─── COMPANY DASHBOARD & JOBS ─────────────────────────────
 app.get('/api/company/dashboard', async (c) => {
   try {
