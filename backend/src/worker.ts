@@ -2,6 +2,59 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import nodemailer from 'nodemailer';
+
+async function sendCompanyVerificationEmail(email: string, companyName: string, token: string) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: 'workbridge.anandhu@gmail.com',
+        pass: 'rget fqku jaad wkku',
+      },
+    });
+
+    const verifyUrl = `https://cloudflare.easyapply-company.pages.dev/verify-email?token=${token}`;
+
+    await transporter.sendMail({
+      from: '"EasyApply Business" <workbridge.anandhu@gmail.com>',
+      to: email,
+      subject: `Verify your corporate workspace - ${companyName || 'EasyApply'}`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
+            <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Employer Workspace Verification</p>
+          </div>
+          <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Confirm Your Corporate Email</h2>
+          <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
+            Welcome to EasyApply Business! Please click the button below to verify your email address (<strong>${email}</strong>) and activate your employer workspace:
+          </p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${verifyUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
+              Verify Corporate Workspace
+            </a>
+          </div>
+          <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
+            Or copy and paste this verification link into your web browser:<br/>
+            <a href="${verifyUrl}" style="color: #0071e3; word-break: break-all;">${verifyUrl}</a>
+          </p>
+          <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
+          <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+            This email was sent automatically by EasyApply. If you did not create an employer workspace, please ignore this email.
+          </p>
+        </div>
+      `,
+    });
+    console.log(`✉️ Operational verification email dispatched via SMTP to: ${email}`);
+    return true;
+  } catch (err: any) {
+    console.error(`❌ SMTP delivery failure for ${email}:`, err.message || err);
+    return false;
+  }
+}
 
 type Bindings = {
   DB: D1Database;
@@ -633,14 +686,21 @@ app.post('/api/company/auth/login', async (c) => {
     // Enforce Company Email Verification
     const isCompVerified = company.isVerified === 1 || company.isVerified === true || company.isVerified === '1' || company.isVerified === 'true';
     if (!isCompVerified) {
-      const otp = '000000';
-      console.log(`✉️ Unverified company login attempt for ${cleanEmail}. Verification code: [ ${otp} ]`);
+      const jwtSecret = getJwtSecret(c);
+      const verifyToken = jwt.sign(
+        { companyId: company.id, email: company.email, purpose: 'company_email_verification' },
+        jwtSecret,
+        { expiresIn: '24h' }
+      );
+
+      // Dispatch verification link via Gmail SMTP
+      await sendCompanyVerificationEmail(company.email, company.name, verifyToken);
+
       return c.json({
         success: false,
         emailVerified: false,
-        message: 'Your company workspace is unverified. A verification code has been sent to your corporate email.',
+        message: `Your company workspace is unverified. We have sent a verification link to your corporate email address (${company.email}). Please check your inbox and click the link to verify.`,
         email: company.email,
-        debugOtp: otp,
       }, 403);
     }
 
@@ -680,38 +740,67 @@ app.post('/api/company/auth/login', async (c) => {
   }
 });
 
-app.post('/api/company/auth/verify-email-otp', async (c) => {
+app.get('/api/company/auth/verify-email', async (c) => {
   try {
-    const { email, otp } = await c.req.json();
-    if (!email || !otp) {
-      return c.json({ success: false, message: 'Email and verification code required.' }, 400);
+    const token = c.req.query('token');
+    if (!token) {
+      return c.json({ success: false, message: 'Verification token is required.' }, 400);
     }
 
-    let isValid = false;
-    if (otp.trim() === '000000') {
-      isValid = true;
-    } else {
-      const latestOtp: any = await c.env.DB.prepare(
-        'SELECT * FROM "Otp" WHERE mobileNumber = ? AND purpose = ? ORDER BY createdAt DESC LIMIT 1'
-      ).bind(email.trim().toLowerCase(), 'company_email_verification').first();
-
-      if (latestOtp) {
-        isValid = await bcrypt.compare(otp.trim(), latestOtp.otpHash);
-      }
+    const jwtSecret = getJwtSecret(c);
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch (e) {
+      return c.json({ success: false, message: 'Invalid or expired verification link.' }, 400);
     }
 
-    if (!isValid) {
-      return c.json({ success: false, message: 'Invalid or expired verification code.' }, 400);
+    if (!decoded || decoded.purpose !== 'company_email_verification' || !decoded.companyId) {
+      return c.json({ success: false, message: 'Invalid verification link.' }, 400);
+    }
+
+    const company: any = await c.env.DB.prepare(
+      'SELECT id, name, email FROM "Company" WHERE id = ?'
+    ).bind(decoded.companyId).first();
+
+    if (!company) {
+      return c.json({ success: false, message: 'Company account not found.' }, 404);
     }
 
     const now = new Date().toISOString();
     await c.env.DB.prepare(
-      'UPDATE "Company" SET isVerified = 1, verificationBadge = "verified", updatedAt = ? WHERE LOWER(email) = ?'
-    ).bind(now, email.trim().toLowerCase()).run();
+      'UPDATE "Company" SET isVerified = 1, verificationBadge = "verified", updatedAt = ? WHERE id = ?'
+    ).bind(now, company.id).run();
+
+    // Get owner TeamMember record
+    const member: any = await c.env.DB.prepare(
+      'SELECT id, userId FROM "TeamMember" WHERE companyId = ? AND roles = 1 LIMIT 1'
+    ).bind(company.id).first();
+
+    const memberId = member?.id || company.id;
+    const userId = member?.userId || null;
+
+    const sessionToken = jwt.sign(
+      { memberId, companyId: company.id, userId, role: 'owner' },
+      jwtSecret,
+      { expiresIn: '7d' }
+    );
 
     return c.json({
       success: true,
-      message: 'Corporate email verified successfully! You may now sign in.',
+      message: 'Corporate email verified successfully!',
+      token: sessionToken,
+      user: {
+        id: memberId,
+        name: company.name,
+        email: company.email,
+        role: 'owner',
+        company: {
+          id: company.id,
+          name: company.name,
+          verificationBadge: 'verified',
+        },
+      },
     });
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
@@ -722,9 +811,32 @@ app.post('/api/company/auth/resend-verification', async (c) => {
   try {
     const { email } = await c.req.json();
     if (!email) return c.json({ success: false, message: 'Email address required.' }, 400);
-    const otp = '000000';
-    console.log(`✉️ Resending verification code for ${email}: [ ${otp} ]`);
-    return c.json({ success: true, message: 'A 6-digit verification code has been dispatched to your email.' });
+
+    const cleanEmail = email.trim().toLowerCase();
+    const company: any = await c.env.DB.prepare(
+      'SELECT id, name, email FROM "Company" WHERE LOWER(email) = ?'
+    ).bind(cleanEmail).first();
+
+    if (!company) {
+      return c.json({ success: false, message: 'No company found with that email.' }, 404);
+    }
+
+    const jwtSecret = getJwtSecret(c);
+    const verifyToken = jwt.sign(
+      { companyId: company.id, email: company.email, purpose: 'company_email_verification' },
+      jwtSecret,
+      { expiresIn: '24h' }
+    );
+
+    const sent = await sendCompanyVerificationEmail(company.email, company.name, verifyToken);
+    if (!sent) {
+      return c.json({ success: false, message: 'Failed to send verification email via SMTP.' }, 500);
+    }
+
+    return c.json({
+      success: true,
+      message: `A new verification link has been sent to ${company.email}. Please check your inbox and click the link to verify.`,
+    });
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }

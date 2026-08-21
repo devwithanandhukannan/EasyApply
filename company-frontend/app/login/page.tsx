@@ -187,42 +187,22 @@ export default function LoginPage() {
               <span className="flex-1">{errorMessage}</span>
             </div>
             
-            {/* Conditional Action Link & OTP Verification Form */}
+            {/* Resend Verification Link Action Button */}
             {isUnverified && (
-              <div className="pt-2 border-t border-[#ff3b30]/20 space-y-3">
-                <p className="text-xs font-semibold text-[#1d1d1f] dark:text-white">
-                  Enter 6-digit verification code sent to <strong className="text-[#0071e3]">{email}</strong>:
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={otpInput}
-                    onChange={(e) => setOtpInput(e.target.value)}
-                    placeholder="e.g. 000000"
-                    className="flex-1 px-3 py-2 bg-white dark:bg-[#2c2c2e] border border-black/[0.1] dark:border-white/[0.1] rounded-xl text-xs font-mono tracking-widest text-[#1d1d1f] dark:text-white focus:outline-none focus:border-[#0071e3]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleVerifyOtp}
-                    disabled={isVerifyingOtp || otpInput.trim().length !== 6}
-                    className="px-4 py-2 bg-[#34c759] hover:bg-[#30d158] disabled:opacity-50 text-white text-xs font-bold rounded-xl transition cursor-pointer"
-                  >
-                    {isVerifyingOtp ? 'Verifying...' : 'Verify Email'}
-                  </button>
-                </div>
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <button
-                    type="button"
-                    onClick={handleResendEmail}
-                    disabled={cooldown > 0 || isSendingEmail}
-                    className="text-[#0071e3] hover:underline disabled:text-[#86868b] disabled:no-underline font-semibold"
-                  >
-                    {isSendingEmail && 'Sending...'}
-                    {!isSendingEmail && cooldown > 0 && `Resend in ${cooldown}s`}
-                    {!isSendingEmail && cooldown === 0 && 'Resend code'}
-                  </button>
-                </div>
+              <div className="pt-2 border-t border-[#ff3b30]/20 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={handleResendEmail}
+                  disabled={cooldown > 0 || isSendingEmail}
+                  className="text-xs text-[#0071e3] hover:underline disabled:text-[#86868b] disabled:no-underline font-semibold transition-colors flex items-center space-x-1.5"
+                >
+                  <Mail size={14} />
+                  <span>
+                    {isSendingEmail && 'Sending email...'}
+                    {!isSendingEmail && cooldown > 0 && `Resend link in ${cooldown}s`}
+                    {!isSendingEmail && cooldown === 0 && 'Resend verification link'}
+                  </span>
+                </button>
               </div>
             )}
           </div>

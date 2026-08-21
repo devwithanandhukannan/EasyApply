@@ -30,6 +30,7 @@ function VerifyEmailContent() {
           setMessage('Email confirmed successfully! Channeling you to your corporate dashboard...');
           
           if (response.data.token) {
+            localStorage.setItem('companyToken', response.data.token);
             localStorage.setItem('token', response.data.token);
           }
 
