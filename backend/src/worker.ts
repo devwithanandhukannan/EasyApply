@@ -56,6 +56,57 @@ async function sendCompanyVerificationEmail(email: string, companyName: string, 
   }
 }
 
+async function getCompanySubscription(db: D1Database, companyId: string) {
+  try {
+    const sub: any = await db.prepare(`
+      SELECT s.*, p.id as planId, p.name as planName, p.features as planFeatures, p.maxJobPostings, p.maxTeamMembers
+      FROM "CompanySubscription" s
+      LEFT JOIN "SubscriptionPlan" p ON s.planId = p.id
+      WHERE s.companyId = ? AND s.isActive = 1
+      LIMIT 1
+    `).bind(companyId).first();
+
+    if (!sub) {
+      const freePlan: any = await db.prepare('SELECT * FROM "SubscriptionPlan" WHERE id = "plan-free" OR LOWER(name) = "free" LIMIT 1').first();
+      const freeFeatures = freePlan?.features ? (typeof freePlan.features === 'string' ? JSON.parse(freePlan.features) : freePlan.features) : {
+        jobPostings: true, atsScoring: true, aiResumeScan: true, aiResumeBuilder: true, kanban: true, offerLetters: true, interviewScheduling: true
+      };
+      return {
+        id: 'free',
+        isActive: true,
+        features: freeFeatures,
+        plan: {
+          id: freePlan?.id || 'plan-free',
+          name: freePlan?.name || 'Free Tier',
+          features: freeFeatures,
+          maxJobPostings: freePlan?.maxJobPostings || 3,
+          maxTeamMembers: freePlan?.maxTeamMembers || 2,
+        },
+      };
+    }
+
+    const planFeatures = sub.planFeatures ? (typeof sub.planFeatures === 'string' ? JSON.parse(sub.planFeatures) : sub.planFeatures) : {};
+    const subFeatures = sub.features ? (typeof sub.features === 'string' ? JSON.parse(sub.features) : sub.features) : null;
+    const activeFeatures = subFeatures || planFeatures;
+
+    return {
+      id: sub.id,
+      isActive: Boolean(sub.isActive),
+      features: activeFeatures,
+      plan: {
+        id: sub.planId,
+        name: sub.planName || 'Pro',
+        features: planFeatures,
+        maxJobPostings: sub.maxJobPostings || 50,
+        maxTeamMembers: sub.maxTeamMembers || 15,
+      },
+    };
+  } catch (err: any) {
+    console.error('Error fetching company subscription:', err);
+    return null;
+  }
+}
+
 type Bindings = {
   DB: D1Database;
   RESUME_BUCKET: R2Bucket;
@@ -719,6 +770,8 @@ app.post('/api/company/auth/login', async (c) => {
       { expiresIn: '7d' }
     );
 
+    const subscription = await getCompanySubscription(c.env.DB, company.id);
+
     return c.json({
       success: true,
       message: 'Login successful',
@@ -728,10 +781,13 @@ app.post('/api/company/auth/login', async (c) => {
         name: company.name,
         email: company.email,
         role: 'owner',
+        rolesMask: 2,
         company: {
           id: company.id,
           name: company.name,
+          email: company.email,
           verificationBadge: company.verificationBadge || 'none',
+          subscription,
         },
       },
     });
@@ -786,6 +842,8 @@ app.get('/api/company/auth/verify-email', async (c) => {
       { expiresIn: '7d' }
     );
 
+    const subscription = await getCompanySubscription(c.env.DB, company.id);
+
     return c.json({
       success: true,
       message: 'Corporate email verified successfully!',
@@ -795,10 +853,13 @@ app.get('/api/company/auth/verify-email', async (c) => {
         name: company.name,
         email: company.email,
         role: 'owner',
+        rolesMask: 2,
         company: {
           id: company.id,
           name: company.name,
+          email: company.email,
           verificationBadge: 'verified',
+          subscription,
         },
       },
     });
@@ -850,10 +911,12 @@ app.get('/api/company/auth/session', async (c) => {
     }
 
     const company: any = await c.env.DB.prepare(
-      'SELECT id, name, email, verificationBadge FROM "Company" WHERE id = ?'
+      'SELECT id, name, email, verificationBadge, logoUrl, industry, size FROM "Company" WHERE id = ?'
     ).bind(decoded.companyId).first();
 
     if (!company) return c.json({ success: false, user: null, message: 'Company not found' }, 200);
+
+    const subscription = await getCompanySubscription(c.env.DB, company.id);
 
     return c.json({
       success: true,
@@ -862,10 +925,16 @@ app.get('/api/company/auth/session', async (c) => {
         name: company.name,
         email: company.email,
         role: decoded.role || 'owner',
+        rolesMask: 2, // Company Admin
         company: {
           id: company.id,
           name: company.name,
+          email: company.email,
+          logoUrl: company.logoUrl,
+          industry: company.industry,
+          size: company.size,
           verificationBadge: company.verificationBadge || 'none',
+          subscription,
         },
       },
     });
@@ -890,6 +959,8 @@ app.get('/api/company/me', async (c) => {
       return c.json({ success: false, message: 'Company not found' }, 404);
     }
 
+    const subscription = await getCompanySubscription(c.env.DB, company.id);
+
     const parseJson = (val: any) => {
       if (!val) return [];
       if (typeof val === 'string') {
@@ -906,6 +977,7 @@ app.get('/api/company/me', async (c) => {
       success: true,
       data: {
         ...company,
+        subscription,
         services: parseJson(company.services),
         seoKeywords: parseJson(company.seoKeywords),
         coreValues: parseJson(company.coreValues),
