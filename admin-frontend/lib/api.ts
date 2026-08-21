@@ -1,6 +1,16 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.interviewer.stibe.in/api';
+const getApiUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined' && (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply'))) {
+    return 'https://easyapply-backend.stibelabs.workers.dev/api';
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+};
+
+const API_URL = getApiUrl();
 
 const api = axios.create({ baseURL: API_URL, withCredentials: true });
 

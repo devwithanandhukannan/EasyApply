@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import api from '@/app/lib/axios';
@@ -11,7 +11,7 @@ const LiveKitMeetingRoom = dynamic(
   { ssr: false }
 );
 
-export default function UnifiedLiveKitMeetPage() {
+function UnifiedLiveKitMeetContent() {
   const { id: interviewId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -122,5 +122,18 @@ export default function UnifiedLiveKitMeetPage() {
       interviewId={interviewId as string} // 🎯 Passed down so the call engine can use it if needed
       onDisconnected={handleDisconnected} 
     />
+  );
+}
+
+export default function UnifiedLiveKitMeetPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-zinc-950 font-mono text-xs gap-3 text-zinc-500">
+        <Loader2 className="h-5 w-5 animate-spin text-white" />
+        <p>Configuring secure WebRTC media pipes...</p>
+      </div>
+    }>
+      <UnifiedLiveKitMeetContent />
+    </Suspense>
   );
 }

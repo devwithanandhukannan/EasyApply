@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { Suspense, useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Loader2, AlertTriangle, Code2, Monitor, Square, Tv, Layers,
@@ -38,7 +38,7 @@ const languageBoilerplates: Record<string, string> = {
   rust: `// Rust\nfn main() {\n    println!("Hello World");\n}`,
 };
 
-export default function MeetPage() {
+function MeetPageContent() {
   const { id: interviewId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -1158,5 +1158,18 @@ export default function MeetPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MeetPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-screen flex-col items-center justify-center bg-zinc-950 font-mono text-xs gap-3 text-zinc-500">
+        <Loader2 className="h-5 w-5 animate-spin text-white" />
+        <p>Configuring secure WebRTC media pipes...</p>
+      </div>
+    }>
+      <MeetPageContent />
+    </Suspense>
   );
 }

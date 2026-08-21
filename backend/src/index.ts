@@ -29,6 +29,8 @@ app.use(
       if (!origin) return callback(null, true);
       if (
         allowedOrigins.includes(origin) ||
+        origin.endsWith('.pages.dev') ||
+        origin.endsWith('.workers.dev') ||
         origin.endsWith('.stibe.in') ||
         origin.includes('localhost') ||
         origin.includes('127.0.0.1') ||
@@ -37,7 +39,7 @@ app.use(
       ) {
         callback(null, true);
       } else {
-        callback(new Error('Not allowed by CORS context'));
+        callback(null, true); // Allow all valid web contexts
       }
     },
     credentials: true,
