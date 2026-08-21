@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Smartphone, MessageCircle, ArrowRight, Shield, User, Mail } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
-import api from '@/app/lib/axios';
+import api, { setAccessToken } from '@/app/lib/axios';
 import dynamic from 'next/dynamic';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
 import EasyApplyLogo from '@/app/components/EasyApplyLogo';
@@ -66,10 +66,12 @@ function LoginPageComponent() {
         otp: enteredOtp,
       });
 
-      const { user, token } = response.data;
+      const token = response.data.accessToken || response.data.token;
+      const user = response.data.user;
 
-      // Commit token storage temporarily if your interceptor relies on localStorage
       if (token) {
+        setAccessToken(token);
+        localStorage.setItem('seeker_access_token', token);
         localStorage.setItem('token', token);
       }
 

@@ -430,6 +430,7 @@ app.post('/api/auth/verify-otp', async (c) => {
       success: true,
       message: 'Login successful.',
       accessToken,
+      token: accessToken,
       user: {
         id: user.id,
         mobileNumber: user.mobileNumber,
