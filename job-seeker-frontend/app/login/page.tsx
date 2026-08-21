@@ -158,13 +158,14 @@ function LoginPageComponent() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      // Synchronize context tracking state vectors on complete
-      // Passing flags as true since the user just successfully created them
+      const savedToken = (typeof window !== 'undefined' ? localStorage.getItem('seeker_access_token') : '') || undefined;
       login({
         mobileNumber: phoneNumber,
         hasEmail: true,
-        hasFullName: true
-      });
+        hasFullName: true,
+        fullName: fullName.trim(),
+        email: email.trim(),
+      }, savedToken);
       
       showToast('Success', 'Profile created successfully!', 'success');
     } catch (error: any) {
