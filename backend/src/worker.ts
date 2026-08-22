@@ -2,110 +2,216 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import nodemailer from 'nodemailer';
+import { connect } from 'cloudflare:sockets';
 
-async function sendCompanyVerificationEmail(email: string, companyName: string, token: string) {
+async function sendSmtpEmail({
+  to,
+  subject,
+  html,
+  from = '"EasyApply Business" <workbridge.anandhu@gmail.com>',
+}: {
+  to: string;
+  subject: string;
+  html: string;
+  from?: string;
+}): Promise<boolean> {
+  const user = 'workbridge.anandhu@gmail.com';
+  const pass = 'rget fqku jaad wkku';
+  let socket: any = null;
+
   try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: 'workbridge.anandhu@gmail.com',
-        pass: 'rget fqku jaad wkku',
-      },
+    socket = connect('smtp.gmail.com:465', {
+      secureTransport: 'on',
+      allowHalfOpen: false,
     });
 
-    const verifyUrl = `https://cloudflare.easyapply-company.pages.dev/verify-email?token=${token}`;
+    const reader = socket.readable.getReader();
+    const writer = socket.writable.getWriter();
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
 
-    await transporter.sendMail({
-      from: '"EasyApply Business" <workbridge.anandhu@gmail.com>',
-      to: email,
-      subject: `Verify your corporate workspace - ${companyName || 'EasyApply'}`,
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
-            <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Employer Workspace Verification</p>
-          </div>
-          <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Confirm Your Corporate Email</h2>
-          <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
-            Welcome to EasyApply Business! Please click the button below to verify your email address (<strong>${email}</strong>) and activate your employer workspace:
-          </p>
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${verifyUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
-              Verify Corporate Workspace
-            </a>
-          </div>
-          <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
-            Or copy and paste this verification link into your web browser:<br/>
-            <a href="${verifyUrl}" style="color: #0071e3; word-break: break-all;">${verifyUrl}</a>
-          </p>
-          <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
-          <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
-            This email was sent automatically by EasyApply. If you did not create an employer workspace, please ignore this email.
-          </p>
-        </div>
-      `,
-    });
-    console.log(`✉️ Operational verification email dispatched via SMTP to: ${email}`);
+    let buffer = '';
+
+    const readLine = async (): Promise<string> => {
+      while (true) {
+        const idx = buffer.indexOf('\r\n');
+        if (idx !== -1) {
+          const line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          return line;
+        }
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+      }
+      const rest = buffer;
+      buffer = '';
+      return rest;
+    };
+
+    const readSmtpResponse = async (): Promise<string> => {
+      let lastLine = '';
+      while (true) {
+        const line = await readLine();
+        if (!line) break;
+        lastLine = line;
+        if (line.length >= 4 && line[3] === ' ') {
+          break;
+        }
+        if (line.length === 3) {
+          break;
+        }
+      }
+      return lastLine;
+    };
+
+    const sendCommand = async (cmd: string): Promise<string> => {
+      await writer.write(encoder.encode(cmd + '\r\n'));
+      return await readSmtpResponse();
+    };
+
+    const banner = await readSmtpResponse();
+    if (!banner.startsWith('220')) {
+      throw new Error(`SMTP Banner unexpected: ${banner}`);
+    }
+
+    const ehloRes = await sendCommand('EHLO easyapply.pages.dev');
+    if (!ehloRes.startsWith('250')) {
+      throw new Error(`EHLO error: ${ehloRes}`);
+    }
+
+    const authRes = await sendCommand('AUTH LOGIN');
+    if (!authRes.startsWith('334')) {
+      throw new Error(`AUTH LOGIN error: ${authRes}`);
+    }
+
+    const userRes = await sendCommand(btoa(user));
+    if (!userRes.startsWith('334')) {
+      throw new Error(`Username prompt error: ${userRes}`);
+    }
+
+    const passRes = await sendCommand(btoa(pass.replace(/\s+/g, '')));
+    if (!passRes.startsWith('235')) {
+      throw new Error(`Authentication failed: ${passRes}`);
+    }
+
+    const mailFromRes = await sendCommand(`MAIL FROM:<${user}>`);
+    if (!mailFromRes.startsWith('250')) {
+      throw new Error(`MAIL FROM error: ${mailFromRes}`);
+    }
+
+    const rcptRes = await sendCommand(`RCPT TO:<${to}>`);
+    if (!rcptRes.startsWith('250')) {
+      throw new Error(`RCPT TO error: ${rcptRes}`);
+    }
+
+    const dataRes = await sendCommand('DATA');
+    if (!dataRes.startsWith('354')) {
+      throw new Error(`DATA error: ${dataRes}`);
+    }
+
+    const messageId = `<${crypto.randomUUID()}@easyapply.pages.dev>`;
+    const dateStr = new Date().toUTCString();
+    const rawMessage = [
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      `Date: ${dateStr}`,
+      `Message-ID: ${messageId}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      html,
+      '',
+      '.',
+    ].join('\r\n');
+
+    const sendRes = await sendCommand(rawMessage);
+    if (!sendRes.startsWith('250')) {
+      throw new Error(`Body delivery error: ${sendRes}`);
+    }
+
+    await sendCommand('QUIT');
+
+    reader.releaseLock();
+    writer.releaseLock();
+    await socket.close();
+    console.log(`✉️ Direct Worker SMTP email successfully delivered to ${to}`);
     return true;
   } catch (err: any) {
-    console.error(`❌ SMTP delivery failure for ${email}:`, err.message || err);
+    console.error(`❌ Worker SMTP Delivery Error for ${to}:`, err.message || err);
+    if (socket) {
+      try { await socket.close(); } catch {}
+    }
     return false;
   }
 }
 
-async function sendCompanyPasswordResetEmail(email: string, token: string) {
-  try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: 'workbridge.anandhu@gmail.com',
-        pass: 'rget fqku jaad wkku',
-      },
-    });
-
-    const resetUrl = `https://cloudflare.easyapply-company.pages.dev/reset-password?token=${token}`;
-
-    await transporter.sendMail({
-      from: '"EasyApply Business" <workbridge.anandhu@gmail.com>',
-      to: email,
-      subject: 'Reset Your Company Account Password - EasyApply',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
-          <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
-            <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Company Account Security</p>
-          </div>
-          <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Reset Your Password</h2>
-          <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
-            We received a request to reset the password for your EasyApply company account. Click the button below to set a new password:
-          </p>
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${resetUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
-              Reset Password
-            </a>
-          </div>
-          <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
-            This reset link expires in 1 hour. If you did not request this, you can safely ignore this email.
-          </p>
-          <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
-          <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
-            Or copy and paste this link: <br/>
-            <a href="${resetUrl}" style="color: #0071e3; word-break: break-all;">${resetUrl}</a>
-          </p>
+async function sendCompanyVerificationEmail(email: string, companyName: string, token: string) {
+  const verifyUrl = `https://cloudflare.easyapply-company.pages.dev/verify-email?token=${token}`;
+  return await sendSmtpEmail({
+    to: email,
+    subject: `Verify your corporate workspace - ${companyName || 'EasyApply'}`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
+          <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Employer Workspace Verification</p>
         </div>
-      `,
-    });
-    console.log(`✉️ Password reset email dispatched via SMTP to: ${email}`);
-    return true;
-  } catch (err: any) {
-    console.error(`❌ SMTP reset password delivery failure for ${email}:`, err.message || err);
-    return false;
-  }
+        <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Confirm Your Corporate Email</h2>
+        <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
+          Welcome to EasyApply Business! Please click the button below to verify your email address (<strong>${email}</strong>) and activate your employer workspace:
+        </p>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${verifyUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
+            Verify Corporate Workspace
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
+          Or copy and paste this verification link into your web browser:<br/>
+          <a href="${verifyUrl}" style="color: #0071e3; word-break: break-all;">${verifyUrl}</a>
+        </p>
+        <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
+        <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+          This email was sent automatically by EasyApply. If you did not create an employer workspace, please ignore this email.
+        </p>
+      </div>
+    `,
+  });
+}
+
+async function sendCompanyPasswordResetEmail(email: string, token: string) {
+  const resetUrl = `https://cloudflare.easyapply-company.pages.dev/reset-password?token=${token}`;
+  return await sendSmtpEmail({
+    to: email,
+    subject: 'Reset Your Company Account Password - EasyApply',
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
+          <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Company Account Security</p>
+        </div>
+        <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Reset Your Password</h2>
+        <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
+          We received a request to reset the password for your EasyApply company account. Click the button below to set a new password:
+        </p>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${resetUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
+            Reset Password
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
+          This reset link expires in 1 hour. If you did not request this, you can safely ignore this email.
+        </p>
+        <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
+        <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+          Or copy and paste this link: <br/>
+          <a href="${resetUrl}" style="color: #0071e3; word-break: break-all;">${resetUrl}</a>
+        </p>
+      </div>
+    `,
+  });
 }
 
 async function getCompanySubscription(db: D1Database, companyId: string) {
