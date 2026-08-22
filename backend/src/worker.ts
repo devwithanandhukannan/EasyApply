@@ -495,7 +495,7 @@ app.put('/api/admin/settings/ai', async (c) => {
     const now = new Date().toISOString();
     await c.env.DB.prepare(
       'UPDATE "PlatformSettings" SET groqApiKey = ?, groqModel = ?, allowSeekerAiResumeCreation = ?, updatedAt = ? WHERE id = ?'
-    ).bind(groqApiKey || null, groqModel || 'llama-3.3-70b-versatile', allowSeekerAiResumeCreation !== false ? 1 : 0, now, 'singleton').run();
+    ).bind(groqApiKey || null, groqModel || 'openai/gpt-oss-120b', allowSeekerAiResumeCreation !== false ? 1 : 0, now, 'singleton').run();
     return c.json({ success: true, message: 'AI settings updated successfully' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
@@ -3574,7 +3574,7 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
 
     let aiParsed: any = {};
     if (rawText.trim().length > 10) {
-      // 1. Try Groq AI (Ultra-fast structured output)
+      // 1. Try Groq AI (Ultra-fast structured output with openai/gpt-oss-120b or openai/gpt-oss-20b)
       try {
         const groqResult = await callGroqAiWorker(c.env, [
           {
@@ -3600,9 +3600,9 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
           },
           {
             role: 'user',
-            content: `Resume Content:\n"""\n${rawText.slice(0, 4000)}\n"""`
+            content: `Resume Content:\n"""\n${rawText.slice(0, 5000)}\n"""`
           }
-        ], 'llama-3.3-70b-versatile', true);
+        ], 'openai/gpt-oss-120b', true);
 
         if (groqResult) {
           const jsonMatch = groqResult.match(/\{[\s\S]*\}/);
@@ -3764,71 +3764,64 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
 
 async function callGroqAiWorker(env: Bindings, messages: any[], modelOverride?: string, jsonMode: boolean = true): Promise<string> {
   let apiKey = env.GROQ_API_KEY || '';
-  let model = modelOverride || env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+  let preferredModel = modelOverride || env.GROQ_MODEL || 'openai/gpt-oss-120b';
 
   try {
     const s: any = await env.DB.prepare('SELECT groqApiKey, groqModel FROM "PlatformSettings" WHERE id = ?').bind('singleton').first();
     if (s?.groqApiKey) apiKey = s.groqApiKey;
-    if (s?.groqModel && !s.groqModel.includes('/') && !s.groqModel.includes('gpt')) model = s.groqModel;
+    if (s?.groqModel && !s.groqModel.includes('llama-3.3-70b-versatile') && !s.groqModel.includes('llama-3.1-8b-instant')) {
+      preferredModel = s.groqModel;
+    }
   } catch {}
 
-  if (model.includes('/') || model.includes('gpt')) {
-    model = 'llama-3.3-70b-versatile';
-  }
+  const candidateModels = Array.from(new Set([
+    preferredModel,
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
+    'qwen/qwen3.6-27b',
+    'groq/compound'
+  ])).filter(m => Boolean(m) && m !== 'llama-3.3-70b-versatile' && m !== 'llama-3.1-8b-instant');
 
-  if (!apiKey) {
-    if (env.AI) {
-      const aiRes: any = await (env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
-        messages,
-        max_tokens: 3000,
-      });
-      return aiRes?.response || aiRes?.result?.response || '';
-    }
-    throw new Error('Groq API key is missing');
-  }
-
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.2,
-      max_tokens: 4000,
-      ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
-    }),
-  });
-
-  if (!res.ok) {
-    if (model !== 'llama-3.1-8b-instant') {
-      const fallbackRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  for (const m of candidateModels) {
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
+          model: m,
           messages,
-          temperature: 0.2,
+          temperature: 0.1,
           max_tokens: 4000,
           ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
         }),
       });
-      if (fallbackRes.ok) {
-        const data: any = await fallbackRes.json();
-        return data?.choices?.[0]?.message?.content || '';
+
+      if (res.ok) {
+        const data: any = await res.json();
+        const content = data?.choices?.[0]?.message?.content || '';
+        if (content) return content;
+      } else {
+        const errText = await res.text();
+        console.warn(`Groq model ${m} HTTP ${res.status}:`, errText);
       }
+    } catch (e) {
+      console.warn(`Groq model ${m} network failure:`, e);
     }
-    const errText = await res.text();
-    throw new Error(`Groq API error ${res.status}: ${errText}`);
   }
 
-  const data: any = await res.json();
-  return data?.choices?.[0]?.message?.content || '';
+  // Cloudflare AI fallback
+  if (env.AI) {
+    const aiRes: any = await (env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+      messages,
+      max_tokens: 3000,
+    });
+    return aiRes?.response || aiRes?.result?.response || '';
+  }
+
+  throw new Error('Groq AI generation call failed');
 }
 
 app.post('/api/jobseeker/resumes/generate', async (c) => {
