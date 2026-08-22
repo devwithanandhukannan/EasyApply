@@ -149,7 +149,7 @@ export default function JobSeekerWalkInDirectoryPage() {
         params: { search: search.trim() || undefined },
       });
       if (res.data?.success) {
-        setRooms(res.data.rooms || []);
+        setRooms(res.data.rooms || res.data.data || []);
       }
     } catch {
       // ignore
@@ -160,7 +160,7 @@ export default function JobSeekerWalkInDirectoryPage() {
     try {
       const res = await api.get('/walkin/my-queues');
       if (res.data?.success) {
-        setMyQueues(res.data.queues || []);
+        setMyQueues(res.data.queues || res.data.data || []);
       }
     } catch {
       // ignore

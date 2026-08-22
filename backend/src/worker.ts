@@ -4877,11 +4877,44 @@ app.post('/api/jobseeker/resumes/improve-text', async (c) => {
 app.get('/api/walkin/rooms/:id', async (c) => {
   try {
     const { id } = c.req.param();
-    const room: any = await c.env.DB.prepare(
-      'SELECT w.*, c.name as companyName, c.logoUrl as companyLogoUrl FROM "WalkInRoom" w LEFT JOIN "Company" c ON w.companyId = c.id WHERE w.id = ? OR w.roomCode = ?'
-    ).bind(id, id).first();
+    const room: any = await c.env.DB.prepare(`
+      SELECT w.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.isVerified, c.verificationBadge
+      FROM "WalkInRoom" w
+      LEFT JOIN "Company" c ON w.companyId = c.id
+      WHERE w.id = ? OR w.roomCode = ?
+    `).bind(id, id).first();
     if (!room) return c.json({ success: false, message: 'Room not found' }, 404);
-    return c.json({ success: true, data: room });
+
+    let requiredSkills: string[] = [];
+    try {
+      if (typeof room.requiredSkills === 'string') {
+        requiredSkills = room.requiredSkills.startsWith('[') ? JSON.parse(room.requiredSkills) : room.requiredSkills.split(',').map((s: string) => s.trim());
+      } else if (Array.isArray(room.requiredSkills)) {
+        requiredSkills = room.requiredSkills;
+      }
+    } catch {}
+
+    const countRes: any = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM "WalkInQueueEntry" WHERE roomId = ? AND status IN ("waiting", "priority", "interviewing")'
+    ).bind(room.id).first().catch(() => ({ count: 0 }));
+
+    const formatted = {
+      ...room,
+      requiredSkills,
+      status: (room.status || 'OPEN').toUpperCase(),
+      company: {
+        name: room.companyName || 'Company',
+        logoUrl: room.companyLogoUrl || null,
+        industry: room.companyIndustry || 'Technology',
+        isVerified: Boolean(room.isVerified || room.verificationBadge === 'verified'),
+        verificationBadge: room.verificationBadge || 'verified',
+      },
+      _count: {
+        queue: countRes?.count || 0,
+      },
+    };
+
+    return c.json({ success: true, room: formatted, data: formatted });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -4892,21 +4925,59 @@ app.post('/api/walkin/rooms/:id/join', async (c) => {
     const decoded = await getAuthUser(c);
     if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
     const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
     const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
     if (!profile) return c.json({ success: false, message: 'Complete your profile first.' }, 400);
 
-    const room: any = await c.env.DB.prepare('SELECT id FROM "WalkInRoom" WHERE id = ? OR roomCode = ?').bind(id, id).first();
+    const room: any = await c.env.DB.prepare('SELECT id, status, title FROM "WalkInRoom" WHERE id = ? OR roomCode = ?').bind(id, id).first();
     if (!room) return c.json({ success: false, message: 'Room not found' }, 404);
+
+    if (room.status && room.status.toUpperCase() === 'CLOSED') {
+      return c.json({ success: false, message: 'This walk-in room is closed.' }, 400);
+    }
+
+    const existing: any = await c.env.DB.prepare(
+      'SELECT id, status FROM "WalkInQueueEntry" WHERE roomId = ? AND jobSeekerProfileId = ? AND status IN ("waiting", "priority", "interviewing")'
+    ).bind(room.id, profile.id).first();
+
+    if (existing) {
+      return c.json({ success: true, message: 'Already in queue for this room.', queueId: existing.id, queuePosition: 1 });
+    }
 
     const now = new Date().toISOString();
     const queueId = crypto.randomUUID();
     await c.env.DB.prepare(
-      'INSERT INTO "WalkInQueueEntry" (id, roomId, jobSeekerProfileId, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(queueId, room.id, profile.id, 'waiting', now, now).run();
+      'INSERT INTO "WalkInQueueEntry" (id, roomId, jobSeekerProfileId, resumeId, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(queueId, room.id, profile.id, body.resumeId || null, 'waiting', now, now).run();
 
-    return c.json({ success: true, message: 'Joined the walk-in queue.', queueId });
+    const countRes: any = await c.env.DB.prepare(
+      'SELECT COUNT(*) as count FROM "WalkInQueueEntry" WHERE roomId = ? AND status IN ("waiting", "priority", "interviewing")'
+    ).bind(room.id).first();
+
+    return c.json({ success: true, message: `Joined queue for ${room.title}`, queueId, queuePosition: countRes?.count || 1 });
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Failed to join.' }, 500);
+  }
+});
+
+app.post('/api/walkin/rooms/:id/leave', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const { id } = c.req.param();
+    const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+    if (!profile) return c.json({ success: false, message: 'Profile not found.' }, 400);
+
+    const room: any = await c.env.DB.prepare('SELECT id FROM "WalkInRoom" WHERE id = ? OR roomCode = ?').bind(id, id).first();
+    const targetRoomId = room?.id || id;
+
+    await c.env.DB.prepare(
+      'UPDATE "WalkInQueueEntry" SET status = "skipped", updatedAt = ? WHERE (roomId = ? OR id = ?) AND jobSeekerProfileId = ? AND status IN ("waiting", "priority")'
+    ).bind(new Date().toISOString(), targetRoomId, targetRoomId, profile.id).run();
+
+    return c.json({ success: true, message: 'Left queue successfully.' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Failed to leave queue.' }, 500);
   }
 });
 
@@ -4954,16 +5025,61 @@ app.get('/api/jobseeker/insights', async (c) => {
 app.get('/api/walkin/my-queues', async (c) => {
   try {
     const decoded = await getAuthUser(c);
-    if (!decoded) return c.json({ success: true, queues: [] });
+    if (!decoded) return c.json({ success: true, queues: [], data: [] });
     const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
-    if (!profile) return c.json({ success: true, queues: [] });
+    if (!profile) return c.json({ success: true, queues: [], data: [] });
 
-    const queues = await c.env.DB.prepare(
-      'SELECT q.*, w.title, w.status as roomStatus, c.name as companyName FROM "WalkInQueueEntry" q JOIN "WalkInRoom" w ON q.roomId = w.id JOIN "Company" c ON w.companyId = c.id WHERE q.jobSeekerProfileId = ? ORDER BY q.createdAt DESC LIMIT 20'
-    ).bind(profile.id).all();
-    return c.json({ success: true, queues: queues.results || [] });
+    const rawQueues: any = await c.env.DB.prepare(`
+      SELECT q.*, w.title as roomTitle, w.roomCode, w.livekitRoom, w.status as roomStatus, w.requiredSkills, w.minExperience, w.evaluationCriteria,
+             c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.isVerified, c.verificationBadge
+      FROM "WalkInQueueEntry" q
+      JOIN "WalkInRoom" w ON q.roomId = w.id
+      JOIN "Company" c ON w.companyId = c.id
+      WHERE q.jobSeekerProfileId = ?
+      ORDER BY q.createdAt DESC LIMIT 20
+    `).bind(profile.id).all();
+
+    const formatted = (rawQueues.results || []).map((q: any, idx: number) => {
+      let requiredSkills: string[] = [];
+      try {
+        if (typeof q.requiredSkills === 'string') {
+          requiredSkills = q.requiredSkills.startsWith('[') ? JSON.parse(q.requiredSkills) : q.requiredSkills.split(',').map((s: string) => s.trim());
+        } else if (Array.isArray(q.requiredSkills)) {
+          requiredSkills = q.requiredSkills;
+        }
+      } catch {}
+
+      return {
+        id: q.id,
+        roomId: q.roomId,
+        status: q.status || 'waiting',
+        skillScore: q.skillScore || 0,
+        priorityScore: q.priorityScore || 0,
+        agingBonus: q.agingBonus || 0,
+        waitingSince: q.createdAt,
+        queuePosition: idx + 1,
+        room: {
+          title: q.roomTitle,
+          roomCode: q.roomCode,
+          livekitRoom: q.livekitRoom || `walkin-${q.roomCode}`,
+          status: (q.roomStatus || 'OPEN').toUpperCase(),
+          requiredSkills,
+          minExperience: q.minExperience,
+          evaluationCriteria: q.evaluationCriteria,
+          company: {
+            name: q.companyName || 'Company',
+            logoUrl: q.companyLogoUrl || null,
+            industry: q.companyIndustry || 'Technology',
+            isVerified: Boolean(q.isVerified || q.verificationBadge === 'verified'),
+            verificationBadge: q.verificationBadge || 'verified',
+          },
+        },
+      };
+    });
+
+    return c.json({ success: true, queues: formatted, data: formatted });
   } catch (err: any) {
-    return c.json({ success: true, queues: [] });
+    return c.json({ success: true, queues: [], data: [] });
   }
 });
 
@@ -5184,16 +5300,93 @@ app.get('/api/public/:jobId', async (c) => {
 app.get('/api/walkin/active-rooms', async (c) => {
   try {
     const { search } = c.req.query();
-    let query = 'SELECT w.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry FROM "WalkInRoom" w LEFT JOIN "Company" c ON w.companyId = c.id WHERE w.status = \'active\'';
+    const decoded = await getAuthUser(c).catch(() => null);
+    const myEntriesMap = new Map<string, any>();
+    if (decoded?.userId) {
+      const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first().catch(() => null);
+      if (profile?.id) {
+        const myEntries: any = await c.env.DB.prepare('SELECT * FROM "WalkInQueueEntry" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
+        (myEntries.results || []).forEach((e: any) => {
+          myEntriesMap.set(e.roomId, e);
+        });
+      }
+    }
+
+    let query = `
+      SELECT w.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.isVerified, c.verificationBadge
+      FROM "WalkInRoom" w
+      LEFT JOIN "Company" c ON w.companyId = c.id
+      WHERE UPPER(w.status) != 'CLOSED'
+    `;
     const params: any[] = [];
-    if (search) { query += ' AND (w.title LIKE ? OR c.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
+    if (search) {
+      query += ' AND (w.title LIKE ? OR c.name LIKE ? OR w.requiredSkills LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
     query += ' ORDER BY w.createdAt DESC LIMIT 50';
-    const rooms = params.length
+
+    const rawRooms: any = params.length
       ? await c.env.DB.prepare(query).bind(...params).all()
       : await c.env.DB.prepare(query).all();
-    return c.json({ success: true, data: rooms.results, pagination: { totalPages: 1, total: rooms.results.length } });
+
+    const formattedRooms = await Promise.all((rawRooms.results || []).map(async (r: any) => {
+      let requiredSkills: string[] = [];
+      try {
+        if (typeof r.requiredSkills === 'string') {
+          requiredSkills = r.requiredSkills.startsWith('[') ? JSON.parse(r.requiredSkills) : r.requiredSkills.split(',').map((s: string) => s.trim());
+        } else if (Array.isArray(r.requiredSkills)) {
+          requiredSkills = r.requiredSkills;
+        }
+      } catch {}
+
+      const queueCountRes: any = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM "WalkInQueueEntry" WHERE roomId = ? AND status IN ("waiting", "priority", "interviewing")'
+      ).bind(r.id).first().catch(() => ({ count: 0 }));
+
+      const myEntry = myEntriesMap.get(r.id) || null;
+
+      return {
+        id: r.id,
+        title: r.title,
+        description: r.description,
+        requiredSkills,
+        minExperience: r.minExperience,
+        priorityThreshold: r.priorityThreshold || 70,
+        evaluationCriteria: r.evaluationCriteria,
+        roomCode: r.roomCode,
+        livekitRoom: r.livekitRoom || `walkin-${r.roomCode}`,
+        status: (r.status || 'OPEN').toUpperCase(),
+        maxQueue: r.maxQueue || 50,
+        createdAt: r.createdAt,
+        company: {
+          name: r.companyName || 'Company',
+          logoUrl: r.companyLogoUrl || null,
+          industry: r.companyIndustry || 'Technology',
+          isVerified: Boolean(r.isVerified || r.verificationBadge === 'verified'),
+          verificationBadge: r.verificationBadge || 'verified',
+        },
+        _count: {
+          queue: queueCountRes?.count || 0,
+        },
+        hasApplied: Boolean(myEntry),
+        myEntry: myEntry ? {
+          id: myEntry.id,
+          status: myEntry.status,
+          skillScore: myEntry.skillScore || 0,
+          priorityScore: myEntry.priorityScore || 0,
+          waitingSince: myEntry.createdAt,
+        } : null,
+      };
+    }));
+
+    return c.json({
+      success: true,
+      rooms: formattedRooms,
+      data: formattedRooms,
+      pagination: { totalPages: 1, total: formattedRooms.length },
+    });
   } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
+    return c.json({ success: false, error: err.message, message: err.message, rooms: [] }, 500);
   }
 });
 
