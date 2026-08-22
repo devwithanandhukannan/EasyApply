@@ -69,6 +69,17 @@ function JobsContent() {
     }
   }, [searchParams]);
 
+  const switchTab = (tab: 'all' | 'saved') => {
+    setActiveTab(tab);
+    setPage(1);
+    setSearchQuery('');
+    if (tab === 'saved') {
+      router.replace('/dashboard/jobs?tab=saved');
+    } else {
+      router.replace('/dashboard/jobs');
+    }
+  };
+
   // Fetch saved job IDs on mount
   const fetchSavedJobIds = useCallback(async () => {
     try {
@@ -288,7 +299,7 @@ function JobsContent() {
         {/* Tab Switcher */}
         <div className="flex items-center gap-1.5 p-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] rounded-2xl self-start sm:self-auto shrink-0 border border-black/[0.04] dark:border-white/[0.06]">
           <button
-            onClick={() => { setActiveTab('all'); setPage(1); }}
+            onClick={() => switchTab('all')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
               activeTab === 'all'
                 ? 'bg-white dark:bg-[#1c1c1e] text-[#1d1d1f] dark:text-white shadow-xs'
@@ -300,7 +311,7 @@ function JobsContent() {
           </button>
 
           <button
-            onClick={() => { setActiveTab('saved'); setPage(1); }}
+            onClick={() => switchTab('saved')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
               activeTab === 'saved'
                 ? 'bg-white dark:bg-[#1c1c1e] text-[#0071e3] shadow-xs'

@@ -3467,14 +3467,23 @@ app.get('/api/jobseeker/saved-jobs/ids', async (c) => {
 
 app.get('/api/jobseeker/saved-jobs', async (c) => {
   try {
+    const { search } = c.req.query();
     const decoded = await getAuthUser(c);
     if (!decoded) return c.json({ success: true, data: [], pagination: { totalPages: 1 } });
     const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
     if (!profile) return c.json({ success: true, data: [], pagination: { totalPages: 1 } });
 
-    const jobs = await c.env.DB.prepare(
-      'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge, s.createdAt as savedAt FROM "SavedJob" s JOIN "JobPosting" j ON s.jobPostingId = j.id JOIN "Company" c ON j.companyId = c.id WHERE s.jobSeekerProfileId = ? ORDER BY s.createdAt DESC'
-    ).bind(profile.id).all();
+    let sql = 'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge, s.createdAt as savedAt FROM "SavedJob" s JOIN "JobPosting" j ON s.jobPostingId = j.id JOIN "Company" c ON j.companyId = c.id WHERE s.jobSeekerProfileId = ?';
+    const params: any[] = [profile.id];
+
+    if (search) {
+      sql += ' AND (j.title LIKE ? OR j.description LIKE ? OR c.name LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    sql += ' ORDER BY s.createdAt DESC';
+
+    const jobs = await c.env.DB.prepare(sql).bind(...params).all();
 
     const apps = await c.env.DB.prepare('SELECT jobPostingId, status FROM "Application" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
     const appMap = new Map((apps.results || []).map((a: any) => [a.jobPostingId, a.status]));
@@ -3503,13 +3512,19 @@ app.post('/api/jobseeker/saved-jobs/:jobId', async (c) => {
     const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
     if (!profile) return c.json({ success: false, message: 'Profile required' }, 400);
 
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    await c.env.DB.prepare(
-      'INSERT OR IGNORE INTO "SavedJob" (id, jobSeekerProfileId, jobPostingId, createdAt) VALUES (?, ?, ?, ?)'
-    ).bind(id, profile.id, jobId, now).run();
+    const existing = await c.env.DB.prepare('SELECT id FROM "SavedJob" WHERE jobSeekerProfileId = ? AND jobPostingId = ?').bind(profile.id, jobId).first();
 
-    return c.json({ success: true, message: 'Job saved.' });
+    if (existing) {
+      await c.env.DB.prepare('DELETE FROM "SavedJob" WHERE jobSeekerProfileId = ? AND jobPostingId = ?').bind(profile.id, jobId).run();
+      return c.json({ success: true, isSaved: false, message: 'Job removed from saved.' });
+    } else {
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await c.env.DB.prepare(
+        'INSERT INTO "SavedJob" (id, jobSeekerProfileId, jobPostingId, createdAt) VALUES (?, ?, ?, ?)'
+      ).bind(id, profile.id, jobId, now).run();
+      return c.json({ success: true, isSaved: true, message: 'Job saved successfully.' });
+    }
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
