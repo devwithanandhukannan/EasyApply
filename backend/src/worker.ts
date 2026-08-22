@@ -1818,6 +1818,136 @@ app.delete('/api/crm/talent-pools/:poolId/members/:memberId', async (c) => {
   }
 });
 
+// ─── SEEKER DIRECT DISCOVERY ENDPOINTS ───────────────────
+const handleDiscoverySeekers = async (c: any) => {
+  try {
+    const url = new URL(c.req.url);
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+    const limit = Math.max(1, parseInt(url.searchParams.get('limit') || '12'));
+    const search = (url.searchParams.get('search') || '').trim().toLowerCase();
+    const skillsParam = (url.searchParams.get('skills') || '').trim().toLowerCase();
+    const location = (url.searchParams.get('location') || '').trim().toLowerCase();
+    const availability = (url.searchParams.get('availability') || '').trim();
+
+    let query = 'SELECT p.* FROM "JobSeekerProfile" p WHERE p.discoverable = 1';
+    const params: any[] = [];
+
+    if (search) {
+      query += ' AND (LOWER(p.fullName) LIKE ? OR LOWER(p.bio) LIKE ? OR LOWER(p.location) LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    if (location) {
+      query += ' AND LOWER(p.location) LIKE ?';
+      params.push(`%${location}%`);
+    }
+
+    if (availability) {
+      query += ' AND p.availabilityStatus = ?';
+      params.push(availability);
+    }
+
+    query += ' ORDER BY p.updatedAt DESC';
+
+    const allProfiles = await c.env.DB.prepare(query).bind(...params).all();
+    const results = allProfiles.results || [];
+
+    const seekersWithDetails = await Promise.all(results.map(async (p: any) => {
+      const skillsRes = await c.env.DB.prepare('SELECT name FROM "Skill" WHERE jobSeekerProfileId = ?').bind(p.id).all().catch(() => ({ results: [] }));
+      const expRes = await c.env.DB.prepare('SELECT role, company, current, startYear, endYear FROM "Experience" WHERE jobSeekerProfileId = ? ORDER BY createdAt DESC LIMIT 3').bind(p.id).all().catch(() => ({ results: [] }));
+      const eduRes = await c.env.DB.prepare('SELECT degree, institution, startYear, endYear FROM "Education" WHERE jobSeekerProfileId = ? ORDER BY createdAt DESC LIMIT 2').bind(p.id).all().catch(() => ({ results: [] }));
+
+      const pSkills = (skillsRes.results || []).map((s: any) => ({ name: s.name }));
+      const pExp = expRes.results || [];
+      const pEdu = eduRes.results || [];
+
+      return {
+        id: p.id,
+        fullName: p.fullName || 'Candidate',
+        email: p.email || '',
+        phone: p.phone || '',
+        location: p.location || '',
+        profilePhotoUrl: p.profilePhotoUrl || null,
+        bio: p.bio || '',
+        availabilityStatus: p.availabilityStatus || 'available',
+        linkedin: p.linkedin || '',
+        github: p.github || '',
+        portfolio: p.portfolio || '',
+        skills: pSkills,
+        experience: pExp,
+        education: pEdu,
+        _count: {
+          applications: 0,
+          skills: pSkills.length,
+          experience: pExp.length,
+        }
+      };
+    }));
+
+    let filtered = seekersWithDetails;
+    if (skillsParam) {
+      const targetSkills = skillsParam.split(',').map(s => s.trim()).filter(Boolean);
+      if (targetSkills.length > 0) {
+        filtered = filtered.filter(s =>
+          targetSkills.some(ts => s.skills.some((sk: any) => sk.name.toLowerCase().includes(ts)))
+        );
+      }
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / limit) || 1;
+    const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+    return c.json({
+      success: true,
+      seekers: paginated,
+      total,
+      page,
+      totalPages,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Failed to fetch seekers' }, 500);
+  }
+};
+
+const handleDiscoverySeekerDetail = async (c: any) => {
+  try {
+    const { profileId, id } = c.req.param();
+    const targetId = profileId || id;
+    const profile: any = await c.env.DB.prepare('SELECT * FROM "JobSeekerProfile" WHERE id = ?').bind(targetId).first();
+    if (!profile) return c.json({ success: false, message: 'Seeker profile not found' }, 404);
+
+    const skills = await c.env.DB.prepare('SELECT * FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const experience = await c.env.DB.prepare('SELECT * FROM "Experience" WHERE jobSeekerProfileId = ? ORDER BY createdAt DESC').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const education = await c.env.DB.prepare('SELECT * FROM "Education" WHERE jobSeekerProfileId = ? ORDER BY createdAt DESC').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const projects = await c.env.DB.prepare('SELECT * FROM "Project" WHERE jobSeekerProfileId = ? ORDER BY createdAt DESC').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const certifications = await c.env.DB.prepare('SELECT * FROM "Certification" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const languages = await c.env.DB.prepare('SELECT * FROM "Language" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const achievements = await c.env.DB.prepare('SELECT * FROM "Achievement" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+
+    const seeker = {
+      ...profile,
+      skills,
+      experience,
+      education,
+      projects,
+      certifications,
+      languages,
+      achievements,
+    };
+
+    return c.json({ success: true, seeker });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+app.get('/api/walkin/discovery/seekers', handleDiscoverySeekers);
+app.get('/api/discovery/seekers', handleDiscoverySeekers);
+app.get('/api/walkin/discovery/seekers/:id', handleDiscoverySeekerDetail);
+app.get('/api/discovery/seekers/:id', handleDiscoverySeekerDetail);
+
+
 app.get('/api/crm/candidates', async (c) => {
   try {
     const decoded = await getAuthUser(c);
