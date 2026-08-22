@@ -1241,12 +1241,12 @@ ${inputDesc || `We are seeking a talented ${jobTitle} to join our ${dept} team.`
 
     let descriptionText = '';
 
-    // 1. Try Groq AI via callGroqAiWorker first
+    // 1. Try Groq AI via callGroqAiWorker first (jsonMode=false = plain text, not JSON)
     try {
       descriptionText = await callGroqAiWorker(c.env, [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
-      ]);
+      ], undefined, false);
     } catch (groqErr) {
       console.warn('Groq AI generate-description failed in worker, trying Cloudflare AI:', groqErr);
     }
@@ -2170,7 +2170,7 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
   }
 });
 
-async function callGroqAiWorker(env: Bindings, messages: any[], modelOverride?: string): Promise<string> {
+async function callGroqAiWorker(env: Bindings, messages: any[], modelOverride?: string, jsonMode: boolean = true): Promise<string> {
   let apiKey = env.GROQ_API_KEY || '';
   let model = modelOverride || env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
@@ -2206,7 +2206,7 @@ async function callGroqAiWorker(env: Bindings, messages: any[], modelOverride?: 
       messages,
       temperature: 0.2,
       max_tokens: 4000,
-      response_format: { type: 'json_object' },
+      ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
 
@@ -2223,7 +2223,7 @@ async function callGroqAiWorker(env: Bindings, messages: any[], modelOverride?: 
           messages,
           temperature: 0.2,
           max_tokens: 4000,
-          response_format: { type: 'json_object' },
+          ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
         }),
       });
       if (fallbackRes.ok) {
