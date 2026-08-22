@@ -152,7 +152,7 @@ export default function TalentPoolPage() {
                     {pool.name}
                   </h3>
                   <span className="shrink-0 text-[11px] font-bold bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] dark:text-[#47a0ff] px-2.5 py-0.5 rounded-full">
-                    {pool._count.members} {pool._count.members === 1 ? 'candidate' : 'candidates'}
+                    {pool._count?.members ?? 0} {(pool._count?.members ?? 0) === 1 ? 'candidate' : 'candidates'}
                   </span>
                 </div>
                 

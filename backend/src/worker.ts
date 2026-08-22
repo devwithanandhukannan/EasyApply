@@ -1729,8 +1729,17 @@ app.get('/api/crm/talent-pools', async (c) => {
   try {
     const decoded = await getAuthUser(c);
     if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
-    const pools = await c.env.DB.prepare('SELECT * FROM "TalentPool" WHERE companyId = ? ORDER BY createdAt DESC').bind(decoded.companyId).all();
-    return c.json({ success: true, data: pools.results || [] });
+    const poolsResult = await c.env.DB.prepare('SELECT * FROM "TalentPool" WHERE companyId = ? ORDER BY createdAt DESC').bind(decoded.companyId).all();
+    const pools = await Promise.all((poolsResult.results || []).map(async (p: any) => {
+      const countRes: any = await c.env.DB.prepare('SELECT COUNT(*) as count FROM "TalentPoolMember" WHERE talentPoolId = ?').bind(p.id).first().catch(() => ({ count: 0 }));
+      return {
+        ...p,
+        _count: {
+          members: countRes?.count || 0,
+        },
+      };
+    }));
+    return c.json({ success: true, data: pools });
   } catch {
     return c.json({ success: true, data: [] });
   }
