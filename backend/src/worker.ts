@@ -3452,42 +3452,68 @@ app.get('/api/jobseeker/salary-compare', async (c) => {
 });
 
 // ─── MISSING ENDPOINTS: RESUME AI ────────────────────────
-// Pure JS PDF Text Extractor for Cloudflare Workers (No DOM/Node dependencies)
-function extractPdfTextPure(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const textDecoder = new TextDecoder('utf-8', { fatal: false });
-  const rawString = textDecoder.decode(bytes);
-
-  const textChunks: string[] = [];
-  const tjMatches = rawString.match(/\(([^)]+)\)\s*T[jJ]/g);
-  if (tjMatches) {
-    for (const match of tjMatches) {
-      const clean = match.replace(/\)\s*T[jJ]$/, '').replace(/^\(/, '').trim();
-      if (clean.length > 0) textChunks.push(clean);
+// Robust PDF Text Extractor for Cloudflare Workers (Universal unpdf + Deflate + Clean Token extraction)
+async function extractPdfTextWorker(buffer: ArrayBuffer): Promise<string> {
+  // Method 1: unpdf universal pdf parser
+  try {
+    const { extractText } = await import('unpdf');
+    const res = await extractText(new Uint8Array(buffer));
+    const extracted = Array.isArray(res?.text)
+      ? res.text.join('\n')
+      : (typeof res?.text === 'string' ? res.text : '');
+    if (extracted && extracted.trim().length > 15) {
+      return extracted.trim();
     }
+  } catch (err) {
+    console.warn('unpdf extractText failed in worker:', err);
   }
 
-  const arrayMatches = rawString.match(/\[\s*(\([^)]+\)\s*)+\]\s*TJ/g);
-  if (arrayMatches) {
-    for (const match of arrayMatches) {
-      const strMatches = match.match(/\(([^)]+)\)/g);
-      if (strMatches) {
-        const line = strMatches.map(s => s.slice(1, -1)).join('');
-        if (line.length > 0) textChunks.push(line);
+  // Method 2: Deflate stream text extraction & Tj/TJ token extraction
+  try {
+    const bytes = new Uint8Array(buffer);
+    const textDecoder = new TextDecoder('utf-8', { fatal: false });
+    const rawString = textDecoder.decode(bytes);
+
+    const textChunks: string[] = [];
+    const tjMatches = rawString.match(/\(([^)]+)\)\s*T[jJ]/g);
+    if (tjMatches) {
+      for (const match of tjMatches) {
+        const clean = match.replace(/\)\s*T[jJ]$/, '').replace(/^\(/, '').trim();
+        if (clean.length > 0 && !clean.startsWith('%PDF') && !clean.startsWith('PDF-')) {
+          textChunks.push(clean);
+        }
       }
     }
+
+    const arrayMatches = rawString.match(/\[\s*(\([^)]+\)\s*)+\]\s*TJ/g);
+    if (arrayMatches) {
+      for (const match of arrayMatches) {
+        const strMatches = match.match(/\(([^)]+)\)/g);
+        if (strMatches) {
+          const line = strMatches.map(s => s.slice(1, -1)).join('');
+          if (line.length > 0 && !line.startsWith('%PDF') && !line.startsWith('PDF-')) {
+            textChunks.push(line);
+          }
+        }
+      }
+    }
+
+    if (textChunks.join(' ').trim().length > 20) {
+      return textChunks.join(' ');
+    }
+  } catch (e) {
+    console.warn('Regex Tj/TJ extract failed:', e);
   }
 
-  if (textChunks.length > 5) {
-    return textChunks.join(' ');
-  }
-
-  // Fallback ASCII text stream extraction
-  const asciiStrings = rawString.match(/[\w\s.,@+:/\-(){}[\]]{4,}/g) || [];
+  // Method 3: Clean ASCII extraction with strict PDF token filtering
+  const bytes = new Uint8Array(buffer);
+  const rawString = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  const asciiStrings = rawString.match(/[a-zA-Z0-9._%+-@\s,/:()\-]{3,}/g) || [];
   const filtered = asciiStrings.filter(s => {
     const trimmed = s.trim();
     return !trimmed.startsWith('/') &&
-           !/^(obj|endobj|stream|endstream|xref|trailer|startxref|FlateDecode)$/i.test(trimmed) &&
+           !trimmed.startsWith('%PDF') &&
+           !/^(PDF-\d\.\d|obj|endobj|stream|endstream|xref|trailer|startxref|FlateDecode|Catalog|Pages|Font|Type|Subtype|Length|Filter)$/i.test(trimmed) &&
            /[a-zA-Z]{2,}/.test(trimmed);
   });
 
@@ -3511,7 +3537,7 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
         const isPdf = fileName.endsWith('.pdf') || (file.type || '').includes('pdf');
 
         if (isPdf) {
-          rawText = extractPdfTextPure(buffer);
+          rawText = await extractPdfTextWorker(buffer);
         } else {
           rawText = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
         }
@@ -3527,8 +3553,16 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
     const linkedinMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+/i);
     const githubMatch = rawText.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/[a-zA-Z0-9_-]+/i);
 
-    const lines = rawText.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean);
-    const candidateName = lines[0] && lines[0].length < 40 && !lines[0].includes('@') ? lines[0] : '';
+    const lines = rawText.split(/[\r\n]+/).map(l => l.trim()).filter(l => {
+      return l.length > 1 &&
+             l.length < 50 &&
+             !l.includes('@') &&
+             !l.startsWith('http') &&
+             !l.startsWith('%PDF') &&
+             !/^PDF-\d/i.test(l) &&
+             !/^(resume|curriculum|vitae|cv|page|email|phone|contact|profile)/i.test(l);
+    });
+    const candidateName = lines.length > 0 ? lines[0] : '';
 
     const heuristicData = {
       fullName: candidateName,
@@ -3539,13 +3573,55 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
     };
 
     let aiParsed: any = {};
-    if (rawText.trim().length > 10 && c.env.AI) {
+    if (rawText.trim().length > 10) {
+      // 1. Try Groq AI (Ultra-fast structured output)
       try {
-        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
-          messages: [
-            {
-              role: 'system',
-              content: `You are an ATS resume parser. Extract structured data from the resume text into JSON format only. Return ONLY a valid JSON object matching this structure:
+        const groqResult = await callGroqAiWorker(c.env, [
+          {
+            role: 'system',
+            content: `You are an expert ATS resume parser. Extract structured candidate data from the resume text into valid JSON matching this schema:
+{
+  "fullName": "Candidate Full Name",
+  "email": "email address",
+  "phone": "phone number",
+  "location": "City, State or Country",
+  "linkedin": "https://linkedin.com/in/...",
+  "github": "https://github.com/...",
+  "portfolio": "https://...",
+  "bio": "Professional executive summary / career overview",
+  "skills": ["Skill 1", "Skill 2"],
+  "education": [{"institution": "University", "degree": "Degree", "field": "Major", "location": "City", "startYear": "2020", "endYear": "2024", "cgpa": "3.8"}],
+  "experience": [{"company": "Company", "role": "Title", "location": "City", "startYear": "2022", "endYear": "Present", "current": true, "description": "Responsibilities and accomplishments"}],
+  "projects": [{"name": "Project Name", "description": "Summary", "technologies": ["React", "Node.js"], "githubLink": "", "liveLink": ""}],
+  "certifications": [{"name": "Certification Name", "organization": "Issuer", "issueDate": "2023"}],
+  "languages": [{"language": "Language", "proficiency": "Fluent"}],
+  "achievements": [{"title": "Award Title", "description": "Details", "year": "2023"}]
+}`
+          },
+          {
+            role: 'user',
+            content: `Resume Content:\n"""\n${rawText.slice(0, 4000)}\n"""`
+          }
+        ], 'llama-3.3-70b-versatile', true);
+
+        if (groqResult) {
+          const jsonMatch = groqResult.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            aiParsed = JSON.parse(jsonMatch[0]);
+          }
+        }
+      } catch (groqErr) {
+        console.warn('Groq AI parse failed in worker, trying Cloudflare AI:', groqErr);
+      }
+
+      // 2. Fallback to Cloudflare Workers AI
+      if ((!aiParsed?.fullName && !aiParsed?.email) && c.env.AI) {
+        try {
+          const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+            messages: [
+              {
+                role: 'system',
+                content: `You are an ATS resume parser. Extract structured data from the resume text into JSON format only. Return ONLY a valid JSON object matching this structure:
 {
   "fullName": "Name",
   "email": "email",
@@ -3558,29 +3634,33 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
   "skills": ["Skill 1"],
   "education": [{"institution": "Univ", "degree": "Degree", "field": "", "location": "", "startYear": "", "endYear": "", "cgpa": ""}],
   "experience": [{"company": "Company", "role": "Role", "location": "", "startYear": "", "endYear": "", "description": ""}],
-  "projects": [{"name": "Project", "description": "", "techStack": [], "githubLink": "", "liveLink": ""}],
-  "certifications": [{"name": "Cert", "issuer": "", "year": ""}],
+  "projects": [{"name": "Project", "description": "", "technologies": [], "githubLink": "", "liveLink": ""}],
+  "certifications": [{"name": "Cert", "organization": "", "issueDate": ""}],
   "languages": [{"language": "Language", "proficiency": "Native"}],
   "achievements": [{"title": "", "description": "", "year": ""}]
 }`
-            },
-            { role: 'user', content: `Resume Text:\n"""\n${rawText.slice(0, 3000)}\n"""` }
-          ],
-          max_tokens: 1200,
-        });
+              },
+              { role: 'user', content: `Resume Text:\n"""\n${rawText.slice(0, 3000)}\n"""` }
+            ],
+            max_tokens: 1400,
+          });
 
-        const respText = aiResult?.response || aiResult?.result?.response || '';
-        const jsonMatch = respText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          aiParsed = JSON.parse(jsonMatch[0]);
+          const respText = aiResult?.response || aiResult?.result?.response || '';
+          const jsonMatch = respText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            aiParsed = JSON.parse(jsonMatch[0]);
+          }
+        } catch (aiErr) {
+          console.warn('Cloudflare AI resume parse failed:', aiErr);
         }
-      } catch (aiErr) {
-        console.warn('Cloudflare AI resume parse failed, using heuristic fallback:', aiErr);
       }
     }
 
+    const rawFullName = aiParsed.fullName || aiParsed.basicInfo?.fullName || heuristicData.fullName;
+    const cleanFullName = rawFullName && !/^%?PDF/i.test(rawFullName) ? rawFullName : (heuristicData.fullName || '');
+
     const basicInfo = {
-      fullName: aiParsed.fullName || aiParsed.basicInfo?.fullName || heuristicData.fullName,
+      fullName: cleanFullName,
       email: aiParsed.email || aiParsed.basicInfo?.email || heuristicData.email,
       phone: aiParsed.phone || aiParsed.basicInfo?.phone || heuristicData.phone,
       location: aiParsed.location || aiParsed.basicInfo?.location || '',
@@ -3589,6 +3669,65 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
       portfolio: aiParsed.portfolio || aiParsed.basicInfo?.portfolio || '',
       bio: aiParsed.bio || aiParsed.basicInfo?.bio || aiParsed.summary || '',
     };
+
+    // Normalize education
+    const rawEducation = Array.isArray(aiParsed.education) ? aiParsed.education : [];
+    const formattedEducation = rawEducation.map((edu: any) => ({
+      institution: edu.institution || edu.school || edu.university || '',
+      degree: edu.degree || '',
+      field: edu.field || edu.major || '',
+      location: edu.location || '',
+      startYear: String(edu.startYear || edu.startDate || ''),
+      endYear: String(edu.endYear || edu.endDate || ''),
+      cgpa: String(edu.cgpa || edu.gpa || ''),
+      description: edu.description || '',
+    }));
+
+    // Normalize experience
+    const rawExperience = Array.isArray(aiParsed.experience) ? aiParsed.experience : [];
+    const formattedExperience = rawExperience.map((exp: any) => ({
+      company: exp.company || exp.organization || '',
+      role: exp.role || exp.title || exp.position || '',
+      location: exp.location || '',
+      startYear: String(exp.startYear || exp.startDate || ''),
+      endYear: String(exp.endYear || exp.endDate || ''),
+      current: Boolean(exp.current || String(exp.endYear || '').toLowerCase().includes('present')),
+      description: exp.description || (Array.isArray(exp.responsibilities) ? exp.responsibilities.join('\n') : ''),
+      skills: Array.isArray(exp.skills) ? exp.skills : [],
+    }));
+
+    // Normalize projects
+    const rawProjects = Array.isArray(aiParsed.projects) ? aiParsed.projects : [];
+    const formattedProjects = rawProjects.map((p: any) => ({
+      name: p.name || p.title || '',
+      description: p.description || '',
+      technologies: Array.isArray(p.technologies) ? p.technologies : (Array.isArray(p.techStack) ? p.techStack : []),
+      githubLink: p.githubLink || p.github || '',
+      liveLink: p.liveLink || p.link || p.url || '',
+    }));
+
+    // Normalize certifications
+    const rawCertifications = Array.isArray(aiParsed.certifications) ? aiParsed.certifications : [];
+    const formattedCertifications = rawCertifications.map((c: any) => ({
+      name: c.name || c.title || '',
+      organization: c.organization || c.issuer || '',
+      issueDate: String(c.issueDate || c.year || c.date || ''),
+      credentialUrl: c.credentialUrl || c.url || '',
+    }));
+
+    // Normalize languages
+    const rawLanguages = Array.isArray(aiParsed.languages) ? aiParsed.languages : [];
+    const formattedLanguages = rawLanguages.map((l: any) => {
+      if (typeof l === 'string') return { language: l, proficiency: 'Proficient' };
+      return { language: l.language || l.name || '', proficiency: l.proficiency || 'Proficient' };
+    });
+
+    // Normalize achievements
+    const rawAchievements = Array.isArray(aiParsed.achievements) ? aiParsed.achievements : [];
+    const formattedAchievements = rawAchievements.map((a: any) => {
+      if (typeof a === 'string') return { title: a, description: '', year: '' };
+      return { title: a.title || a.name || '', description: a.description || '', year: String(a.year || '') };
+    });
 
     const finalResult = {
       basicInfo,
@@ -3601,12 +3740,12 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
       portfolio: basicInfo.portfolio,
       bio: basicInfo.bio,
       skills: Array.isArray(aiParsed.skills) ? aiParsed.skills : [],
-      education: Array.isArray(aiParsed.education) ? aiParsed.education : [],
-      experience: Array.isArray(aiParsed.experience) ? aiParsed.experience : [],
-      projects: Array.isArray(aiParsed.projects) ? aiParsed.projects : [],
-      certifications: Array.isArray(aiParsed.certifications) ? aiParsed.certifications : [],
-      languages: Array.isArray(aiParsed.languages) ? aiParsed.languages : [],
-      achievements: Array.isArray(aiParsed.achievements) ? aiParsed.achievements : [],
+      education: formattedEducation,
+      experience: formattedExperience,
+      projects: formattedProjects,
+      certifications: formattedCertifications,
+      languages: formattedLanguages,
+      achievements: formattedAchievements,
     };
 
     return c.json({ success: true, data: finalResult });

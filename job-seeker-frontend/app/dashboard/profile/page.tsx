@@ -193,17 +193,21 @@ export default function ProfilePage() {
       if (response.data.success) {
         const parsed = response.data.data;
         const info = parsed.basicInfo || parsed;
-        if (info.fullName)  setBasicInfo(prev => ({ ...prev, fullName: info.fullName }));
-        if (info.email)     setBasicInfo(prev => ({ ...prev, email: info.email }));
-        if (info.phone)     setBasicInfo(prev => ({ ...prev, phone: info.phone }));
-        if (info.location)  setBasicInfo(prev => ({ ...prev, location: info.location }));
-        if (info.linkedin)  setBasicInfo(prev => ({ ...prev, linkedin: info.linkedin }));
-        if (info.github)    setBasicInfo(prev => ({ ...prev, github: info.github }));
-        if (info.portfolio) setBasicInfo(prev => ({ ...prev, portfolio: info.portfolio }));
-        if (info.bio)       setBasicInfo(prev => ({ ...prev, bio: info.bio }));
+        setBasicInfo(prev => ({
+          ...prev,
+          fullName: info.fullName || prev.fullName,
+          email: info.email || prev.email,
+          phone: info.phone || prev.phone,
+          location: info.location || prev.location,
+          linkedin: info.linkedin || prev.linkedin,
+          github: info.github || prev.github,
+          portfolio: info.portfolio || prev.portfolio,
+          bio: info.bio || info.summary || prev.bio,
+        }));
 
         if (parsed.skills?.length) {
-          setSkills(prev => Array.from(new Set([...prev, ...parsed.skills])));
+          const newSkills = parsed.skills.map((s: any) => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean);
+          setSkills(prev => Array.from(new Set([...prev, ...newSkills])));
         }
         if (parsed.education?.length) {
           setEducation(parsed.education.map((edu: any, index: number) => ({ ...edu, id: Date.now() + index })));
