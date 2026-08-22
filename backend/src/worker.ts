@@ -3476,7 +3476,18 @@ app.get('/api/jobseeker/saved-jobs', async (c) => {
       'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge, s.createdAt as savedAt FROM "SavedJob" s JOIN "JobPosting" j ON s.jobPostingId = j.id JOIN "Company" c ON j.companyId = c.id WHERE s.jobSeekerProfileId = ? ORDER BY s.createdAt DESC'
     ).bind(profile.id).all();
 
-    const formatted = (jobs.results || []).map(formatJobResponse);
+    const apps = await c.env.DB.prepare('SELECT jobPostingId, status FROM "Application" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
+    const appMap = new Map((apps.results || []).map((a: any) => [a.jobPostingId, a.status]));
+
+    const formatted = (jobs.results || []).map((j: any) => {
+      const base = formatJobResponse(j);
+      const appStatus = appMap.get(j.id);
+      return {
+        ...base,
+        hasApplied: Boolean(appStatus),
+        applicationStatus: appStatus || null,
+      };
+    });
 
     return c.json({ success: true, data: formatted, pagination: { totalPages: 1 } });
   } catch {
@@ -4714,7 +4725,28 @@ app.get('/api/public/search', async (c) => {
       ? await c.env.DB.prepare(query).bind(...params).all()
       : await c.env.DB.prepare(query).all();
 
-    const formatted = (jobs.results || []).map(formatJobResponse);
+    let appMap = new Map<string, string>();
+    try {
+      const decoded = await getAuthUser(c);
+      if (decoded?.userId) {
+        const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+        if (profile) {
+          const apps = await c.env.DB.prepare('SELECT jobPostingId, status FROM "Application" WHERE jobSeekerProfileId = ?').bind(profile.id).all();
+          appMap = new Map((apps.results || []).map((a: any) => [a.jobPostingId, a.status]));
+        }
+      }
+    } catch {}
+
+    const formatted = (jobs.results || []).map((j: any) => {
+      const base = formatJobResponse(j);
+      const appStatus = appMap.get(j.id);
+      return {
+        ...base,
+        hasApplied: Boolean(appStatus),
+        applicationStatus: appStatus || null,
+      };
+    });
+
     return c.json({
       success: true,
       data: formatted,

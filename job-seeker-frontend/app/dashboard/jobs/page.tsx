@@ -81,9 +81,31 @@ function JobsContent() {
     }
   }, []);
 
+  const [appliedJobMap, setAppliedJobMap] = useState<Map<string, string>>(new Map());
+
+  // Fetch applied job IDs on mount
+  const fetchAppliedJobs = useCallback(async () => {
+    try {
+      const res = await api.get('/jobseeker/applications');
+      if (res.data.success && Array.isArray(res.data.data)) {
+        const map = new Map<string, string>();
+        res.data.data.forEach((app: any) => {
+          const jobId = app.jobPostingId || app.jobId || app.jobDetails?.id;
+          if (jobId) {
+            map.set(jobId, app.status || app.currentStage || 'applied');
+          }
+        });
+        setAppliedJobMap(map);
+      }
+    } catch (e) {
+      console.error('Failed to load applied job IDs:', e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchSavedJobIds();
-  }, [fetchSavedJobIds]);
+    fetchAppliedJobs();
+  }, [fetchSavedJobIds, fetchAppliedJobs]);
 
   // Fetch data when activeTab, page, drop-down filters, or location string changes
   useEffect(() => {
@@ -205,9 +227,13 @@ function JobsContent() {
   };
 
   const handleApplicationSuccess = () => {
+    if (selectedJob?.id) {
+      setAppliedJobMap((prev) => new Map(prev).set(selectedJob.id, 'applied'));
+    }
     setShowApplicationModal(false);
     setSelectedJob(null);
     fetchJobs(); 
+    fetchAppliedJobs();
   };
 
   const calculateDaysAgo = (date: string) => {
@@ -390,7 +416,8 @@ function JobsContent() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
             {jobs.map((job) => {
-              const hasApplied = job.hasApplied === true;
+              const hasApplied = job.hasApplied === true || appliedJobMap.has(job.id);
+              const applicationStatus = job.applicationStatus || appliedJobMap.get(job.id);
               const isSaved = savedJobIds.has(job.id);
               
               return (
@@ -533,11 +560,11 @@ function JobsContent() {
                     {hasApplied ? (
                       <button
                         disabled
-                        onClick={(e) => e.preventDefault()}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                         className="w-full py-2 bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#86868b] rounded-2xl text-xs font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed shadow-xs"
                       >
                         <CheckCircle2 size={13} className="text-[#34c759]" />
-                        <span>{formatStatusLabel(job.applicationStatus)}</span>
+                        <span className="capitalize">{applicationStatus === 'applied' ? 'Applied' : formatStatusLabel(applicationStatus || 'Applied')}</span>
                       </button>
                     ) : (
                       <button
