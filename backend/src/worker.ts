@@ -4255,13 +4255,56 @@ app.get('/api/public/plans', async (c) => {
   }
 });
 
+const formatJobResponse = (j: any) => {
+  if (!j) return null;
+  let parsedSkills = [];
+  try {
+    parsedSkills = typeof j.skills === 'string' ? JSON.parse(j.skills || '[]') : (j.skills || []);
+  } catch {
+    parsedSkills = typeof j.skills === 'string' ? j.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+  }
+
+  let parsedRequirements = [];
+  try {
+    parsedRequirements = typeof j.requirements === 'string' ? JSON.parse(j.requirements || '[]') : (j.requirements || []);
+  } catch {
+    parsedRequirements = typeof j.requirements === 'string' ? j.requirements.split('\n').map((s: string) => s.trim()).filter(Boolean) : [];
+  }
+
+  return {
+    ...j,
+    skills: parsedSkills,
+    requirements: parsedRequirements,
+    company: {
+      id: j.companyId,
+      name: j.companyName || j.company_name || 'Hiring Organization',
+      logoUrl: j.companyLogoUrl || j.company_logo || null,
+      industry: j.companyIndustry || j.industry || 'Technology',
+      verificationBadge: j.verificationBadge || null,
+    }
+  };
+};
+
 app.get('/api/public/search', async (c) => {
   try {
-    const jobs = await c.env.DB.prepare('SELECT * FROM "JobPosting" WHERE status = ? ORDER BY createdAt DESC LIMIT 50').bind('active').all();
+    const { search, jobType, locationType, location, page } = c.req.query();
+    let query = 'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.status = \'active\'';
+    const params: any[] = [];
+    if (search) { query += ' AND (j.title LIKE ? OR j.description LIKE ? OR c.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+    if (jobType && jobType !== 'all') { query += ' AND j.jobType = ?'; params.push(jobType); }
+    if (locationType && locationType !== 'all') { query += ' AND j.locationType = ?'; params.push(locationType); }
+    if (location) { query += ' AND j.location LIKE ?'; params.push(`%${location}%`); }
+    query += ' ORDER BY j.createdAt DESC LIMIT 50';
+
+    const jobs = params.length
+      ? await c.env.DB.prepare(query).bind(...params).all()
+      : await c.env.DB.prepare(query).all();
+
+    const formatted = (jobs.results || []).map(formatJobResponse);
     return c.json({
       success: true,
-      data: jobs.results,
-      pagination: { totalPages: 1, total: jobs.results.length },
+      data: formatted,
+      pagination: { totalPages: 1, total: formatted.length },
     });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
@@ -4302,12 +4345,13 @@ app.get('/api/public/companies/:identifier', async (c) => {
 app.get('/api/public/companies/:identifier/jobs', async (c) => {
   try {
     const { identifier } = c.req.param();
-    const company: any = await c.env.DB.prepare('SELECT id FROM "Company" WHERE id = ? OR name = ?').bind(identifier, identifier).first();
+    const company: any = await c.env.DB.prepare('SELECT id, name, logoUrl, industry, verificationBadge FROM "Company" WHERE id = ? OR name = ?').bind(identifier, identifier).first();
     if (!company) return c.json({ success: true, data: [] });
     const jobs = await c.env.DB.prepare(
-      'SELECT * FROM "JobPosting" WHERE companyId = ? AND status = ? ORDER BY createdAt DESC LIMIT 50'
+      'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.companyId = ? AND j.status = ? ORDER BY j.createdAt DESC LIMIT 50'
     ).bind(company.id, 'active').all();
-    return c.json({ success: true, data: jobs.results });
+    const formatted = (jobs.results || []).map(formatJobResponse);
+    return c.json({ success: true, data: formatted });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
@@ -4318,14 +4362,15 @@ app.get('/api/public/jobs', async (c) => {
     const { search, jobType, locationType, page } = c.req.query();
     let query = 'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.status = \'active\'';
     const params: any[] = [];
-    if (search) { query += ' AND (j.title LIKE ? OR j.description LIKE ?)'; params.push(`%${search}%`, `%${search}%`); }
-    if (jobType) { query += ' AND j.jobType = ?'; params.push(jobType); }
-    if (locationType) { query += ' AND j.locationType = ?'; params.push(locationType); }
+    if (search) { query += ' AND (j.title LIKE ? OR j.description LIKE ? OR c.name LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+    if (jobType && jobType !== 'all') { query += ' AND j.jobType = ?'; params.push(jobType); }
+    if (locationType && locationType !== 'all') { query += ' AND j.locationType = ?'; params.push(locationType); }
     query += ' ORDER BY j.createdAt DESC LIMIT 50';
     const jobs = params.length
       ? await c.env.DB.prepare(query).bind(...params).all()
       : await c.env.DB.prepare(query).all();
-    return c.json({ success: true, data: jobs.results, pagination: { totalPages: 1, total: jobs.results.length } });
+    const formatted = (jobs.results || []).map(formatJobResponse);
+    return c.json({ success: true, data: formatted, pagination: { totalPages: 1, total: formatted.length } });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
@@ -4338,7 +4383,7 @@ app.get('/api/public/jobs/:id', async (c) => {
       'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.id = ?'
     ).bind(id).first();
     if (!job) return c.json({ success: false, message: 'Job not found' }, 404);
-    return c.json({ success: true, data: job });
+    return c.json({ success: true, data: formatJobResponse(job) });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -4352,7 +4397,7 @@ app.get('/api/public/:jobId', async (c) => {
       'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.id = ?'
     ).bind(jobId).first();
     if (!job) return c.json({ success: false, message: 'Job not found' }, 404);
-    return c.json({ success: true, data: job });
+    return c.json({ success: true, data: formatJobResponse(job) });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }

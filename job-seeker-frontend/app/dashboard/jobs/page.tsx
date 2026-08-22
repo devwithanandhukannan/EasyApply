@@ -401,10 +401,10 @@ function JobsContent() {
                 >
                   <div className="flex items-start justify-between gap-3 mb-4">
                     <div className="flex items-center gap-3 min-w-0">
-                      {job.company.logoUrl ? (
+                      {job.company?.logoUrl ? (
                         <img
                           src={job.company.logoUrl}
-                          alt={job.company.name}
+                          alt={job.company?.name || 'Company'}
                           className="w-10 h-10 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] object-cover shrink-0 shadow-xs"
                         />
                       ) : (
@@ -413,13 +413,13 @@ function JobsContent() {
                         </div>
                       )}
                       <div className="min-w-0">
-                        <h3 className="text-[#1d1d1f] dark:text-white text-xs font-bold truncate group-hover:text-[#0071e3] transition-colors">{job.company.name}</h3>
-                        <p className="text-[10px] text-[#86868b] truncate mt-0.5 uppercase tracking-wide font-semibold">{job.company.industry || 'Technology'}</p>
+                        <h3 className="text-[#1d1d1f] dark:text-white text-xs font-bold truncate group-hover:text-[#0071e3] transition-colors">{job.company?.name || 'Company'}</h3>
+                        <p className="text-[10px] text-[#86868b] truncate mt-0.5 uppercase tracking-wide font-semibold">{job.company?.industry || 'Technology'}</p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {job.company.verificationBadge === 'verified' && (
+                      {job.company?.verificationBadge === 'verified' && (
                         <span className="shrink-0 text-[9px] font-bold text-[#34c759] bg-[#34c759]/10 border border-[#34c759]/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                           Verified
                         </span>
@@ -658,7 +658,7 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
       if (response.data.success) {
         showToast(
           'Application Submitted',
-          `Successfully applied for ${job.title} at ${job.company.name}.`,
+          `Successfully applied for ${job.title} at ${job.company?.name || 'Company'}.`,
           'success'
         );
         onSuccess();
@@ -686,7 +686,7 @@ function ApplicationModal({ job, onClose, onSuccess }: { job: any; onClose: () =
         <div className="p-5 border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between bg-[#f2f2f7]/40 dark:bg-[#2c2c2e]/40">
           <div>
             <h2 className="text-base font-bold tracking-tight text-[#1d1d1f] dark:text-[#f5f5f7]">Submit Application</h2>
-            <p className="text-xs text-[#86868b] mt-0.5 font-medium">{job.title} — {job.company.name}</p>
+            <p className="text-xs text-[#86868b] mt-0.5 font-medium">{job.title} — {job.company?.name || 'Company'}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white flex items-center justify-center transition-colors cursor-pointer">
             <X size={15} />
