@@ -3390,20 +3390,34 @@ app.delete('/api/jobseeker/resumes/:id', async (c) => {
   }
 });
 
+function cleanAscii(str: string): string {
+  return (str || '')
+    .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, '')
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/[\u00B7]/g, '|')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&middot;/g, '|')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
 function escapePdf(str: string): string {
-  return str.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  return cleanAscii(str).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
 }
 
 function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
   const pageWidth = 595.28;
   const pageHeight = 841.89;
-  const marginX = 45;
+  const marginX = 42;
   const contentWidth = pageWidth - marginX * 2;
 
   const pages: string[][] = [[]];
   let curPage = 0;
-  let curY = 795;
-  const minY = 50;
+  let curY = 800;
+  const minY = 45;
 
   const pushOp = (op: string) => {
     pages[curPage].push(op);
@@ -3413,7 +3427,7 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
     if (curY - neededHeight < minY) {
       pages.push([]);
       curPage++;
-      curY = 795;
+      curY = 800;
     }
   };
 
@@ -3423,21 +3437,27 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
   };
 
   const drawCentered = (text: string, font: string, size: number, y: number) => {
-    const factor = font === 'F2' ? 0.55 : 0.5;
+    const factor = font === 'F2' ? 0.53 : 0.47;
     const estW = Math.min(contentWidth, text.length * size * factor);
     const x = Math.max(marginX, (pageWidth - estW) / 2);
     drawText(text, font, size, x, y);
   };
 
   const drawLine = (y: number) => {
-    pushOp(`q 0.5 0.5 0.5 RG 0.75 w ${marginX} ${y.toFixed(2)} m ${pageWidth - marginX} ${y.toFixed(2)} l S Q`);
+    pushOp(`q 0.2 0.2 0.2 RG 0.85 w ${marginX} ${y.toFixed(2)} m ${pageWidth - marginX} ${y.toFixed(2)} l S Q`);
   };
 
-  const drawParagraph = (text: string, font = 'F1', size = 9.5, lineHeight = 13, isBullet = false) => {
-    const clean = text.replace(/[\r\n]+/g, ' ').trim();
+  const drawBulletPoint = (x: number, y: number) => {
+    pushOp(`q 0.1 0.1 0.1 rg ${(x).toFixed(2)} ${(y + 3.2).toFixed(2)} 2.2 2.2 re f Q`);
+  };
+
+  const drawParagraph = (text: string, font = 'F1', size = 10, lineHeight = 13.5, isBullet = false) => {
+    const clean = cleanAscii(text).replace(/[\r\n]+/g, ' ').trim();
     if (!clean) return;
 
-    const charsPerLine = Math.floor(contentWidth / (size * (font === 'F2' ? 0.55 : 0.5)));
+    const leftMargin = isBullet ? marginX + 12 : marginX;
+    const paragraphWidth = pageWidth - leftMargin - marginX;
+    const charsPerLine = Math.floor(paragraphWidth / (size * (font === 'F2' ? 0.52 : 0.46)));
     const words = clean.split(' ');
     let line = '';
     let isFirst = true;
@@ -3446,9 +3466,10 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
       if ((line + ' ' + w).trim().length > charsPerLine) {
         checkPageBreak(lineHeight);
         curY -= lineHeight;
-        const indent = isBullet ? (isFirst ? 0 : 10) : 0;
-        const prefix = (isBullet && isFirst) ? '• ' : '';
-        drawText(prefix + line.trim(), font, size, marginX + indent, curY);
+        if (isBullet && isFirst) {
+          drawBulletPoint(marginX + 2, curY);
+        }
+        drawText(line.trim(), font, size, leftMargin, curY);
         line = w;
         isFirst = false;
       } else {
@@ -3458,16 +3479,17 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
     if (line.trim()) {
       checkPageBreak(lineHeight);
       curY -= lineHeight;
-      const indent = isBullet ? (isFirst ? 0 : 10) : 0;
-      const prefix = (isBullet && isFirst) ? '• ' : '';
-      drawText(prefix + line.trim(), font, size, marginX + indent, curY);
+      if (isBullet && isFirst) {
+        drawBulletPoint(marginX + 2, curY);
+      }
+      drawText(line.trim(), font, size, leftMargin, curY);
     }
   };
 
   const drawHeading = (heading: string) => {
     checkPageBreak(28);
     curY -= 16;
-    drawText(heading.toUpperCase(), 'F2', 11, marginX, curY);
+    drawText(heading.toUpperCase(), 'F2', 11.5, marginX, curY);
     curY -= 4;
     drawLine(curY);
     curY -= 6;
@@ -3483,15 +3505,15 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
   const portfolio = parsed.contact?.portfolio || parsed.portfolio || parsed.basicInfo?.portfolio || '';
   const summary = parsed.summary || parsed.bio || parsed.basicInfo?.bio || '';
 
-  checkPageBreak(30);
-  curY -= 20;
-  drawCentered(fullName, 'F2', 18, curY);
+  checkPageBreak(32);
+  curY -= 22;
+  drawCentered(fullName.toUpperCase(), 'F2', 18, curY);
 
   const contacts = [email, phone, location, linkedin, github, portfolio].filter(Boolean);
   if (contacts.length > 0) {
     checkPageBreak(16);
     curY -= 14;
-    drawCentered(contacts.join('  •  '), 'F1', 9, curY);
+    drawCentered(contacts.join('   |   '), 'F1', 9.5, curY);
   }
 
   curY -= 6;
@@ -3500,7 +3522,7 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
 
   if (summary) {
     drawHeading('Professional Summary');
-    drawParagraph(summary, 'F1', 9.5, 13);
+    drawParagraph(summary, 'F1', 10, 13.5);
   }
 
   const skillsList = Array.isArray(parsed.skills)
@@ -3508,7 +3530,7 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
     : (typeof parsed.skills === 'string' ? parsed.skills : '');
   if (skillsList) {
     drawHeading('Technical Skills');
-    drawParagraph(skillsList, 'F1', 9.5, 13);
+    drawParagraph(skillsList, 'F1', 10, 13.5);
   }
 
   const experiences = Array.isArray(parsed.experience) ? parsed.experience : [];
@@ -3518,15 +3540,15 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
       const role = exp.role || exp.title || exp.position || 'Software Engineer';
       const company = exp.company || exp.organization || 'Company';
       const duration = exp.duration || `${exp.startYear || ''} - ${exp.endYear || (exp.current ? 'Present' : '')}`.replace(/^- | - $/g, '');
-      const headerLine = `${role} — ${company}${duration ? ` (${duration})` : ''}`;
+      const headerLine = `${role}  |  ${company}${duration ? `  (${duration})` : ''}`;
       
       checkPageBreak(18);
       curY -= 14;
-      drawText(headerLine, 'F2', 10, marginX, curY);
+      drawText(headerLine, 'F2', 10.5, marginX, curY);
 
       const bullets = Array.isArray(exp.bullets) ? exp.bullets : (exp.description ? exp.description.split('\n').filter(Boolean) : []);
       for (const b of bullets) {
-        drawParagraph(b.replace(/^[•\-\*]\s*/, ''), 'F1', 9, 12, true);
+        drawParagraph(b.replace(/^[•\-\*]\s*/, ''), 'F1', 9.5, 13, true);
       }
       curY -= 4;
     }
@@ -3537,16 +3559,16 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
     drawHeading('Featured Projects');
     for (const proj of projects) {
       const name = proj.name || proj.title || 'Project';
-      const tech = Array.isArray(proj.technologies) ? proj.technologies.join(', ') : (proj.technologies || '');
+      const tech = Array.isArray(proj.technologies) ? proj.technologies.join(', ') : (Array.isArray(proj.techStack) ? proj.techStack.join(', ') : (proj.technologies || ''));
       const link = proj.githubLink || proj.liveLink || proj.link || '';
-      const headerLine = `${name}${tech ? ` (${tech})` : ''}${link ? ` — ${link}` : ''}`;
+      const headerLine = `${name}${tech ? ` (${tech})` : ''}${link ? `  |  ${link}` : ''}`;
       
       checkPageBreak(18);
       curY -= 14;
-      drawText(headerLine, 'F2', 10, marginX, curY);
+      drawText(headerLine, 'F2', 10.5, marginX, curY);
 
       if (proj.description) {
-        drawParagraph(proj.description, 'F1', 9, 12, true);
+        drawParagraph(proj.description, 'F1', 9.5, 13, true);
       }
       curY -= 4;
     }
@@ -3560,15 +3582,15 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
       const degree = edu.degree || 'Degree';
       const field = edu.field || edu.major || '';
       const duration = edu.duration || `${edu.startYear || ''} - ${edu.endYear || ''}`.replace(/^- | - $/g, '');
-      const cgpa = edu.cgpa || edu.gpa ? ` | CGPA: ${edu.cgpa || edu.gpa}` : '';
-      const headerLine = `${institution} — ${degree}${field ? ` in ${field}` : ''}${cgpa}${duration ? ` (${duration})` : ''}`;
+      const cgpa = edu.cgpa || edu.gpa ? `  |  CGPA: ${edu.cgpa || edu.gpa}` : '';
+      const headerLine = `${institution}  |  ${degree}${field ? ` in ${field}` : ''}${cgpa}${duration ? `  (${duration})` : ''}`;
 
       checkPageBreak(18);
       curY -= 14;
-      drawText(headerLine, 'F2', 10, marginX, curY);
+      drawText(headerLine, 'F2', 10.5, marginX, curY);
 
       if (edu.details || edu.description) {
-        drawParagraph(edu.details || edu.description, 'F1', 9, 12);
+        drawParagraph(edu.details || edu.description, 'F1', 9.5, 13);
       }
       curY -= 4;
     }
@@ -3581,7 +3603,7 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
       const name = typeof c === 'string' ? c : (c.name || c.title || '');
       const org = typeof c === 'string' ? '' : (c.organization || c.issuer || '');
       const date = typeof c === 'string' ? '' : (c.issueDate || c.year || '');
-      drawParagraph(`${name}${org ? ` — ${org}` : ''}${date ? ` (${date})` : ''}`, 'F1', 9, 12, true);
+      drawParagraph(`${name}${org ? `  |  ${org}` : ''}${date ? `  (${date})` : ''}`, 'F1', 9.5, 13, true);
     }
   }
 
@@ -3591,7 +3613,7 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
     for (const a of achievements) {
       const title = typeof a === 'string' ? a : (a.title || a.name || '');
       const desc = typeof a === 'string' ? '' : (a.description || '');
-      drawParagraph(`${title}${desc && desc !== title ? `: ${desc}` : ''}`, 'F1', 9, 12, true);
+      drawParagraph(`${title}${desc && desc !== title ? `: ${desc}` : ''}`, 'F1', 9.5, 13, true);
     }
   }
 
@@ -3603,8 +3625,8 @@ function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
 
   const objCatalog = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj`;
   const objPages = `2 0 obj\n<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pageCount} /MediaBox [0 0 595.28 841.89] >>\nendobj`;
-  const objF1 = `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj`;
-  const objF2 = `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj`;
+  const objF1 = `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>\nendobj`;
+  const objF2 = `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Times-Bold /Encoding /WinAnsiEncoding >>\nendobj`;
 
   const pageObjs: string[] = [];
   const contentObjs: string[] = [];

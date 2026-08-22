@@ -1523,46 +1523,73 @@ export default function ResumeEditorPage() {
     }
   }, [editor, id, resumeName, margins, showToast]);
 
-  // ─── High-Definition Vector PDF Print Preview (100% 1:1 Page Breaks) ──────
-  const handleExport = useCallback(async () => {
+  // ─── High-Definition Vector PDF Print Preview (100% 1:1 Page Breaks & Fonts) ──────
+  const handleExport = useCallback(() => {
     if (!editor) return;
-    setDownloadingPdf(true);
-    showToast('Rendering PDF', 'Preparing vector print preview with exact margins...', 'info');
-    try {
-      // 1. Save latest state
-      await updateResume(id, {
-        htmlContent: editor.getHTML(),
-        name: resumeName || undefined,
-        margins,
-        versionLabel: 'Before Print Preview',
-      });
-      setSaveState('saved');
-      setTimeout(() => setSaveState('idle'), 2500);
+    const html = editor.getHTML();
+    const safeName = (resumeName || 'Resume').trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume';
 
-      // 2. Fetch compiled vector PDF blob
-      const res = await api.get(`/jobseeker/resumes/${id}/download-uploaded`, {
-        responseType: 'blob',
-      });
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
 
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const pdfUrl = URL.createObjectURL(blob);
-      const win = window.open(pdfUrl, '_blank');
-      if (!win) {
-        showToast('Notice', 'Popup blocked. Triggering direct PDF download...', 'info');
-        const link = document.createElement('a');
-        link.href = pdfUrl;
-        link.download = `${(resumeName || 'Resume').trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume'}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    } catch (err: any) {
-      console.error('PDF print preview failed:', err);
-      showToast('Error', 'Failed to generate vector PDF preview', 'danger');
-    } finally {
-      setDownloadingPdf(false);
-    }
-  }, [editor, id, resumeName, margins, showToast]);
+    const doc = iframe.contentWindow?.document;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${safeName}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: ${margins.top}px ${margins.right}px ${margins.bottom}px ${margins.left}px;
+            }
+            body {
+              font-family: "Georgia", "Times New Roman", Times, serif;
+              font-size: 13px;
+              line-height: 1.35;
+              color: #000;
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            h1 { font-size: 22px; font-weight: bold; text-transform: uppercase; text-align: center; margin: 0 0 4px 0; letter-spacing: 0.5px; }
+            h2 { font-size: 13.5px; font-weight: bold; text-transform: uppercase; margin: 12px 0 3px 0; padding-bottom: 2px; border-bottom: 1px solid #000; letter-spacing: 0.5px; }
+            h3 { font-size: 13px; font-weight: bold; margin: 6px 0 2px 0; }
+            p { margin: 0 0 3px 0; }
+            ul { margin: 2px 0 4px 0; padding-left: 20px; list-style-type: disc; }
+            li { margin-bottom: 2px; }
+            hr { border: none; border-top: 1px solid #000; margin: 6px 0; }
+            span[style*="float: right"], span[style*="float:right"], .float-right { float: right !important; text-align: right !important; }
+            a { color: inherit; text-decoration: none; }
+          </style>
+        </head>
+        <body>
+          ${html}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe);
+        }
+      }, 1500);
+    }, 250);
+  }, [editor, resumeName, margins]);
 
   const SaveIcon = saveState === 'saving' ? Loader2 : saveState === 'saved' ? CheckCheck : saveState === 'error' ? AlertCircle : Save;
   const saveLabel = { idle: 'Save', saving: 'Saving…', saved: 'Saved', error: 'Error' }[saveState];
