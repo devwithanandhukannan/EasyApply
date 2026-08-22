@@ -37,7 +37,7 @@ export const getSettings = async (_req: Request, res: Response) => {
         emailFromName: s?.emailFromName ?? 'EasyApply',
         // Groq
         groqApiKey: maskSecret(s?.groqApiKey),
-        groqModel: s?.groqModel ?? process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b',
+        groqModel: s?.groqModel ?? process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile',
         // LiveKit
         livekitApiUrl: s?.livekitApiUrl ?? null,
         livekitApiKey: s?.livekitApiKey ?? null,

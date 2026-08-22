@@ -1,24 +1,58 @@
 import Groq from 'groq-sdk';
+import { getGroqKey, getGroqModel } from './platformSettings.service.ts';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-const DEFAULT_MODEL = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
-const FALLBACK_MODELS = [DEFAULT_MODEL, 'qwen/qwen3.6-27b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile'];
+const VALID_GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-8b-instant',
+  'mixtral-8x7b-32768',
+  'gemma2-9b-it',
+  'deepseek-r1-distill-llama-70b'
+];
 
-export async function createGroqChatCompletion(params: Groq.Chat.CompletionCreateParamsNonStreaming) {
-  const targetModel = params.model || DEFAULT_MODEL;
-  const modelsToTry = [targetModel, ...FALLBACK_MODELS.filter(m => m !== targetModel)];
+async function getGroqClient(): Promise<{ client: Groq; activeModel: string }> {
+  const apiKey = await getGroqKey();
+  const configuredModel = await getGroqModel();
+
+  // Clean invalid legacy model names
+  const activeModel = configuredModel && !configuredModel.includes('/') && !configuredModel.includes('gpt')
+    ? configuredModel
+    : 'llama-3.3-70b-versatile';
+
+  return {
+    client: new Groq({ apiKey: apiKey || process.env.GROQ_API_KEY || '' }),
+    activeModel
+  };
+}
+
+export async function createGroqChatCompletion(params: any) {
+  const { client, activeModel } = await getGroqClient();
+
+  // If params.model is invalid/legacy or missing, use activeModel
+  const requestedModel = params.model && !params.model.includes('/') && !params.model.includes('gpt')
+    ? params.model
+    : activeModel;
+
+  const modelsToTry = [
+    requestedModel,
+    ...VALID_GROQ_MODELS.filter(m => m !== requestedModel)
+  ];
+
   let lastError: any = null;
 
   for (const model of modelsToTry) {
     try {
-      return await groq.chat.completions.create({
+      return await client.chat.completions.create({
         ...params,
         model,
       });
     } catch (err: any) {
       lastError = err;
-      if (err?.status === 404 || err?.error?.error?.code === 'model_not_found' || err?.error?.code === 'model_not_found') {
-        console.warn(`[Groq AI] Model '${model}' not found or unavailable, attempting fallback model...`);
+      const status = err?.status || err?.statusCode;
+      const code = err?.error?.error?.code || err?.error?.code || err?.code;
+      const msg = err?.message || '';
+
+      if (status === 404 || status === 400 || code === 'model_not_found' || msg.includes('model')) {
+        console.warn(`[Groq AI] Model '${model}' call failed (${msg}), attempting fallback model...`);
         continue;
       }
       throw err;
@@ -27,7 +61,7 @@ export async function createGroqChatCompletion(params: Groq.Chat.CompletionCreat
   throw lastError;
 }
 
-const MODEL = DEFAULT_MODEL;
+const MODEL = 'llama-3.3-70b-versatile';
 
 const normalizeScores = (scores: any) => {
   if (!scores || typeof scores !== 'object') return {};

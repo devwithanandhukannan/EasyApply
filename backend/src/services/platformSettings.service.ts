@@ -47,7 +47,7 @@ export async function getGroqKey(): Promise<string> {
 
 export async function getGroqModel(): Promise<string> {
   const s = await getSettings();
-  return s?.groqModel ?? process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b';
+  return s?.groqModel ?? process.env.GROQ_MODEL ?? 'llama-3.3-70b-versatile';
 }
 
 export async function getLivekitConfig() {

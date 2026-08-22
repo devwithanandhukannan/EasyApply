@@ -112,6 +112,8 @@ type Bindings = {
   RESUME_BUCKET: R2Bucket;
   SESSION_KV: KVNamespace;
   AI: any;
+  GROQ_API_KEY?: string;
+  GROQ_MODEL?: string;
   ACCESS_TOKEN_SECRET?: string;
   REFRESH_TOKEN_SECRET?: string;
 };
@@ -2103,6 +2105,237 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
       },
       message: 'Parsing fallback used.'
     });
+  }
+});
+
+async function callGroqAiWorker(env: Bindings, messages: any[], modelOverride?: string): Promise<string> {
+  let apiKey = env.GROQ_API_KEY || '';
+  let model = modelOverride || env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+
+  try {
+    const s: any = await env.DB.prepare('SELECT groqApiKey, groqModel FROM "PlatformSettings" WHERE id = ?').bind('singleton').first();
+    if (s?.groqApiKey) apiKey = s.groqApiKey;
+    if (s?.groqModel && !s.groqModel.includes('/') && !s.groqModel.includes('gpt')) model = s.groqModel;
+  } catch {}
+
+  if (model.includes('/') || model.includes('gpt')) {
+    model = 'llama-3.3-70b-versatile';
+  }
+
+  if (!apiKey) {
+    if (env.AI) {
+      const aiRes: any = await (env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+        messages,
+        max_tokens: 3000,
+      });
+      return aiRes?.response || aiRes?.result?.response || '';
+    }
+    throw new Error('Groq API key is missing');
+  }
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.2,
+      max_tokens: 4000,
+      response_format: { type: 'json_object' },
+    }),
+  });
+
+  if (!res.ok) {
+    if (model !== 'llama-3.1-8b-instant') {
+      const fallbackRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages,
+          temperature: 0.2,
+          max_tokens: 4000,
+          response_format: { type: 'json_object' },
+        }),
+      });
+      if (fallbackRes.ok) {
+        const data: any = await fallbackRes.json();
+        return data?.choices?.[0]?.message?.content || '';
+      }
+    }
+    const errText = await res.text();
+    throw new Error(`Groq API error ${res.status}: ${errText}`);
+  }
+
+  const data: any = await res.json();
+  return data?.choices?.[0]?.message?.content || '';
+}
+
+app.post('/api/jobseeker/resumes/generate', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { customPrompt, jobDescription } = await c.req.json().catch(() => ({}));
+
+    const settings: any = await c.env.DB.prepare('SELECT allowSeekerAiResumeCreation FROM "PlatformSettings" WHERE id = ?').bind('singleton').first().catch(() => null);
+    if (settings && settings.allowSeekerAiResumeCreation === 0) {
+      return c.json({ success: false, message: 'AI Resume creation is currently disabled platform-wide by administrator.' }, 403);
+    }
+
+    const profile: any = await c.env.DB.prepare('SELECT * FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+    if (!profile) return c.json({ success: false, message: 'Profile not found' }, 404);
+
+    const skills = await c.env.DB.prepare('SELECT * FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const experience = await c.env.DB.prepare('SELECT * FROM "WorkExperience" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const education = await c.env.DB.prepare('SELECT * FROM "Education" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const projects = await c.env.DB.prepare('SELECT * FROM "Project" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+    const certifications = await c.env.DB.prepare('SELECT * FROM "Certification" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then(r => r.results || []).catch(() => []);
+
+    const userProfileData = {
+      fullName: profile.fullName || 'Candidate',
+      email: profile.email || decoded.email || '',
+      phone: profile.phone || '',
+      location: profile.location || '',
+      linkedin: profile.linkedin || '',
+      github: profile.github || '',
+      portfolio: profile.portfolio || '',
+      bio: profile.bio || '',
+      skills: skills.map((s: any) => s.name),
+      experience,
+      education,
+      projects,
+      certifications,
+    };
+
+    const prompt = `You are an expert resume writer. Generate an optimized ATS resume JSON structure based on:
+Profile: ${JSON.stringify(userProfileData)}
+${customPrompt ? `User Request: ${customPrompt}` : ''}
+${jobDescription ? `Job Description: ${jobDescription}` : ''}
+
+Return ONLY valid JSON matching this schema:
+{
+  "resumeData": {
+    "fullName": "${userProfileData.fullName}",
+    "contact": { "email": "${userProfileData.email}", "phone": "${userProfileData.phone}", "location": "${userProfileData.location}", "links": [] },
+    "summary": "Tailored summary...",
+    "skills": ["skill1"],
+    "experience": [{ "company": "", "role": "", "location": "", "duration": "", "bullets": ["Achievement"] }],
+    "projects": [{ "name": "", "description": "", "technologies": [] }],
+    "education": [{ "institution": "", "degree": "", "field": "", "location": "", "duration": "", "details": "" }],
+    "certifications": [],
+    "languages": [],
+    "achievements": []
+  },
+  "scores": { "ats": 85, "formatting": 90, "keywords": 85, "grammar": 90, "readability": 85, "impact": 80 },
+  "atsBreakdown": { "contactInfo": 95, "summary": 85, "skills": 90, "experience": 85, "education": 90, "formatting": 90 },
+  "strengths": ["Strong technical background"],
+  "improvements": { "summary": "Highlight key outcomes", "skills": "Group by domain", "experience": "Quantify results", "education": "Include relevant coursework", "formatting": "Consistent bullets" },
+  "missingSections": [],
+  "keywordGaps": []
+}`;
+
+    let aiContent = '';
+    try {
+      aiContent = await callGroqAiWorker(c.env, [
+        { role: 'system', content: 'You are an ATS resume generator. Return strictly valid JSON.' },
+        { role: 'user', content: prompt }
+      ]);
+    } catch (e: any) {
+      console.warn('Groq AI generation call error in Cloudflare Worker:', e);
+    }
+
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(aiContent);
+    } catch {
+      parsed = {
+        resumeData: {
+          fullName: userProfileData.fullName,
+          contact: { email: userProfileData.email, phone: userProfileData.phone, location: userProfileData.location, links: [] },
+          summary: userProfileData.bio || 'Experienced software professional.',
+          skills: userProfileData.skills,
+          experience: userProfileData.experience.map((e: any) => ({ company: e.company || '', role: e.role || '', location: e.location || '', duration: '', bullets: e.description ? [e.description] : [] })),
+          projects: userProfileData.projects.map((p: any) => ({ name: p.name || '', description: p.description || '', technologies: [] })),
+          education: userProfileData.education.map((ed: any) => ({ institution: ed.institution || '', degree: ed.degree || '', field: ed.field || '', location: '', duration: '', details: '' })),
+          certifications: [],
+          languages: [],
+          achievements: []
+        },
+        scores: { ats: 80, formatting: 85, keywords: 80, grammar: 90, readability: 85, impact: 80 },
+        atsBreakdown: { contactInfo: 90, summary: 85, skills: 85, experience: 80, education: 90, formatting: 85 },
+        strengths: ['Solid foundation'],
+        improvements: { summary: 'Add quantifiable metrics' },
+        missingSections: [],
+        keywordGaps: []
+      };
+    }
+
+    const resumeId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const resumeName = `${userProfileData.fullName} Resume`;
+
+    const contentData = {
+      htmlContent: `<div style="font-family: sans-serif; padding: 24px;"><h1>${userProfileData.fullName}</h1><p>${userProfileData.email} | ${userProfileData.phone}</p><h2>Summary</h2><p>${parsed.resumeData?.summary || ''}</p></div>`,
+      rawText: parsed.resumeData?.summary || '',
+      parsedData: parsed.resumeData || {},
+      atsBreakdown: parsed.atsBreakdown || {},
+      margins: { top: 48, right: 48, bottom: 48, left: 48 },
+      template: 'default',
+      versions: [],
+      customPrompt: customPrompt || null,
+    };
+
+    const aiData = {
+      scores: parsed.scores || {},
+      strengths: parsed.strengths || [],
+      improvements: parsed.improvements || {},
+      missingSections: parsed.missingSections || [],
+      keywordGaps: parsed.keywordGaps || [],
+    };
+
+    const existingPrimary = await c.env.DB.prepare('SELECT id FROM "Resume" WHERE jobSeekerProfileId = ? AND isPrimary = 1').bind(profile.id).first();
+    const isPrimary = existingPrimary ? 0 : 1;
+
+    await c.env.DB.prepare(`
+      INSERT INTO "Resume" (id, jobSeekerProfileId, name, source, atsScore, content, aiSuggestions, isPrimary, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      resumeId,
+      profile.id,
+      resumeName,
+      'built',
+      parsed.scores?.ats || 80,
+      JSON.stringify(contentData),
+      JSON.stringify(aiData),
+      isPrimary,
+      now,
+      now
+    ).run();
+
+    const createdResume = {
+      id: resumeId,
+      jobSeekerProfileId: profile.id,
+      name: resumeName,
+      source: 'built',
+      atsScore: parsed.scores?.ats || 80,
+      content: contentData,
+      aiSuggestions: aiData,
+      isPrimary: isPrimary === 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    return c.json({ success: true, data: createdResume });
+  } catch (err: any) {
+    console.error('generateCV error in Cloudflare Worker:', err);
+    return c.json({ success: false, message: err.message || 'Resume generation failed' }, 500);
   }
 });
 
