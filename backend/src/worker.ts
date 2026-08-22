@@ -3476,10 +3476,7 @@ app.get('/api/jobseeker/saved-jobs', async (c) => {
       'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge, s.createdAt as savedAt FROM "SavedJob" s JOIN "JobPosting" j ON s.jobPostingId = j.id JOIN "Company" c ON j.companyId = c.id WHERE s.jobSeekerProfileId = ? ORDER BY s.createdAt DESC'
     ).bind(profile.id).all();
 
-    const formatted = (jobs.results || []).map((j: any) => ({
-      ...j,
-      requiredSkills: typeof j.requiredSkills === 'string' ? JSON.parse(j.requiredSkills || '[]') : (j.requiredSkills || []),
-    }));
+    const formatted = (jobs.results || []).map(formatJobResponse);
 
     return c.json({ success: true, data: formatted, pagination: { totalPages: 1 } });
   } catch {
@@ -3585,13 +3582,66 @@ app.post('/api/jobseeker/applications/apply', async (c) => {
   try {
     const decoded = await getAuthUser(c);
     if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
-    const body = await c.req.json().catch(() => ({}));
-    const { jobPostingId, resumeId } = body;
+
+    let jobPostingId = '';
+    let resumeId: string | null = null;
+    let applyWithNew = false;
+    let newResumeFile: File | null = null;
+
+    const contentType = c.req.header('content-type') || '';
+    if (contentType.includes('multipart/form-data') || contentType.includes('application/x-www-form-urlencoded')) {
+      const formData = await c.req.formData().catch(() => null);
+      if (formData) {
+        jobPostingId = (formData.get('jobPostingId') as string) || (formData.get('jobId') as string) || '';
+        resumeId = (formData.get('resumeId') as string) || null;
+        applyWithNew = formData.get('applyWithNew') === 'true';
+        newResumeFile = formData.get('newResume') as File | null;
+      }
+    } else {
+      const body = await c.req.json().catch(() => ({}));
+      jobPostingId = body.jobPostingId || body.jobId || '';
+      resumeId = body.resumeId || null;
+      applyWithNew = Boolean(body.applyWithNew);
+    }
+
     if (!jobPostingId) return c.json({ success: false, message: 'Job posting ID required' }, 400);
 
     const now = new Date().toISOString();
-    const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+    const profile: any = await c.env.DB.prepare('SELECT id, fullName, email FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
     if (!profile) return c.json({ success: false, message: 'Complete your profile first.' }, 400);
+
+    // If applying with a new uploaded file, upload and create a Resume record
+    if (applyWithNew && newResumeFile) {
+      const newResumeId = crypto.randomUUID();
+      const fileName = newResumeFile.name || 'Uploaded Resume';
+      let rawText = '';
+      try {
+        const buffer = await newResumeFile.arrayBuffer();
+        if (fileName.toLowerCase().endsWith('.pdf')) {
+          rawText = extractPdfTextPure(buffer);
+        } else {
+          rawText = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
+        }
+      } catch {}
+
+      const contentData = {
+        rawText: rawText.slice(0, 3000),
+        fileName,
+        parsedData: { summary: rawText.slice(0, 500) },
+      };
+
+      await c.env.DB.prepare(
+        'INSERT INTO "Resume" (id, jobSeekerProfileId, name, source, filePath, isPrimary, atsScore, content, aiSuggestions, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, 0, 75, ?, ?, ?, ?)'
+      ).bind(newResumeId, profile.id, fileName, 'uploaded', null, JSON.stringify(contentData), JSON.stringify({}), now, now).run();
+
+      resumeId = newResumeId;
+    }
+
+    // Fallback: If resumeId is still empty or 'default', find user's primary/latest resume
+    if (!resumeId || resumeId === 'default') {
+      const defaultRes: any = await c.env.DB.prepare('SELECT id FROM "Resume" WHERE jobSeekerProfileId = ? ORDER BY isPrimary DESC, updatedAt DESC LIMIT 1').bind(profile.id).first();
+      resumeId = defaultRes?.id || null;
+    }
 
     const existing = await c.env.DB.prepare('SELECT id FROM "Application" WHERE jobSeekerProfileId = ? AND jobPostingId = ?').bind(profile.id, jobPostingId).first();
     if (existing) return c.json({ success: false, message: 'You have already applied to this job.' }, 409);
@@ -3606,6 +3656,9 @@ app.post('/api/jobseeker/applications/apply', async (c) => {
     await c.env.DB.prepare(
       'INSERT INTO "ApplicationHistory" (id, applicationId, toStatus, changedBy, changedByType, notes, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).bind(histId, appId, 'applied', 'Applicant', 'user', 'Applied to position', now).run().catch(() => {});
+
+    // Update applicant count on JobPosting if column exists
+    await c.env.DB.prepare('UPDATE "JobPosting" SET totalApplications = COALESCE(totalApplications, 0) + 1 WHERE id = ?').bind(jobPostingId).run().catch(() => {});
 
     return c.json({ success: true, message: 'Application submitted successfully.', applicationId: appId });
   } catch (err: any) {
