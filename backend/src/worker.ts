@@ -1983,6 +1983,139 @@ app.delete('/api/crm/talent-pools/:poolId/members/:memberId', async (c) => {
   }
 });
 
+// ─── COMPANY TEAM WORKSPACE ENDPOINTS ─────────────────────
+app.get('/api/company/team', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: true, team: [], tags: [] });
+
+    const membersRes = await c.env.DB.prepare(
+      'SELECT m.*, u.mobileNumber, u.globalRoles, p.fullName, p.email as profileEmail, p.profilePhotoUrl FROM "TeamMember" m JOIN "User" u ON m.userId = u.id LEFT JOIN "JobSeekerProfile" p ON p.userId = u.id WHERE m.companyId = ? AND m.status = "active" ORDER BY m.createdAt ASC'
+    ).bind(decoded.companyId).all();
+
+    const members = (membersRes.results || []).map((m: any) => {
+      let permissions = m.permissions;
+      if (typeof permissions === 'string') {
+        try { permissions = JSON.parse(permissions); } catch {}
+      }
+      let tags = m.tags;
+      if (typeof tags === 'string') {
+        try { tags = JSON.parse(tags); } catch { tags = []; }
+      }
+
+      return {
+        id: m.id,
+        userId: m.userId,
+        name: m.fullName || m.profileEmail || m.mobileNumber || 'Team Member',
+        email: m.profileEmail || m.mobileNumber || '',
+        rolesMask: m.roles,
+        globalRolesMask: m.globalRoles,
+        permissions: permissions || null,
+        tags: Array.isArray(tags) ? tags : [],
+        status: m.status,
+        joinedAt: m.createdAt,
+        avatar: m.profilePhotoUrl || null,
+      };
+    });
+
+    const allTags = Array.from(new Set(members.flatMap((m: any) => m.tags || [])));
+
+    return c.json({ success: true, team: members, tags: allTags });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/company/team/invite', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const { email, roleType, permissions, tags } = await c.req.json().catch(() => ({}));
+    if (!email) return c.json({ success: false, message: 'Email is required' }, 400);
+
+    const normalizedEmail = String(email).toLowerCase().trim();
+    let bitwiseRole = 16; // COMPANY_VIEWER
+    if (roleType === 'admin') bitwiseRole = 2; // COMPANY_ADMIN
+    else if (roleType === 'hr' || roleType === 'recruiter') bitwiseRole = 4; // COMPANY_HR
+    else if (roleType === 'interviewer') bitwiseRole = 8; // COMPANY_INTERVIEWER
+
+    let existingUser: any = await c.env.DB.prepare('SELECT * FROM "User" WHERE mobileNumber = ?').bind(normalizedEmail).first();
+    let userId = existingUser?.id;
+    const now = new Date().toISOString();
+
+    if (!existingUser) {
+      userId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "User" (id, mobileNumber, globalRoles, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)'
+      ).bind(userId, normalizedEmail, bitwiseRole, now, now).run();
+    }
+
+    const memberId = crypto.randomUUID();
+    const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
+    const permJson = permissions ? JSON.stringify(permissions) : null;
+
+    await c.env.DB.prepare(
+      'INSERT INTO "TeamMember" (id, companyId, userId, roles, permissions, tags, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, "active", ?, ?) ON CONFLICT("companyId", "userId") DO UPDATE SET roles = excluded.roles, permissions = excluded.permissions, tags = excluded.tags, status = "active", updatedAt = excluded.updatedAt'
+    ).bind(memberId, decoded.companyId, userId, bitwiseRole, permJson, tagsJson, now, now).run();
+
+    return c.json({ success: true, message: `Team member added: ${normalizedEmail}` });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.put('/api/company/team/:memberId/role', async (c) => {
+  try {
+    const { memberId } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const { newRolesMask, permissions, tags } = await c.req.json().catch(() => ({}));
+    const now = new Date().toISOString();
+
+    const permJson = permissions !== undefined ? JSON.stringify(permissions) : undefined;
+    const tagsJson = tags !== undefined ? JSON.stringify(Array.isArray(tags) ? tags : []) : undefined;
+
+    let updateSql = 'UPDATE "TeamMember" SET updatedAt = ?';
+    const params: any[] = [now];
+
+    if (newRolesMask !== undefined) {
+      updateSql += ', roles = ?';
+      params.push(Number(newRolesMask));
+    }
+    if (permJson !== undefined) {
+      updateSql += ', permissions = ?';
+      params.push(permJson);
+    }
+    if (tagsJson !== undefined) {
+      updateSql += ', tags = ?';
+      params.push(tagsJson);
+    }
+
+    updateSql += ' WHERE id = ? AND companyId = ?';
+    params.push(memberId, decoded.companyId);
+
+    await c.env.DB.prepare(updateSql).bind(...params).run();
+    return c.json({ success: true, message: 'Team member updated' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.delete('/api/company/team/:memberId', async (c) => {
+  try {
+    const { memberId } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    await c.env.DB.prepare('DELETE FROM "TeamMember" WHERE id = ? AND companyId = ?').bind(memberId, decoded.companyId).run();
+    return c.json({ success: true, message: 'Team member removed' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+
 // ─── SEEKER DIRECT DISCOVERY ENDPOINTS ───────────────────
 const handleDiscoverySeekers = async (c: any) => {
   try {
