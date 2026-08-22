@@ -1,6 +1,6 @@
-/dashboard/jobs/* /dashboard/jobs/default.html 200
-/dashboard/resumes/editor/* /dashboard/resumes/editor/default.html 200
-/careers/*/jobs/* /careers/default/jobs/default.html 200
-/careers/* /careers/default.html 200
-/meet/* /meet/default.html 200
-/walkin/* /walkin/default.html 200
+/dashboard/jobs/* /dashboard/jobs/default 200
+/dashboard/resumes/editor/* /dashboard/resumes/editor/default 200
+/careers/*/jobs/* /careers/default/jobs/default 200
+/careers/* /careers/default 200
+/meet/* /meet/default 200
+/walkin/* /walkin/default 200

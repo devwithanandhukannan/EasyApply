@@ -1,7 +1,7 @@
-/dashboard/jobs/*/applicants/* /dashboard/jobs/default/applicants/default.html 200
-/dashboard/jobs/* /dashboard/jobs/default.html 200
-/dashboard/applications/* /dashboard/applications/default.html 200
-/dashboard/offers/* /dashboard/offers/default.html 200
-/dashboard/talent-pool/* /dashboard/talent-pool/default.html 200
-/dashboard/interviews/*/review /dashboard/interviews/default/review.html 200
-/meet/* /meet/default.html 200
+/dashboard/jobs/*/applicants/* /dashboard/jobs/default/applicants/default 200
+/dashboard/jobs/* /dashboard/jobs/default 200
+/dashboard/applications/* /dashboard/applications/default 200
+/dashboard/offers/* /dashboard/offers/default 200
+/dashboard/talent-pool/* /dashboard/talent-pool/default 200
+/dashboard/interviews/*/review /dashboard/interviews/default/review 200
+/meet/* /meet/default 200
