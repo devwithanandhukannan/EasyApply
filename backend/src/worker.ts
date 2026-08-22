@@ -5039,7 +5039,7 @@ app.get('/api/walkin/my-queues', async (c) => {
       ORDER BY q.createdAt DESC LIMIT 20
     `).bind(profile.id).all();
 
-    const formatted = (rawQueues.results || []).map((q: any, idx: number) => {
+    const formatted = await Promise.all((rawQueues.results || []).map(async (q: any, idx: number) => {
       let requiredSkills: string[] = [];
       try {
         if (typeof q.requiredSkills === 'string') {
@@ -5048,6 +5048,10 @@ app.get('/api/walkin/my-queues', async (c) => {
           requiredSkills = q.requiredSkills;
         }
       } catch {}
+
+      const queueCountRes: any = await c.env.DB.prepare(
+        'SELECT COUNT(*) as count FROM "WalkInQueueEntry" WHERE roomId = ? AND status IN ("waiting", "priority", "interviewing")'
+      ).bind(q.roomId).first().catch(() => ({ count: 0 }));
 
       return {
         id: q.id,
@@ -5059,6 +5063,7 @@ app.get('/api/walkin/my-queues', async (c) => {
         waitingSince: q.createdAt,
         queuePosition: idx + 1,
         room: {
+          id: q.roomId,
           title: q.roomTitle,
           roomCode: q.roomCode,
           livekitRoom: q.livekitRoom || `walkin-${q.roomCode}`,
@@ -5073,9 +5078,12 @@ app.get('/api/walkin/my-queues', async (c) => {
             isVerified: Boolean(q.isVerified || q.verificationBadge === 'verified'),
             verificationBadge: q.verificationBadge || 'verified',
           },
+          _count: {
+            queue: queueCountRes?.count || 0,
+          },
         },
       };
-    });
+    }));
 
     return c.json({ success: true, queues: formatted, data: formatted });
   } catch (err: any) {
