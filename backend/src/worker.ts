@@ -3648,8 +3648,8 @@ app.post('/api/jobseeker/applications/apply', async (c) => {
 
     const appId = crypto.randomUUID();
     await c.env.DB.prepare(
-      'INSERT INTO "Application" (id, jobSeekerProfileId, jobPostingId, resumeId, status, pipelineIndex, appliedAt, lastActivityAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(appId, profile.id, jobPostingId, resumeId || null, 'applied', 0, now, now, now, now).run();
+      'INSERT INTO "Application" (id, jobSeekerProfileId, jobPostingId, resumeId, status, pipelineIndex, appliedAt, lastActivityAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(appId, profile.id, jobPostingId, resumeId || null, 'applied', 0, now, now, now).run();
 
     // Log history
     const histId = crypto.randomUUID();
