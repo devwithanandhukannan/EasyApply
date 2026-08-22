@@ -1838,34 +1838,71 @@ app.post('/api/company/offers/create', async (c) => {
   }
 });
 
-app.get('/api/company/offers/templates', async (c) => {
+const handleGetOfferTemplates = async (c: any) => {
   try {
     const decoded = await getAuthUser(c);
     if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
     const tpls = await c.env.DB.prepare('SELECT * FROM "OfferTemplate" WHERE companyId = ? ORDER BY createdAt DESC').bind(decoded.companyId).all();
-    return c.json({ success: true, data: tpls.results || [] });
+    const formatted = (tpls.results || []).map((t: any) => {
+      let parsedContent = t.content;
+      if (typeof parsedContent === 'string') {
+        try { parsedContent = JSON.parse(parsedContent); } catch {}
+      }
+      return {
+        ...t,
+        content: parsedContent,
+        isDefault: Boolean(t.isDefault),
+        isActive: Boolean(t.isActive),
+      };
+    });
+    return c.json({ success: true, data: formatted });
   } catch {
     return c.json({ success: true, data: [] });
   }
-});
+};
 
-app.post('/api/company/offers/templates', async (c) => {
+const handleCreateOfferTemplate = async (c: any) => {
   try {
     const decoded = await getAuthUser(c);
     if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
-    const { name, content, isDefault } = await c.req.json().catch(() => ({}));
+    const { name, content, isDefault, isActive } = await c.req.json().catch(() => ({}));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await c.env.DB.prepare(
       'INSERT INTO "OfferTemplate" (id, companyId, name, content, isDefault, isActive, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(id, decoded.companyId, name || 'Custom Template', JSON.stringify(content || {}), isDefault ? 1 : 0, 1, now, now).run();
-    return c.json({ success: true, message: 'Template saved', templateId: id });
+    ).bind(id, decoded.companyId, name || 'Custom Template', JSON.stringify(content || {}), isDefault ? 1 : 0, isActive !== undefined ? (isActive ? 1 : 0) : 1, now, now).run();
+    return c.json({ success: true, message: 'Template saved', templateId: id, data: { id, name, content, isDefault, isActive: true } });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
-});
+};
 
-app.delete('/api/company/offers/templates/:id', async (c) => {
+const handleUpdateOfferTemplate = async (c: any) => {
+  try {
+    const { id } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const { name, content, isDefault, isActive } = await c.req.json().catch(() => ({}));
+    const now = new Date().toISOString();
+
+    const contentJson = content ? JSON.stringify(content) : undefined;
+    let updateSql = 'UPDATE "OfferTemplate" SET updatedAt = ?';
+    const params: any[] = [now];
+    if (name) { updateSql += ', name = ?'; params.push(name); }
+    if (contentJson !== undefined) { updateSql += ', content = ?'; params.push(contentJson); }
+    if (isDefault !== undefined) { updateSql += ', isDefault = ?'; params.push(isDefault ? 1 : 0); }
+    if (isActive !== undefined) { updateSql += ', isActive = ?'; params.push(isActive ? 1 : 0); }
+    updateSql += ' WHERE id = ? AND companyId = ?';
+    params.push(id, decoded.companyId);
+
+    await c.env.DB.prepare(updateSql).bind(...params).run();
+    return c.json({ success: true, message: 'Template updated' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleDeleteOfferTemplate = async (c: any) => {
   try {
     const { id } = c.req.param();
     const decoded = await getAuthUser(c);
@@ -1875,11 +1912,50 @@ app.delete('/api/company/offers/templates/:id', async (c) => {
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
-});
+};
 
-app.post('/api/company/offers/templates/generate-ai', async (c) => {
-  return c.json({ success: true, template: 'Standard Offer Template' });
-});
+const handleGenerateOfferTemplateAI = async (c: any) => {
+  try {
+    const { name, description } = await c.req.json().catch(() => ({}));
+    const standardContent = {
+      header: {
+        title: name || 'Offer of Employment',
+        companyName: 'Company Name',
+        date: new Date().toISOString().split('T')[0],
+      },
+      salutation: 'Dear {{candidateName}},',
+      body: `We are pleased to offer you the position of {{position}} in the {{department}} team at our organization. We were impressed by your skills and believe you will be a great addition to our team.\n\n${description || ''}`,
+      terms: {
+        salary: '{{salary}} {{currency}} per annum',
+        startDate: '{{startDate}}',
+        location: '{{location}}',
+        employmentType: '{{employmentType}}',
+      },
+      closing: 'We look forward to welcoming you aboard.\n\nSincerely,\nHuman Resources',
+    };
+    return c.json({
+      success: true,
+      data: {
+        name: name || 'Standard Template',
+        content: standardContent,
+      },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+app.get('/api/company/offers/templates', handleGetOfferTemplates);
+app.get('/api/offers/templates', handleGetOfferTemplates);
+app.post('/api/company/offers/templates', handleCreateOfferTemplate);
+app.post('/api/offers/templates', handleCreateOfferTemplate);
+app.put('/api/company/offers/templates/:id', handleUpdateOfferTemplate);
+app.put('/api/offers/templates/:id', handleUpdateOfferTemplate);
+app.delete('/api/company/offers/templates/:id', handleDeleteOfferTemplate);
+app.delete('/api/offers/templates/:id', handleDeleteOfferTemplate);
+app.post('/api/company/offers/templates/generate-ai', handleGenerateOfferTemplateAI);
+app.post('/api/offers/templates/generate-ai', handleGenerateOfferTemplateAI);
+
 
 app.get('/api/crm/talent-pools', async (c) => {
   try {
