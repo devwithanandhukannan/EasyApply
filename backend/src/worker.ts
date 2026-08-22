@@ -1346,6 +1346,90 @@ app.post('/api/company/jobs', async (c) => {
   }
 });
 
+app.post('/api/company/jobs/generate-description', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const {
+      roughDescription,
+      title,
+      department,
+      locationType,
+      experienceRequired,
+      skills,
+      salaryRange
+    } = body;
+
+    const inputDesc = roughDescription || body.description || '';
+    if (!inputDesc.trim() && !title?.trim()) {
+      return c.json({ success: false, message: 'Please enter a description or job title first' }, 400);
+    }
+
+    const skillsList = Array.isArray(skills) && skills.length > 0 ? skills.join(', ') : 'Not specified';
+    const jobTitle = title || 'Software Engineer';
+    const dept = department || 'Engineering';
+    const locType = locationType || 'Remote';
+    const exp = experienceRequired || 'Not specified';
+    const sal = salaryRange || 'Competitive';
+
+    const systemPrompt = `You are an expert technical recruiter and senior copywriter. Optimize and expand the rough job description into a highly engaging, professional markdown job posting.
+Create a comprehensive job description with these sections:
+1. **Role Overview**
+2. **Key Responsibilities**
+3. **Required Qualifications**
+4. **Preferred Qualifications**
+5. **What We Offer**
+Output ONLY the formatted job description text.`;
+
+    const userPrompt = `Target Job Context:
+- Job Title: ${jobTitle}
+- Department: ${dept}
+- Location Model: ${locType}
+- Experience Needed: ${exp}
+- Target Skills: ${skillsList}
+- Comp Range: ${sal}
+
+Rough Notes/Description Input:
+"""
+${inputDesc || `We are seeking a talented ${jobTitle} to join our ${dept} team.`}
+"""`;
+
+    let descriptionText = '';
+
+    try {
+      descriptionText = await callGroqAiWorker(c.env, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ], undefined, false);
+    } catch (groqErr) {
+      console.warn('Groq AI generate-description failed in worker, trying Cloudflare AI:', groqErr);
+    }
+
+    if (!descriptionText && c.env.AI) {
+      try {
+        const aiResult = await (c.env.AI as any).run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_tokens: 1500,
+        });
+        descriptionText = aiResult?.response || aiResult?.result?.response || '';
+      } catch (cfAiErr) {
+        console.warn('Cloudflare AI fallback also failed:', cfAiErr);
+      }
+    }
+
+    if (!descriptionText) {
+      descriptionText = `### Role Overview\nWe are seeking a highly skilled **${jobTitle}** to join our **${dept}** team (${locType}). In this role, you will design, develop, and maintain high-performance software solutions while collaborating closely with cross-functional teams.\n\n### Key Responsibilities\n- Architect, build, and deploy scalable applications and features\n- Collaborate with product managers, designers, and engineers to deliver exceptional user experiences\n- Write clean, maintainable, and well-tested code following best practices\n- Participate in code reviews and mentor junior team members\n- Optimize system performance, reliability, and security\n\n### Required Qualifications\n- Demonstrated experience in software development\n- Proficiency in: ${skillsList}\n- Strong problem-solving skills and technical adaptability\n\n### Preferred Qualifications\n- Experience working in a ${locType.toLowerCase()} environment\n- Familiarity with modern CI/CD pipelines and cloud architecture\n\n### What We Offer\n- Competitive compensation package (${sal})\n- Flexible work arrangements\n- Continuous learning and growth opportunities`;
+    }
+
+    return c.json({ success: true, description: descriptionText });
+  } catch (err: any) {
+    console.error('Error generating job description:', err);
+    return c.json({ success: false, message: err.message || 'Failed to generate job description' }, 500);
+  }
+});
+
 app.put('/api/company/jobs/:id', async (c) => {
   try {
     const { id } = c.req.param();
