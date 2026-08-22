@@ -74,9 +74,9 @@ function JobsContent() {
     setPage(1);
     setSearchQuery('');
     if (tab === 'saved') {
-      router.replace('/dashboard/jobs?tab=saved');
+      router.push('/dashboard/jobs?tab=saved');
     } else {
-      router.replace('/dashboard/jobs');
+      router.push('/dashboard/jobs?tab=all');
     }
   };
 

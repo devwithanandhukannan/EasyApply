@@ -46,7 +46,7 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
 
   const menuItems = [
     { icon: Home, label: 'Dashboard', href: '/dashboard' },
-    { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs' },
+    { icon: Search, label: 'Browse Jobs', href: '/dashboard/jobs?tab=all' },
     { icon: Bookmark, label: 'Saved Jobs', href: '/dashboard/jobs?tab=saved' },
     { icon: FileText, label: 'My Resumes', href: '/dashboard/resumes' },
     { icon: Briefcase, label: 'Applied Jobs', href: '/dashboard/applications' },
@@ -74,7 +74,7 @@ export default function Sidebar({ user, isCollapsed: propIsCollapsed, setIsColla
           isActive = pathname === '/dashboard';
         } else if (item.href === '/dashboard/jobs?tab=saved') {
           isActive = pathname === '/dashboard/jobs' && isSavedTabActive;
-        } else if (item.href === '/dashboard/jobs') {
+        } else if (item.href === '/dashboard/jobs?tab=all' || item.href === '/dashboard/jobs') {
           isActive = pathname === '/dashboard/jobs' && !isSavedTabActive;
         } else {
           isActive = pathname.startsWith(item.href);
