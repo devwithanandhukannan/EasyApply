@@ -484,23 +484,39 @@ function JobsContent() {
                     </div>
                   </div>
 
-                  {job.requiredSkills && job.requiredSkills.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-4">
-                      {job.requiredSkills.slice(0, 2).map((skill: string, idx: number) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-0.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] text-[10px] rounded-lg border border-black/[0.04] dark:border-white/[0.06] font-medium"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                      {job.requiredSkills.length > 2 && (
-                        <span className="px-1.5 py-0.5 text-[#86868b] text-[10px] font-bold">
-                          +{job.requiredSkills.length - 2}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  {(() => {
+                    const skillsList = Array.isArray(job.requiredSkills)
+                      ? job.requiredSkills
+                      : Array.isArray(job.skills)
+                      ? job.skills
+                      : typeof job.requiredSkills === 'string'
+                      ? (job.requiredSkills.startsWith('[') ? (() => { try { return JSON.parse(job.requiredSkills); } catch { return job.requiredSkills.split(','); } })() : job.requiredSkills.split(','))
+                      : typeof job.skills === 'string'
+                      ? (job.skills.startsWith('[') ? (() => { try { return JSON.parse(job.skills); } catch { return job.skills.split(','); } })() : job.skills.split(','))
+                      : [];
+
+                    const validSkills = (Array.isArray(skillsList) ? skillsList : []).map((s: any) => String(s).trim()).filter(Boolean);
+
+                    if (validSkills.length === 0) return null;
+
+                    return (
+                      <div className="flex flex-wrap gap-1 mb-4">
+                        {validSkills.slice(0, 2).map((skill: string, idx: number) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] text-[10px] rounded-lg border border-black/[0.04] dark:border-white/[0.06] font-medium"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                        {validSkills.length > 2 && (
+                          <span className="px-1.5 py-0.5 text-[#86868b] text-[10px] font-bold">
+                            +{validSkills.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="pt-3 border-t border-black/[0.06] dark:border-white/[0.08] space-y-2.5">
                     <div className="flex items-center justify-between text-[11px] text-[#86868b] font-medium">

@@ -530,7 +530,7 @@ export default function CompanyCareerPage() {
                           </p>
                         )}
 
-                        {room.requiredSkills && room.requiredSkills.length > 0 && (
+                        {Array.isArray(room.requiredSkills) && room.requiredSkills.length > 0 && (
                           <div className="space-y-1.5">
                             <div className="text-[10px] font-bold text-[#86868b] uppercase tracking-wider">
                               Required Skills

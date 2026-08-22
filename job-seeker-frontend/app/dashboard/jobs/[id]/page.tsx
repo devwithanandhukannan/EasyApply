@@ -339,21 +339,37 @@ export default function JobDetailsPage() {
           </div>
 
           {/* Profile Core Skills */}
-          {job.requiredSkills && job.requiredSkills.length > 0 && (
-            <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-6 space-y-3 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
-              <h3 className="text-xs font-bold uppercase text-[#86868b] tracking-wider">Required Skills</h3>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {job.requiredSkills.map((skill: string, idx: number) => (
-                  <span
-                    key={idx}
-                    className="px-3 py-1 bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] text-xs font-semibold rounded-full"
-                  >
-                    {skill}
-                  </span>
-                ))}
+          {(() => {
+            const skillsList = Array.isArray(job.requiredSkills)
+              ? job.requiredSkills
+              : Array.isArray(job.skills)
+              ? job.skills
+              : typeof job.requiredSkills === 'string'
+              ? (job.requiredSkills.startsWith('[') ? (() => { try { return JSON.parse(job.requiredSkills); } catch { return job.requiredSkills.split(','); } })() : job.requiredSkills.split(','))
+              : typeof job.skills === 'string'
+              ? (job.skills.startsWith('[') ? (() => { try { return JSON.parse(job.skills); } catch { return job.skills.split(','); } })() : job.skills.split(','))
+              : [];
+
+            const validSkills = (Array.isArray(skillsList) ? skillsList : []).map((s: any) => String(s).trim()).filter(Boolean);
+
+            if (validSkills.length === 0) return null;
+
+            return (
+              <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-6 space-y-3 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+                <h3 className="text-xs font-bold uppercase text-[#86868b] tracking-wider">Required Skills</h3>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {validSkills.map((skill: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 bg-[#0071e3]/10 border border-[#0071e3]/20 text-[#0071e3] text-xs font-semibold rounded-full"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Verification Notice */}
           <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-5 flex gap-3 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">

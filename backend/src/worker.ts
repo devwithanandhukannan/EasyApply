@@ -4257,23 +4257,40 @@ app.get('/api/public/plans', async (c) => {
 
 const formatJobResponse = (j: any) => {
   if (!j) return null;
-  let parsedSkills = [];
+  let parsedSkills: string[] = [];
   try {
-    parsedSkills = typeof j.skills === 'string' ? JSON.parse(j.skills || '[]') : (j.skills || []);
+    const rawSkills = j.skills || j.requiredSkills;
+    if (Array.isArray(rawSkills)) {
+      parsedSkills = rawSkills;
+    } else if (typeof rawSkills === 'string') {
+      parsedSkills = rawSkills.startsWith('[') ? JSON.parse(rawSkills) : rawSkills.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
   } catch {
     parsedSkills = typeof j.skills === 'string' ? j.skills.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
   }
+  if (!Array.isArray(parsedSkills)) {
+    parsedSkills = [];
+  }
 
-  let parsedRequirements = [];
+  let parsedRequirements: string[] = [];
   try {
-    parsedRequirements = typeof j.requirements === 'string' ? JSON.parse(j.requirements || '[]') : (j.requirements || []);
+    const rawReq = j.requirements;
+    if (Array.isArray(rawReq)) {
+      parsedRequirements = rawReq;
+    } else if (typeof rawReq === 'string') {
+      parsedRequirements = rawReq.startsWith('[') ? JSON.parse(rawReq) : rawReq.split('\n').map((s: string) => s.trim()).filter(Boolean);
+    }
   } catch {
     parsedRequirements = typeof j.requirements === 'string' ? j.requirements.split('\n').map((s: string) => s.trim()).filter(Boolean) : [];
+  }
+  if (!Array.isArray(parsedRequirements)) {
+    parsedRequirements = [];
   }
 
   return {
     ...j,
     skills: parsedSkills,
+    requiredSkills: parsedSkills,
     requirements: parsedRequirements,
     company: {
       id: j.companyId,
