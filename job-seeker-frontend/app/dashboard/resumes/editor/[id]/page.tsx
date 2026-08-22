@@ -957,7 +957,12 @@ export default function ResumeEditorPage() {
   // ─── TipTap ──────────────────────────────────────────────────────────
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: { depth: 100 } } as any),
+      StarterKit.configure({
+        history: { depth: 100 },
+        horizontalRule: false,
+        link: false,
+        underline: false,
+      } as any),
       TextStyle, Color, FontFamily, FontSize, Underline, LineHeight, Indent,
       Highlight.configure({ multicolor: true }),
       Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } }),

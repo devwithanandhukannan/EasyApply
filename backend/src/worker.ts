@@ -3067,14 +3067,14 @@ app.get('/api/jobseeker/resumes/:id', async (c) => {
 
     // Fallback: If not found or if id is 'default', get latest/primary resume for current user
     if (!resume && decoded?.userId) {
-      const profile: any = await c.env.DB.prepare('SELECT id, fullName, email, phone, location, bio, skills FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+      const profile: any = await c.env.DB.prepare('SELECT id, fullName, email, phone, location, bio FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
       if (profile) {
         resume = await c.env.DB.prepare('SELECT * FROM "Resume" WHERE jobSeekerProfileId = ? ORDER BY isPrimary DESC, updatedAt DESC LIMIT 1').bind(profile.id).first();
 
         // If user has NO resumes yet, build an initial ATS HTML template from their profile
         if (!resume) {
-          let skillsArr: string[] = [];
-          try { skillsArr = JSON.parse(profile.skills || '[]'); } catch { skillsArr = (profile.skills || '').split(',').map((s: string) => s.trim()).filter(Boolean); }
+          const skillsResult = await c.env.DB.prepare('SELECT name FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
+          const skillsArr: string[] = (skillsResult.results || []).map((s: any) => s.name).filter(Boolean);
 
           const defaultHtml = `<h1 style="text-align:center;">${profile.fullName || 'Your Full Name'}</h1>
 <p style="text-align:center;">${profile.email || 'email@example.com'} &nbsp;&middot;&nbsp; ${profile.phone || '+1 234 567 890'} &nbsp;&middot;&nbsp; ${profile.location || 'Location'}</p>
@@ -3084,10 +3084,10 @@ app.get('/api/jobseeker/resumes/:id', async (c) => {
 <h2>Technical Skills</h2>
 <p>${skillsArr.join(', ') || 'TypeScript, React, Node.js, Python, PostgreSQL'}</p>
 <h2>Professional Experience</h2>
-<p><strong>Senior Software Engineer</strong> &nbsp;&middot;&nbsp; Tech Corp <span style="float:right;">2022 &ndash; Present</span></p>
-<p>Developed distributed microservices and scalable web applications serving enterprise clients.</p>
+<p><strong>Software Engineer</strong> &nbsp;&middot;&nbsp; Tech Solutions <span style="float:right;">2022 &ndash; Present</span></p>
+<p>Developed scalable web applications, REST APIs, and microservices architectures.</p>
 <h2>Education</h2>
-<p><strong>Bachelor of Technology in Computer Science</strong> &nbsp;&middot;&nbsp; University <span style="float:right;">2018 &ndash; 2022</span></p>`;
+<p><strong>Bachelor of Technology</strong> &nbsp;&middot;&nbsp; University <span style="float:right;">2018 &ndash; 2022</span></p>`;
 
           resume = {
             id: 'default',
