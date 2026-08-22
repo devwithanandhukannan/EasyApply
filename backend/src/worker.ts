@@ -1766,78 +1766,7 @@ app.patch('/api/company/spot-jobs/:jobId/status', handleSpotJobStatus);
 app.patch('/api/spot-jobs/:jobId/status', handleSpotJobStatus);
 
 
-app.get('/api/company/offers', async (c) => {
-  try {
-    const decoded = await getAuthUser(c);
-    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
-    const offers = await c.env.DB.prepare(
-      'SELECT o.*, a.jobPostingId, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "OfferLetter" o JOIN "Application" a ON o.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE j.companyId = ? ORDER BY o.createdAt DESC'
-    ).bind(decoded.companyId).all();
-    return c.json({ success: true, data: offers.results || [] });
-  } catch {
-    return c.json({ success: true, data: [] });
-  }
-});
-
-app.get('/api/company/offers/company/list', async (c) => {
-  try {
-    const decoded = await getAuthUser(c);
-    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
-    const offers = await c.env.DB.prepare(
-      'SELECT o.*, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "OfferLetter" o JOIN "Application" a ON o.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE j.companyId = ? ORDER BY o.createdAt DESC'
-    ).bind(decoded.companyId).all();
-    return c.json({ success: true, data: offers.results || [] });
-  } catch {
-    return c.json({ success: true, data: [] });
-  }
-});
-
-app.get('/api/company/offers/:id', async (c) => {
-  try {
-    const { id } = c.req.param();
-    const offer: any = await c.env.DB.prepare(
-      'SELECT o.*, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "OfferLetter" o JOIN "Application" a ON o.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE o.id = ?'
-    ).bind(id).first();
-    if (!offer) return c.json({ success: false, message: 'Offer not found' }, 404);
-    if (offer.content && typeof offer.content === 'string') {
-      try { offer.content = JSON.parse(offer.content); } catch {}
-    }
-    return c.json({ success: true, data: offer });
-  } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
-  }
-});
-
-app.post('/api/company/offers/create', async (c) => {
-  try {
-    const body = await c.req.json().catch(() => ({}));
-    const { applicationId, templateId, position, department, salary, currency, startDate, location, employmentType, content } = body;
-    const offerId = crypto.randomUUID();
-    const now = new Date().toISOString();
-    await c.env.DB.prepare(
-      'INSERT INTO "OfferLetter" (id, applicationId, templateId, position, department, salary, currency, startDate, location, employmentType, content, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(
-      offerId,
-      applicationId,
-      templateId || null,
-      position || 'Offer',
-      department || 'Engineering',
-      Number(salary) || 0,
-      currency || 'INR',
-      startDate ? new Date(startDate).toISOString() : now,
-      location || 'Remote',
-      employmentType || 'Full-time',
-      JSON.stringify(content || {}),
-      'pending',
-      now,
-      now
-    ).run();
-    return c.json({ success: true, message: 'Offer letter created successfully', offerId });
-  } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
-  }
-});
-
+// ─── OFFER TEMPLATES (Static routes must be before /:id) ─────────────────
 const handleGetOfferTemplates = async (c: any) => {
   try {
     const decoded = await getAuthUser(c);
@@ -1947,14 +1876,88 @@ const handleGenerateOfferTemplateAI = async (c: any) => {
 
 app.get('/api/company/offers/templates', handleGetOfferTemplates);
 app.get('/api/offers/templates', handleGetOfferTemplates);
+app.post('/api/company/offers/templates/generate-ai', handleGenerateOfferTemplateAI);
+app.post('/api/offers/templates/generate-ai', handleGenerateOfferTemplateAI);
 app.post('/api/company/offers/templates', handleCreateOfferTemplate);
 app.post('/api/offers/templates', handleCreateOfferTemplate);
 app.put('/api/company/offers/templates/:id', handleUpdateOfferTemplate);
 app.put('/api/offers/templates/:id', handleUpdateOfferTemplate);
 app.delete('/api/company/offers/templates/:id', handleDeleteOfferTemplate);
 app.delete('/api/offers/templates/:id', handleDeleteOfferTemplate);
-app.post('/api/company/offers/templates/generate-ai', handleGenerateOfferTemplateAI);
-app.post('/api/offers/templates/generate-ai', handleGenerateOfferTemplateAI);
+
+// ─── OFFERS CRUD ─────────────────────────────────────────
+app.get('/api/company/offers', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
+    const offers = await c.env.DB.prepare(
+      'SELECT o.*, a.jobPostingId, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "OfferLetter" o JOIN "Application" a ON o.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE j.companyId = ? ORDER BY o.createdAt DESC'
+    ).bind(decoded.companyId).all();
+    return c.json({ success: true, data: offers.results || [] });
+  } catch {
+    return c.json({ success: true, data: [] });
+  }
+});
+
+app.get('/api/company/offers/company/list', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
+    const offers = await c.env.DB.prepare(
+      'SELECT o.*, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "OfferLetter" o JOIN "Application" a ON o.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE j.companyId = ? ORDER BY o.createdAt DESC'
+    ).bind(decoded.companyId).all();
+    return c.json({ success: true, data: offers.results || [] });
+  } catch {
+    return c.json({ success: true, data: [] });
+  }
+});
+
+app.post('/api/company/offers/create', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { applicationId, templateId, position, department, salary, currency, startDate, location, employmentType, content } = body;
+    const offerId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      'INSERT INTO "OfferLetter" (id, applicationId, templateId, position, department, salary, currency, startDate, location, employmentType, content, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      offerId,
+      applicationId,
+      templateId || null,
+      position || 'Offer',
+      department || 'Engineering',
+      Number(salary) || 0,
+      currency || 'INR',
+      startDate ? new Date(startDate).toISOString() : now,
+      location || 'Remote',
+      employmentType || 'Full-time',
+      JSON.stringify(content || {}),
+      'pending',
+      now,
+      now
+    ).run();
+    return c.json({ success: true, message: 'Offer letter created successfully', offerId });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.get('/api/company/offers/:id', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const offer: any = await c.env.DB.prepare(
+      'SELECT o.*, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "OfferLetter" o JOIN "Application" a ON o.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE o.id = ?'
+    ).bind(id).first();
+    if (!offer) return c.json({ success: false, message: 'Offer not found' }, 404);
+    if (offer.content && typeof offer.content === 'string') {
+      try { offer.content = JSON.parse(offer.content); } catch {}
+    }
+    return c.json({ success: true, data: offer });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
 
 
 app.get('/api/crm/talent-pools', async (c) => {
