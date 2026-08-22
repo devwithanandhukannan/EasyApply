@@ -3390,6 +3390,301 @@ app.delete('/api/jobseeker/resumes/:id', async (c) => {
   }
 });
 
+function escapePdf(str: string): string {
+  return str.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
+function generateAtsPdfBinary(resumeName: string, data: any): Uint8Array {
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  const marginX = 45;
+  const contentWidth = pageWidth - marginX * 2;
+
+  const pages: string[][] = [[]];
+  let curPage = 0;
+  let curY = 795;
+  const minY = 50;
+
+  const pushOp = (op: string) => {
+    pages[curPage].push(op);
+  };
+
+  const checkPageBreak = (neededHeight: number) => {
+    if (curY - neededHeight < minY) {
+      pages.push([]);
+      curPage++;
+      curY = 795;
+    }
+  };
+
+  const drawText = (text: string, font: string, size: number, x: number, y: number) => {
+    const clean = escapePdf(text);
+    pushOp(`BT /${font} ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${clean}) Tj ET`);
+  };
+
+  const drawCentered = (text: string, font: string, size: number, y: number) => {
+    const factor = font === 'F2' ? 0.55 : 0.5;
+    const estW = Math.min(contentWidth, text.length * size * factor);
+    const x = Math.max(marginX, (pageWidth - estW) / 2);
+    drawText(text, font, size, x, y);
+  };
+
+  const drawLine = (y: number) => {
+    pushOp(`q 0.5 0.5 0.5 RG 0.75 w ${marginX} ${y.toFixed(2)} m ${pageWidth - marginX} ${y.toFixed(2)} l S Q`);
+  };
+
+  const drawParagraph = (text: string, font = 'F1', size = 9.5, lineHeight = 13, isBullet = false) => {
+    const clean = text.replace(/[\r\n]+/g, ' ').trim();
+    if (!clean) return;
+
+    const charsPerLine = Math.floor(contentWidth / (size * (font === 'F2' ? 0.55 : 0.5)));
+    const words = clean.split(' ');
+    let line = '';
+    let isFirst = true;
+
+    for (const w of words) {
+      if ((line + ' ' + w).trim().length > charsPerLine) {
+        checkPageBreak(lineHeight);
+        curY -= lineHeight;
+        const indent = isBullet ? (isFirst ? 0 : 10) : 0;
+        const prefix = (isBullet && isFirst) ? '• ' : '';
+        drawText(prefix + line.trim(), font, size, marginX + indent, curY);
+        line = w;
+        isFirst = false;
+      } else {
+        line = line ? `${line} ${w}` : w;
+      }
+    }
+    if (line.trim()) {
+      checkPageBreak(lineHeight);
+      curY -= lineHeight;
+      const indent = isBullet ? (isFirst ? 0 : 10) : 0;
+      const prefix = (isBullet && isFirst) ? '• ' : '';
+      drawText(prefix + line.trim(), font, size, marginX + indent, curY);
+    }
+  };
+
+  const drawHeading = (heading: string) => {
+    checkPageBreak(28);
+    curY -= 16;
+    drawText(heading.toUpperCase(), 'F2', 11, marginX, curY);
+    curY -= 4;
+    drawLine(curY);
+    curY -= 6;
+  };
+
+  const parsed = data?.parsedData || data || {};
+  const fullName = parsed.fullName || parsed.basicInfo?.fullName || resumeName || 'Resume';
+  const email = parsed.contact?.email || parsed.email || parsed.basicInfo?.email || '';
+  const phone = parsed.contact?.phone || parsed.phone || parsed.basicInfo?.phone || '';
+  const location = parsed.contact?.location || parsed.location || parsed.basicInfo?.location || '';
+  const linkedin = parsed.contact?.linkedin || parsed.linkedin || parsed.basicInfo?.linkedin || '';
+  const github = parsed.contact?.github || parsed.github || parsed.basicInfo?.github || '';
+  const portfolio = parsed.contact?.portfolio || parsed.portfolio || parsed.basicInfo?.portfolio || '';
+  const summary = parsed.summary || parsed.bio || parsed.basicInfo?.bio || '';
+
+  checkPageBreak(30);
+  curY -= 20;
+  drawCentered(fullName, 'F2', 18, curY);
+
+  const contacts = [email, phone, location, linkedin, github, portfolio].filter(Boolean);
+  if (contacts.length > 0) {
+    checkPageBreak(16);
+    curY -= 14;
+    drawCentered(contacts.join('  •  '), 'F1', 9, curY);
+  }
+
+  curY -= 6;
+  drawLine(curY);
+  curY -= 4;
+
+  if (summary) {
+    drawHeading('Professional Summary');
+    drawParagraph(summary, 'F1', 9.5, 13);
+  }
+
+  const skillsList = Array.isArray(parsed.skills)
+    ? parsed.skills.map((s: any) => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean).join(', ')
+    : (typeof parsed.skills === 'string' ? parsed.skills : '');
+  if (skillsList) {
+    drawHeading('Technical Skills');
+    drawParagraph(skillsList, 'F1', 9.5, 13);
+  }
+
+  const experiences = Array.isArray(parsed.experience) ? parsed.experience : [];
+  if (experiences.length > 0) {
+    drawHeading('Work Experience');
+    for (const exp of experiences) {
+      const role = exp.role || exp.title || exp.position || 'Software Engineer';
+      const company = exp.company || exp.organization || 'Company';
+      const duration = exp.duration || `${exp.startYear || ''} - ${exp.endYear || (exp.current ? 'Present' : '')}`.replace(/^- | - $/g, '');
+      const headerLine = `${role} — ${company}${duration ? ` (${duration})` : ''}`;
+      
+      checkPageBreak(18);
+      curY -= 14;
+      drawText(headerLine, 'F2', 10, marginX, curY);
+
+      const bullets = Array.isArray(exp.bullets) ? exp.bullets : (exp.description ? exp.description.split('\n').filter(Boolean) : []);
+      for (const b of bullets) {
+        drawParagraph(b.replace(/^[•\-\*]\s*/, ''), 'F1', 9, 12, true);
+      }
+      curY -= 4;
+    }
+  }
+
+  const projects = Array.isArray(parsed.projects) ? parsed.projects : [];
+  if (projects.length > 0) {
+    drawHeading('Featured Projects');
+    for (const proj of projects) {
+      const name = proj.name || proj.title || 'Project';
+      const tech = Array.isArray(proj.technologies) ? proj.technologies.join(', ') : (proj.technologies || '');
+      const link = proj.githubLink || proj.liveLink || proj.link || '';
+      const headerLine = `${name}${tech ? ` (${tech})` : ''}${link ? ` — ${link}` : ''}`;
+      
+      checkPageBreak(18);
+      curY -= 14;
+      drawText(headerLine, 'F2', 10, marginX, curY);
+
+      if (proj.description) {
+        drawParagraph(proj.description, 'F1', 9, 12, true);
+      }
+      curY -= 4;
+    }
+  }
+
+  const educations = Array.isArray(parsed.education) ? parsed.education : [];
+  if (educations.length > 0) {
+    drawHeading('Education');
+    for (const edu of educations) {
+      const institution = edu.institution || edu.school || edu.university || 'University';
+      const degree = edu.degree || 'Degree';
+      const field = edu.field || edu.major || '';
+      const duration = edu.duration || `${edu.startYear || ''} - ${edu.endYear || ''}`.replace(/^- | - $/g, '');
+      const cgpa = edu.cgpa || edu.gpa ? ` | CGPA: ${edu.cgpa || edu.gpa}` : '';
+      const headerLine = `${institution} — ${degree}${field ? ` in ${field}` : ''}${cgpa}${duration ? ` (${duration})` : ''}`;
+
+      checkPageBreak(18);
+      curY -= 14;
+      drawText(headerLine, 'F2', 10, marginX, curY);
+
+      if (edu.details || edu.description) {
+        drawParagraph(edu.details || edu.description, 'F1', 9, 12);
+      }
+      curY -= 4;
+    }
+  }
+
+  const certs = Array.isArray(parsed.certifications) ? parsed.certifications : [];
+  if (certs.length > 0) {
+    drawHeading('Certifications');
+    for (const c of certs) {
+      const name = typeof c === 'string' ? c : (c.name || c.title || '');
+      const org = typeof c === 'string' ? '' : (c.organization || c.issuer || '');
+      const date = typeof c === 'string' ? '' : (c.issueDate || c.year || '');
+      drawParagraph(`${name}${org ? ` — ${org}` : ''}${date ? ` (${date})` : ''}`, 'F1', 9, 12, true);
+    }
+  }
+
+  const achievements = Array.isArray(parsed.achievements) ? parsed.achievements : [];
+  if (achievements.length > 0) {
+    drawHeading('Honors & Achievements');
+    for (const a of achievements) {
+      const title = typeof a === 'string' ? a : (a.title || a.name || '');
+      const desc = typeof a === 'string' ? '' : (a.description || '');
+      drawParagraph(`${title}${desc && desc !== title ? `: ${desc}` : ''}`, 'F1', 9, 12, true);
+    }
+  }
+
+  const pageCount = pages.length;
+  const kids: string[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    kids.push(`${5 + i} 0 R`);
+  }
+
+  const objCatalog = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj`;
+  const objPages = `2 0 obj\n<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pageCount} /MediaBox [0 0 595.28 841.89] >>\nendobj`;
+  const objF1 = `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj`;
+  const objF2 = `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj`;
+
+  const pageObjs: string[] = [];
+  const contentObjs: string[] = [];
+
+  for (let i = 0; i < pageCount; i++) {
+    const pageObjNum = 5 + i;
+    const contentObjNum = 5 + pageCount + i;
+    const streamContent = pages[i].join('\n');
+    const streamBytes = new TextEncoder().encode(streamContent);
+
+    pageObjs.push(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObjNum} 0 R >>\nendobj`);
+    contentObjs.push(`${contentObjNum} 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n${streamContent}\nendstream\nendobj`);
+  }
+
+  const allObjs = [objCatalog, objPages, objF1, objF2, ...pageObjs, ...contentObjs];
+  let pdfString = `%PDF-1.4\n%âãÏÓ\n`;
+  const xrefOffsets: number[] = [0];
+
+  for (const obj of allObjs) {
+    const currentOffset = new TextEncoder().encode(pdfString).length;
+    xrefOffsets.push(currentOffset);
+    pdfString += `${obj}\n`;
+  }
+
+  const startXref = new TextEncoder().encode(pdfString).length;
+  pdfString += `xref\n0 ${allObjs.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= allObjs.length; i++) {
+    pdfString += `${String(xrefOffsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+
+  pdfString += `trailer\n<< /Size ${allObjs.length + 1} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF\n`;
+  return new TextEncoder().encode(pdfString);
+}
+
+const handleResumePdf = async (c: any, isView: boolean) => {
+  try {
+    const { id } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded) return c.text('Unauthorized', 401);
+
+    const resume: any = await c.env.DB.prepare(
+      'SELECT r.*, p.fullName FROM "Resume" r JOIN "JobSeekerProfile" p ON r.jobSeekerProfileId = p.id WHERE r.id = ? AND p.userId = ?'
+    ).bind(id, decoded.userId).first();
+
+    if (!resume) return c.text('Resume not found', 404);
+
+    const safeName = (resume.name || 'Resume').trim().replace(/[^a-zA-Z0-9-_ ]/g, '') || 'Resume';
+
+    if (resume.filePath && c.env.RESUME_BUCKET) {
+      try {
+        const r2Obj = await c.env.RESUME_BUCKET.get(resume.filePath);
+        if (r2Obj) {
+          const headers = new Headers();
+          headers.set('Content-Type', 'application/pdf');
+          headers.set('Content-Disposition', `${isView ? 'inline' : 'attachment'}; filename="${safeName}.pdf"`);
+          return new Response(r2Obj.body, { headers });
+        }
+      } catch {}
+    }
+
+    let contentData: any = {};
+    try {
+      contentData = typeof resume.content === 'string' ? JSON.parse(resume.content) : (resume.content || {});
+    } catch {}
+
+    const pdfBytes = generateAtsPdfBinary(resume.name, contentData);
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/pdf');
+    headers.set('Content-Disposition', `${isView ? 'inline' : 'attachment'}; filename="${safeName}.pdf"`);
+    return new Response(pdfBytes, { headers });
+  } catch (err: any) {
+    return c.text('PDF Generation Error: ' + err.message, 500);
+  }
+};
+
+app.get('/api/jobseeker/resumes/:id/download-uploaded', async (c) => handleResumePdf(c, false));
+app.get('/api/jobseeker/resumes/:id/download', async (c) => handleResumePdf(c, false));
+app.get('/api/jobseeker/resumes/:id/download-pdf', async (c) => handleResumePdf(c, false));
+app.get('/api/jobseeker/resumes/:id/view-pdf', async (c) => handleResumePdf(c, true));
+
 app.post('/api/jobseeker/resumes/upload', async (c) => {
   try {
     const decoded = await getAuthUser(c);
