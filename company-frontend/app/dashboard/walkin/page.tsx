@@ -266,27 +266,41 @@ export default function CompanyWalkInKanbanPage() {
   const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<KanbanColumnId | null>(null);
 
+  const activeRoom = selectedRoom || (rooms.length > 0 ? rooms[0] : null);
+
   useEffect(() => {
     fetchRooms();
   }, []);
 
   useEffect(() => {
-    if (selectedRoom && !isForbidden) {
-      fetchQueue(selectedRoom.roomCode);
-      const interval = setInterval(() => fetchQueue(selectedRoom.roomCode), 4000);
+    if (activeRoom && !isForbidden) {
+      fetchQueue(activeRoom.roomCode);
+      const interval = setInterval(() => fetchQueue(activeRoom.roomCode), 4000);
       return () => clearInterval(interval);
     }
-  }, [selectedRoom?.roomCode, isForbidden]);
+  }, [activeRoom?.roomCode, isForbidden]);
 
-  const fetchRooms = async () => {
+  const fetchRooms = async (preferredRoomId?: string) => {
     try {
       setLoading(true);
       const res = await api.get('/walkin/rooms');
       if (res.data?.success) {
         const roomsList = res.data.rooms || res.data.data || [];
         setRooms(roomsList);
-        if (roomsList.length > 0 && !selectedRoom) {
-          setSelectedRoom(roomsList[0]);
+        if (roomsList.length > 0) {
+          setSelectedRoom(prev => {
+            if (preferredRoomId) {
+              const matched = roomsList.find((r: any) => r.id === preferredRoomId || r.roomCode === preferredRoomId);
+              if (matched) return matched;
+            }
+            if (prev) {
+              const existing = roomsList.find((r: any) => r.id === prev.id);
+              if (existing) return existing;
+            }
+            return roomsList[0];
+          });
+        } else {
+          setSelectedRoom(null);
         }
       }
     } catch (err: any) {
@@ -384,7 +398,8 @@ export default function CompanyWalkInKanbanPage() {
         maxQueue: Number(maxQueue),
       });
       if (res.data?.success) {
-        showToast('Room Created', `Room ${res.data.room.roomCode} is now live!`, 'success');
+        const newRoom = res.data.room || res.data.data;
+        showToast('Room Created', `Room ${newRoom.roomCode} is now live!`, 'success');
         setCreateModalOpen(false);
         setTitle('');
         setDescription('');
@@ -392,8 +407,9 @@ export default function CompanyWalkInKanbanPage() {
         setPriorityThreshold(70);
         setEvaluationCriteria('');
         setSkills([]);
-        await fetchRooms();
-        setSelectedRoom(res.data.room);
+        setRooms(prev => [newRoom, ...prev.filter(r => r.id !== newRoom.id)]);
+        setSelectedRoom(newRoom);
+        await fetchRooms(newRoom.id);
       }
     } catch (err: any) {
       showToast('Error', err.response?.data?.message || 'Failed to create room', 'danger');
@@ -403,23 +419,23 @@ export default function CompanyWalkInKanbanPage() {
   };
 
   const openSettingsModal = () => {
-    if (!selectedRoom) return;
-    setEditTitle(selectedRoom.title);
-    setEditDescription(selectedRoom.description || '');
-    setEditMinExperience(selectedRoom.minExperience || '');
-    setEditPriorityThreshold(selectedRoom.priorityThreshold || 70);
-    setEditEvaluationCriteria(selectedRoom.evaluationCriteria || '');
-    setEditSkills(selectedRoom.requiredSkills || []);
-    setEditMaxQueue(selectedRoom.maxQueue || 25);
+    if (!activeRoom) return;
+    setEditTitle(activeRoom.title);
+    setEditDescription(activeRoom.description || '');
+    setEditMinExperience(activeRoom.minExperience || '');
+    setEditPriorityThreshold(activeRoom.priorityThreshold || 70);
+    setEditEvaluationCriteria(activeRoom.evaluationCriteria || '');
+    setEditSkills(activeRoom.requiredSkills || []);
+    setEditMaxQueue(activeRoom.maxQueue || 25);
     setSettingsModalOpen(true);
   };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedRoom) return;
+    if (!activeRoom) return;
     setSavingSettings(true);
     try {
-      const res = await api.put(`/walkin/rooms/${selectedRoom.roomCode}/settings`, {
+      const res = await api.put(`/walkin/rooms/${activeRoom.roomCode}/settings`, {
         title: editTitle.trim(),
         description: editDescription.trim() || null,
         requiredSkills: editSkills,
@@ -429,10 +445,12 @@ export default function CompanyWalkInKanbanPage() {
         maxQueue: Number(editMaxQueue),
       });
       if (res.data?.success) {
+        const updated = res.data.room || { ...activeRoom, title: editTitle, description: editDescription, requiredSkills: editSkills, maxQueue: editMaxQueue };
         showToast('Settings Saved', 'Room configuration and limits updated!', 'success');
-        setSelectedRoom(res.data.room);
+        setSelectedRoom(updated);
+        setRooms(prev => prev.map(r => r.id === updated.id ? updated : r));
         setSettingsModalOpen(false);
-        fetchRooms();
+        fetchRooms(updated.id);
       }
     } catch (err: any) {
       showToast('Error', err.response?.data?.message || 'Failed to update room settings', 'danger');
@@ -442,13 +460,13 @@ export default function CompanyWalkInKanbanPage() {
   };
 
   const handleUpdateStatus = async (status: 'OPEN' | 'PAUSED' | 'CLOSED') => {
-    if (!selectedRoom) return;
+    if (!activeRoom) return;
     try {
-      const res = await api.put(`/walkin/rooms/${selectedRoom.roomCode}/status`, { status });
+      const res = await api.put(`/walkin/rooms/${activeRoom.roomCode}/status`, { status });
       if (res.data?.success) {
         showToast('Status Updated', `Room is now ${status}`, 'success');
-        setSelectedRoom({ ...selectedRoom, status });
-        setRooms(rooms.map((r) => (r.id === selectedRoom.id ? { ...r, status } : r)));
+        setSelectedRoom({ ...activeRoom, status });
+        setRooms(rooms.map((r) => (r.id === activeRoom.id ? { ...r, status } : r)));
       }
     } catch (err: any) {
       showToast('Error', err.response?.data?.message || 'Failed to update status', 'danger');
@@ -456,10 +474,10 @@ export default function CompanyWalkInKanbanPage() {
   };
 
   const handleCallCandidate = async (entry?: QueueEntry) => {
-    if (!selectedRoom) return;
+    if (!activeRoom) return;
     setCallingNext(true);
     try {
-      const res = await api.post(`/walkin/rooms/${selectedRoom.roomCode}/call-next`, {
+      const res = await api.post(`/walkin/rooms/${activeRoom.roomCode}/call-next`, {
         entryId: entry?.id || undefined,
       });
       if (res.data?.success) {
@@ -469,7 +487,7 @@ export default function CompanyWalkInKanbanPage() {
           'success'
         );
         const tokenToUse = res.data.recruiterToken || res.data.livekitToken || '';
-        router.push(`/meet/${selectedRoom.livekitRoom}?token=${encodeURIComponent(tokenToUse)}&role=company`);
+        router.push(`/meet/${activeRoom.livekitRoom}?token=${encodeURIComponent(tokenToUse)}&role=company`);
       } else {
         showToast('Queue Empty', res.data?.message || 'No candidates waiting', 'info');
       }
@@ -609,7 +627,7 @@ export default function CompanyWalkInKanbanPage() {
           {/* Room Selector Dropdown / Tabs */}
           {rooms.length > 0 && (
             <select
-              value={selectedRoom?.id || ''}
+              value={activeRoom?.id || ''}
               onChange={(e) => {
                 const found = rooms.find((r) => r.id === e.target.value);
                 if (found) setSelectedRoom(found);
@@ -645,7 +663,7 @@ export default function CompanyWalkInKanbanPage() {
           <Loader2 className="w-8 h-8 animate-spin text-[#0071e3] mx-auto" />
           <p className="text-xs font-medium text-[#86868b]">Loading Walk-In Rooms...</p>
         </div>
-      ) : !selectedRoom ? (
+      ) : (!activeRoom || rooms.length === 0) ? (
         <div className="bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] rounded-3xl p-12 text-center space-y-4 max-w-md mx-auto shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
           <DoorOpen className="w-12 h-12 text-[#86868b] mx-auto" />
           <h2 className="text-lg font-bold text-[#1d1d1f] dark:text-white">No Walk-In Rooms Yet</h2>
@@ -668,12 +686,12 @@ export default function CompanyWalkInKanbanPage() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2.5 flex-wrap">
                   <span
-                    onClick={() => handleCopyCode(selectedRoom.roomCode)}
+                    onClick={() => handleCopyCode(activeRoom.roomCode)}
                     className="cursor-pointer group inline-flex items-center gap-1.5 px-3 py-1 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] border border-black/[0.04] dark:border-white/[0.06] rounded-xl text-xs font-mono font-bold text-[#0071e3] transition-all shadow-2xs"
                     title="Click to copy room code"
                   >
-                    <span>CODE: {selectedRoom.roomCode}</span>
-                    {copiedCode === selectedRoom.roomCode ? (
+                    <span>CODE: {activeRoom.roomCode}</span>
+                    {copiedCode === activeRoom.roomCode ? (
                       <Check className="w-3.5 h-3.5 text-[#34c759]" />
                     ) : (
                       <Copy className="w-3.5 h-3.5 text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white" />
@@ -682,31 +700,31 @@ export default function CompanyWalkInKanbanPage() {
 
                   <span
                     className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full uppercase tracking-wider ${
-                      selectedRoom.status === 'OPEN'
+                      activeRoom.status === 'OPEN'
                         ? 'bg-[#34c759]/10 border border-[#34c759]/20 text-[#248a3d] dark:text-[#30d158]'
-                        : selectedRoom.status === 'PAUSED'
+                        : activeRoom.status === 'PAUSED'
                         ? 'bg-[#ff9500]/10 border border-[#ff9500]/20 text-[#ff9500]'
                         : 'bg-[#ff3b30]/10 border border-[#ff3b30]/20 text-[#ff3b30]'
                     }`}
                   >
-                    {selectedRoom.status}
+                    {activeRoom.status}
                   </span>
 
                   <span className="px-3 py-1 text-xs bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#86868b] rounded-xl font-medium">
-                    Queue: <strong className="text-[#1d1d1f] dark:text-white font-bold">{queue.length}</strong> / {selectedRoom.maxQueue}
+                    Queue: <strong className="text-[#1d1d1f] dark:text-white font-bold">{queue.length}</strong> / {activeRoom.maxQueue}
                   </span>
                 </div>
 
-                <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white tracking-tight">{selectedRoom.title}</h2>
-                {selectedRoom.description && (
-                  <p className="text-xs text-[#86868b] max-w-2xl leading-relaxed font-medium">{selectedRoom.description}</p>
+                <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white tracking-tight">{activeRoom.title}</h2>
+                {activeRoom.description && (
+                  <p className="text-xs text-[#86868b] max-w-2xl leading-relaxed font-medium">{activeRoom.description}</p>
                 )}
 
                 {/* Skills tags */}
-                {Array.isArray(selectedRoom.requiredSkills) && selectedRoom.requiredSkills.length > 0 && (
+                {Array.isArray(activeRoom.requiredSkills) && activeRoom.requiredSkills.length > 0 && (
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
                     <span className="text-[11px] font-semibold text-[#86868b] mr-1">Required Skills:</span>
-                    {selectedRoom.requiredSkills.map((s, idx) => (
+                    {activeRoom.requiredSkills.map((s, idx) => (
                       <span key={idx} className="px-2.5 py-0.5 text-[11px] bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] text-[#1d1d1f] dark:text-[#f5f5f7] rounded-lg font-medium">
                         {s}
                       </span>
@@ -719,7 +737,7 @@ export default function CompanyWalkInKanbanPage() {
               <div className="flex items-center gap-2.5 flex-wrap shrink-0">
                 <button
                   onClick={() => handleCallCandidate()}
-                  disabled={callingNext || selectedRoom.status === 'CLOSED'}
+                  disabled={callingNext || activeRoom.status === 'CLOSED'}
                   className="px-5 py-2.5 bg-[#34c759] hover:bg-[#30d158] text-white font-bold rounded-2xl text-xs flex items-center gap-2 shadow-[0_4px_14px_rgba(52,199,89,0.25)] transition-all cursor-pointer disabled:opacity-40"
                 >
                   <PhoneCall className="w-3.5 h-3.5" />
@@ -727,7 +745,7 @@ export default function CompanyWalkInKanbanPage() {
                 </button>
 
                 {/* Status Toggle */}
-                {selectedRoom.status === 'OPEN' ? (
+                {activeRoom.status === 'OPEN' ? (
                   <button
                     onClick={() => handleUpdateStatus('PAUSED')}
                     className="px-4 py-2.5 bg-[#f2f2f7] hover:bg-[#e5e5ea] dark:bg-[#2c2c2e] dark:hover:bg-[#3a3a3c] border border-black/[0.06] dark:border-white/[0.08] text-[#ff9500] rounded-2xl text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
