@@ -881,8 +881,19 @@ function SuggestionPopupUI({ activeId, x, y, suggestions, onAccept, onReject }: 
 export default function ResumeEditorPage() {
   const params = useParams();
   const router = useRouter();
-  const id = params.id as string;
+  const rawId = (params?.id as string) || '';
+  const [id, setId] = useState<string>(rawId || 'default');
   const { showToast } = useGlassToast();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      const lastPart = pathParts[pathParts.length - 1];
+      if (lastPart && lastPart !== 'editor') {
+        setId(lastPart);
+      }
+    }
+  }, [params]);
 
   const [mounted, setMounted] = useState(false);
   const [resumeName, setResumeName] = useState('');
