@@ -3055,6 +3055,116 @@ app.get('/api/jobseeker/resumes', async (c) => {
   }
 });
 
+function buildAtsResumeHtml(data: any): string {
+  if (!data) return '<p>Resume</p>';
+
+  const fullName = data.fullName || 'Candidate';
+  const email = data.contact?.email || data.email || '';
+  const phone = data.contact?.phone || data.phone || '';
+  const location = data.contact?.location || data.location || '';
+  const linkedin = data.contact?.linkedin || data.linkedin || '';
+  const github = data.contact?.github || data.github || '';
+  const portfolio = data.contact?.portfolio || data.portfolio || '';
+
+  const contactPieces = [email, phone, location, linkedin, github, portfolio].filter(Boolean);
+  const contactLine = contactPieces.join(' &nbsp;&middot;&nbsp; ');
+
+  const summary = data.summary || data.bio || '';
+
+  const skills = Array.isArray(data.skills)
+    ? data.skills.map((s: any) => typeof s === 'string' ? s : (s.name || s.skill || '')).filter(Boolean).join(', ')
+    : (typeof data.skills === 'string' ? data.skills : '');
+
+  // Experience
+  const experienceList = Array.isArray(data.experience) ? data.experience : [];
+  const experienceHtml = experienceList.map((exp: any) => {
+    const role = exp.role || exp.title || exp.position || 'Software Engineer';
+    const company = exp.company || exp.organization || 'Company';
+    const locationStr = exp.location ? ` &nbsp;&middot;&nbsp; ${exp.location}` : '';
+    const duration = exp.duration || `${exp.startMonth ? exp.startMonth + ' ' : ''}${exp.startYear || ''} - ${exp.endMonth ? exp.endMonth + ' ' : ''}${exp.endYear || (exp.current ? 'Present' : '')}`.replace(/^- | - $/g, '');
+    const bullets = Array.isArray(exp.bullets) ? exp.bullets : (exp.description ? exp.description.split('\n').filter(Boolean) : []);
+    
+    return `
+<p><strong>${role}</strong> &nbsp;&middot;&nbsp; ${company}${locationStr} ${duration ? `<span style="float: right;">${duration}</span>` : ''}</p>
+${bullets.length > 0 ? `<ul>${bullets.map((b: string) => `<li>${b.replace(/^[•\-\*]\s*/, '')}</li>`).join('')}</ul>` : (exp.description ? `<p>${exp.description}</p>` : '')}
+`;
+  }).join('');
+
+  // Projects
+  const projectsList = Array.isArray(data.projects) ? data.projects : [];
+  const projectsHtml = projectsList.map((proj: any) => {
+    const name = proj.name || proj.title || 'Project';
+    const tech = Array.isArray(proj.technologies) ? proj.technologies.join(', ') : (Array.isArray(proj.techStack) ? proj.techStack.join(', ') : (proj.technologies || ''));
+    const link = proj.githubLink || proj.liveLink || proj.github || proj.link || '';
+    const desc = proj.description || '';
+    return `
+<p><strong>${name}</strong> ${tech ? `<em>(${tech})</em>` : ''} ${link ? `<span style="float: right;"><a href="${link}">${link}</a></span>` : ''}</p>
+${desc ? `<p>${desc}</p>` : ''}
+`;
+  }).join('');
+
+  // Education
+  const educationList = Array.isArray(data.education) ? data.education : [];
+  const educationHtml = educationList.map((edu: any) => {
+    const institution = edu.institution || edu.school || edu.university || 'University';
+    const degree = edu.degree || 'Degree';
+    const field = edu.field || edu.major || '';
+    const degreeStr = field ? `${degree} in ${field}` : degree;
+    const duration = edu.duration || `${edu.startYear || ''} - ${edu.endYear || ''}`.replace(/^- | - $/g, '');
+    const cgpa = edu.cgpa || edu.gpa ? ` (CGPA: ${edu.cgpa || edu.gpa})` : '';
+    const details = edu.details || edu.description || '';
+
+    return `
+<p><strong>${institution}</strong> &nbsp;&middot;&nbsp; ${degreeStr}${cgpa} ${duration ? `<span style="float: right;">${duration}</span>` : ''}</p>
+${details ? `<p>${details}</p>` : ''}
+`;
+  }).join('');
+
+  // Certifications
+  const certsList = Array.isArray(data.certifications) ? data.certifications : [];
+  const certsHtml = certsList.map((c: any) => {
+    const name = typeof c === 'string' ? c : (c.name || c.title || '');
+    const org = typeof c === 'string' ? '' : (c.organization || c.issuer || '');
+    const date = typeof c === 'string' ? '' : (c.issueDate || c.year || '');
+    return `<li><strong>${name}</strong>${org ? ` &nbsp;&middot;&nbsp; ${org}` : ''}${date ? ` <span style="float: right;">${date}</span>` : ''}</li>`;
+  }).join('');
+
+  // Languages
+  const languagesList = Array.isArray(data.languages) ? data.languages : [];
+  const languagesStr = languagesList.map((l: any) => typeof l === 'string' ? l : `${l.language || l.name || ''} (${l.proficiency || 'Fluent'})`).filter(Boolean).join(', ');
+
+  // Achievements
+  const achievementsList = Array.isArray(data.achievements) ? data.achievements : [];
+  const achievementsHtml = achievementsList.map((a: any) => {
+    const title = typeof a === 'string' ? a : (a.title || a.name || '');
+    const desc = typeof a === 'string' ? '' : (a.description || '');
+    const year = typeof a === 'string' ? '' : (a.year || '');
+    return `<li><strong>${title}</strong>${year ? ` (${year})` : ''}${desc && desc !== title ? `: ${desc}` : ''}</li>`;
+  }).join('');
+
+  return `
+<h1 style="text-align: center; margin-bottom: 4px;">${fullName}</h1>
+${contactLine ? `<p style="text-align: center; font-size: 13px; color: #555; margin-top: 0; margin-bottom: 16px;">${contactLine}</p>` : ''}
+<hr />
+
+${summary ? `<h2>Professional Summary</h2><p>${summary}</p>` : ''}
+
+${skills ? `<h2>Technical Skills</h2><p>${skills}</p>` : ''}
+
+${experienceList.length > 0 ? `<h2>Work Experience</h2>${experienceHtml}` : ''}
+
+${projectsList.length > 0 ? `<h2>Featured Projects</h2>${projectsHtml}` : ''}
+
+${educationList.length > 0 ? `<h2>Education</h2>${educationHtml}` : ''}
+
+${certsList.length > 0 ? `<h2>Certifications</h2><ul>${certsHtml}</ul>` : ''}
+
+${languagesStr ? `<h2>Languages</h2><p>${languagesStr}</p>` : ''}
+
+${achievementsList.length > 0 ? `<h2>Honors & Achievements</h2><ul>${achievementsHtml}</ul>` : ''}
+`.trim();
+}
+
 app.get('/api/jobseeker/resumes/:id', async (c) => {
   try {
     const decoded = await getAuthUser(c);
@@ -3075,19 +3185,25 @@ app.get('/api/jobseeker/resumes/:id', async (c) => {
         if (!resume) {
           const skillsResult = await c.env.DB.prepare('SELECT name FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
           const skillsArr: string[] = (skillsResult.results || []).map((s: any) => s.name).filter(Boolean);
+          const expResult = await c.env.DB.prepare('SELECT * FROM "Experience" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
+          const eduResult = await c.env.DB.prepare('SELECT * FROM "Education" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
+          const projResult = await c.env.DB.prepare('SELECT * FROM "Project" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
+          const certResult = await c.env.DB.prepare('SELECT * FROM "Certification" WHERE jobSeekerProfileId = ?').bind(profile.id).all().catch(() => ({ results: [] }));
 
-          const defaultHtml = `<h1 style="text-align:center;">${profile.fullName || 'Your Full Name'}</h1>
-<p style="text-align:center;">${profile.email || 'email@example.com'} &nbsp;&middot;&nbsp; ${profile.phone || '+1 234 567 890'} &nbsp;&middot;&nbsp; ${profile.location || 'Location'}</p>
-<hr />
-<h2>Executive Summary</h2>
-<p>${profile.bio || 'Experienced software professional with demonstrated track record in building high quality systems.'}</p>
-<h2>Technical Skills</h2>
-<p>${skillsArr.join(', ') || 'TypeScript, React, Node.js, Python, PostgreSQL'}</p>
-<h2>Professional Experience</h2>
-<p><strong>Software Engineer</strong> &nbsp;&middot;&nbsp; Tech Solutions <span style="float:right;">2022 &ndash; Present</span></p>
-<p>Developed scalable web applications, REST APIs, and microservices architectures.</p>
-<h2>Education</h2>
-<p><strong>Bachelor of Technology</strong> &nbsp;&middot;&nbsp; University <span style="float:right;">2018 &ndash; 2022</span></p>`;
+          const profileData = {
+            fullName: profile.fullName || 'Candidate',
+            email: profile.email || '',
+            phone: profile.phone || '',
+            location: profile.location || '',
+            summary: profile.bio || 'Experienced professional with demonstrated track record.',
+            skills: skillsArr,
+            experience: expResult.results || [],
+            education: eduResult.results || [],
+            projects: projResult.results || [],
+            certifications: certResult.results || [],
+          };
+
+          const defaultHtml = buildAtsResumeHtml(profileData);
 
           resume = {
             id: 'default',
@@ -3098,6 +3214,7 @@ app.get('/api/jobseeker/resumes/:id', async (c) => {
             isPrimary: true,
             content: {
               htmlContent: defaultHtml,
+              parsedData: profileData,
               margins: { top: 48, right: 48, bottom: 48, left: 48 },
               versions: [],
             },
@@ -3124,6 +3241,18 @@ app.get('/api/jobseeker/resumes/:id', async (c) => {
     if (typeof resume.aiSuggestions === 'string') {
       try { resume.aiSuggestions = JSON.parse(resume.aiSuggestions); } catch {}
     }
+
+    // Auto-synthesize full HTML if resume content is missing Experience / Education / Skills but parsedData exists
+    const content = resume.content || {};
+    const html = content.htmlContent || '';
+    const hasOnlySummary = (html.includes('<h2>Summary</h2>') || html.includes('<h2>Professional Summary</h2>')) && !html.includes('<h2>Work Experience</h2>') && !html.includes('<h2>Technical Skills</h2>');
+    if ((!html || hasOnlySummary) && content.parsedData) {
+      const fullHtml = buildAtsResumeHtml(content.parsedData);
+      content.htmlContent = fullHtml;
+      resume.content = content;
+      await c.env.DB.prepare('UPDATE "Resume" SET content = ? WHERE id = ?').bind(JSON.stringify(content), resume.id).run().catch(() => {});
+    }
+
     resume.isPrimary = resume.isPrimary === 1 || resume.isPrimary === true;
     return c.json({ success: true, data: resume });
   } catch (err: any) {
@@ -3144,9 +3273,13 @@ app.post('/api/jobseeker/resumes/:id/convert', async (c) => {
       content = resume.content;
     }
 
-    if (!content.htmlContent) {
-      const rawText = content.rawText || content.autoCorrectedText || resume.name || '';
-      content.htmlContent = `<h1 style="text-align:center;">${resume.name || 'Resume'}</h1><p>${rawText.replace(/\n/g, '<br/>')}</p>`;
+    if (!content.htmlContent || content.htmlContent.length < 250) {
+      if (content.parsedData) {
+        content.htmlContent = buildAtsResumeHtml(content.parsedData);
+      } else {
+        const rawText = content.rawText || content.autoCorrectedText || resume.name || '';
+        content.htmlContent = `<h1 style="text-align:center;">${resume.name || 'Resume'}</h1><p>${rawText.replace(/\n/g, '<br/>')}</p>`;
+      }
       await c.env.DB.prepare('UPDATE "Resume" SET content = ? WHERE id = ?').bind(JSON.stringify(content), id).run();
     }
 
@@ -4166,10 +4299,25 @@ Return ONLY valid JSON matching this schema:
     const now = new Date().toISOString();
     const resumeName = `${userProfileData.fullName} Resume`;
 
+    const finalResumeData = parsed.resumeData || {
+      fullName: userProfileData.fullName,
+      contact: { email: userProfileData.email, phone: userProfileData.phone, location: userProfileData.location, links: [] },
+      summary: userProfileData.bio || 'Experienced software professional.',
+      skills: userProfileData.skills,
+      experience: userProfileData.experience.map((e: any) => ({ company: e.company || '', role: e.role || '', location: e.location || '', duration: '', bullets: e.description ? [e.description] : [] })),
+      projects: userProfileData.projects.map((p: any) => ({ name: p.name || '', description: p.description || '', technologies: [] })),
+      education: userProfileData.education.map((ed: any) => ({ institution: ed.institution || '', degree: ed.degree || '', field: ed.field || '', location: '', duration: '', details: '' })),
+      certifications: userProfileData.certifications || [],
+      languages: [],
+      achievements: []
+    };
+
+    const fullHtml = buildAtsResumeHtml(finalResumeData);
+
     const contentData = {
-      htmlContent: `<div style="font-family: sans-serif; padding: 24px;"><h1>${userProfileData.fullName}</h1><p>${userProfileData.email} | ${userProfileData.phone}</p><h2>Summary</h2><p>${parsed.resumeData?.summary || ''}</p></div>`,
-      rawText: parsed.resumeData?.summary || '',
-      parsedData: parsed.resumeData || {},
+      htmlContent: fullHtml,
+      rawText: finalResumeData.summary || '',
+      parsedData: finalResumeData,
       atsBreakdown: parsed.atsBreakdown || {},
       margins: { top: 48, right: 48, bottom: 48, left: 48 },
       template: 'default',
