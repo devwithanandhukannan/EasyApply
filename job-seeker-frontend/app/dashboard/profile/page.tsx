@@ -210,22 +210,81 @@ export default function ProfilePage() {
           setSkills(prev => Array.from(new Set([...prev, ...newSkills])));
         }
         if (parsed.education?.length) {
-          setEducation(parsed.education.map((edu: any, index: number) => ({ ...edu, id: Date.now() + index })));
+          setEducation(parsed.education.map((edu: any, index: number) => ({
+            id: Date.now() + index,
+            institution: edu.institution || '',
+            degree: edu.degree || '',
+            field: edu.field || '',
+            location: edu.location || '',
+            startMonth: edu.startMonth || '',
+            startYear: edu.startYear || '',
+            endMonth: edu.endMonth || '',
+            endYear: edu.endYear || '',
+            cgpa: edu.cgpa || '',
+            description: edu.description || '',
+          })));
         }
         if (parsed.experience?.length) {
-          setExperience(parsed.experience.map((exp: any, index: number) => ({ ...exp, id: Date.now() + index })));
+          setExperience(parsed.experience.map((exp: any, index: number) => ({
+            id: Date.now() + index,
+            company: exp.company || '',
+            role: exp.role || '',
+            location: exp.location || '',
+            startMonth: exp.startMonth || '',
+            startYear: exp.startYear || '',
+            endMonth: exp.endMonth || '',
+            endYear: exp.endYear || '',
+            current: Boolean(exp.current),
+            description: exp.description || '',
+            skills: Array.isArray(exp.skills) ? exp.skills : [],
+          })));
         }
         if (parsed.projects?.length) {
-          setProjects(parsed.projects.map((proj: any, index: number) => ({ ...proj, id: Date.now() + index })));
+          setProjects(parsed.projects.map((proj: any, index: number) => ({
+            id: Date.now() + index,
+            name: proj.name || '',
+            description: proj.description || '',
+            technologies: Array.isArray(proj.technologies) ? proj.technologies : [],
+            githubLink: proj.githubLink || '',
+            liveLink: proj.liveLink || '',
+            startDate: proj.startDate || '',
+            endDate: proj.endDate || '',
+          })));
         }
         if (parsed.certifications?.length) {
-          setCertifications(parsed.certifications.map((cert: any, index: number) => ({ ...cert, id: Date.now() + index })));
+          setCertifications(parsed.certifications.map((cert: any, index: number) => ({
+            id: Date.now() + index,
+            name: typeof cert === 'string' ? cert : (cert.name || ''),
+            organization: typeof cert === 'string' ? 'Accredited Issuer' : (cert.organization || cert.issuer || ''),
+            issueDate: typeof cert === 'string' ? '' : (cert.issueDate || cert.year || ''),
+            credentialUrl: typeof cert === 'string' ? '' : (cert.credentialUrl || cert.url || ''),
+          })));
         }
         if (parsed.languages?.length) {
-          setLanguages(parsed.languages.map((lang: any, index: number) => ({ ...lang, id: Date.now() + index })));
+          setLanguages(parsed.languages.map((lang: any, index: number) => ({
+            id: Date.now() + index,
+            language: typeof lang === 'string' ? lang : (lang.language || lang.name || ''),
+            proficiency: typeof lang === 'string' ? 'Fluent' : (lang.proficiency || 'Fluent'),
+          })));
         }
         if (parsed.achievements?.length) {
-          setAchievements(parsed.achievements.map((ach: any, index: number) => ({ ...ach, id: Date.now() + index })));
+          setAchievements(parsed.achievements.map((ach: any, index: number) => ({
+            id: Date.now() + index,
+            title: typeof ach === 'string' ? ach : (ach.title || ach.name || ''),
+            description: typeof ach === 'string' ? ach : (ach.description || ''),
+            year: typeof ach === 'string' ? '' : (ach.year || ''),
+          })));
+        }
+        if (parsed.preferences) {
+          setPreferences(prev => ({
+            ...prev,
+            roles: parsed.preferences.roles?.length ? parsed.preferences.roles : prev.roles,
+            industries: parsed.preferences.industries?.length ? parsed.preferences.industries : prev.industries,
+            jobType: parsed.preferences.jobType || prev.jobType,
+            experience: parsed.preferences.experience || prev.experience,
+            expectedSalary: parsed.preferences.expectedSalary || prev.expectedSalary,
+            workLocationPreference: parsed.preferences.workLocationPreference || prev.workLocationPreference,
+          }));
         }
 
         showToast('Success', 'CV parsed and imported successfully!', 'success');

@@ -3579,7 +3579,17 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
         const groqResult = await callGroqAiWorker(c.env, [
           {
             role: 'system',
-            content: `You are an expert ATS resume parser. Extract structured candidate data from the resume text into valid JSON matching this schema:
+            content: `You are an expert ATS resume extractor. Extract EVERY SINGLE detail from the resume text into valid JSON matching this schema exactly.
+CRITICAL REQUIREMENTS:
+1. Extract ALL education entries (University, College, Institute, Degree like B.Tech/BS/MS, Major, CGPA, graduation years).
+2. Extract ALL work experience (Company, Role/Title, Dates, Responsibilities, Location, Current status).
+3. Extract ALL projects (Title, Description, Tech Stack, Github/Live Links).
+4. Extract ALL certifications, licenses, and courses.
+5. Extract ALL languages spoken with proficiency.
+6. Extract ALL honors, awards, patents, and achievements.
+7. Infer realistic job preferences (targetRoles, preferredIndustries, experienceLevel, jobType, workLocationPreference).
+
+JSON SCHEMA:
 {
   "fullName": "Candidate Full Name",
   "email": "email address",
@@ -3590,17 +3600,70 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
   "portfolio": "https://...",
   "bio": "Professional executive summary / career overview",
   "skills": ["Skill 1", "Skill 2"],
-  "education": [{"institution": "University", "degree": "Degree", "field": "Major", "location": "City", "startYear": "2020", "endYear": "2024", "cgpa": "3.8"}],
-  "experience": [{"company": "Company", "role": "Title", "location": "City", "startYear": "2022", "endYear": "Present", "current": true, "description": "Responsibilities and accomplishments"}],
-  "projects": [{"name": "Project Name", "description": "Summary", "technologies": ["React", "Node.js"], "githubLink": "", "liveLink": ""}],
-  "certifications": [{"name": "Certification Name", "organization": "Issuer", "issueDate": "2023"}],
-  "languages": [{"language": "Language", "proficiency": "Fluent"}],
-  "achievements": [{"title": "Award Title", "description": "Details", "year": "2023"}]
+  "education": [
+    {
+      "institution": "University / College / Institute Name",
+      "degree": "Degree (e.g. B.Tech, B.S., M.S., High School)",
+      "field": "Field of Study / Major (e.g. Computer Science and Engineering)",
+      "location": "City, Country",
+      "startYear": "2021",
+      "endYear": "2025",
+      "cgpa": "8.2",
+      "description": "Highlights, coursework, thesis"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Company Name",
+      "role": "Job Title / Role",
+      "location": "City, Country / Remote",
+      "startYear": "2022",
+      "endYear": "Present",
+      "current": true,
+      "description": "Responsibilities and accomplishments",
+      "skills": ["Tech 1", "Tech 2"]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Project Title",
+      "description": "Project details and architecture",
+      "technologies": ["React", "Node.js"],
+      "githubLink": "",
+      "liveLink": ""
+    }
+  ],
+  "certifications": [
+    {
+      "name": "Certificate Title",
+      "organization": "Issuing Body / Issuer",
+      "issueDate": "2024",
+      "credentialUrl": ""
+    }
+  ],
+  "languages": [
+    {
+      "language": "Language Name",
+      "proficiency": "Native / Fluent / Professional / Working"
+    }
+  ],
+  "achievements": [
+    {
+      "title": "Award or Patent Title",
+      "description": "Description of achievement",
+      "year": "2024"
+    }
+  ],
+  "targetRoles": ["Full-Stack Software Developer", "Software Engineer", "Backend Developer"],
+  "preferredIndustries": ["Technology", "Software Development", "Cybersecurity", "FinTech"],
+  "experienceLevel": "mid",
+  "jobType": "full-time",
+  "workLocationPreference": "remote"
 }`
           },
           {
             role: 'user',
-            content: `Resume Content:\n"""\n${rawText.slice(0, 5000)}\n"""`
+            content: `Resume Content:\n"""\n${rawText.slice(0, 16000)}\n"""`
           }
         ], 'openai/gpt-oss-120b', true);
 
@@ -3621,28 +3684,11 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
             messages: [
               {
                 role: 'system',
-                content: `You are an ATS resume parser. Extract structured data from the resume text into JSON format only. Return ONLY a valid JSON object matching this structure:
-{
-  "fullName": "Name",
-  "email": "email",
-  "phone": "phone",
-  "location": "City, Country",
-  "linkedin": "url",
-  "github": "url",
-  "portfolio": "url",
-  "bio": "Professional Summary",
-  "skills": ["Skill 1"],
-  "education": [{"institution": "Univ", "degree": "Degree", "field": "", "location": "", "startYear": "", "endYear": "", "cgpa": ""}],
-  "experience": [{"company": "Company", "role": "Role", "location": "", "startYear": "", "endYear": "", "description": ""}],
-  "projects": [{"name": "Project", "description": "", "technologies": [], "githubLink": "", "liveLink": ""}],
-  "certifications": [{"name": "Cert", "organization": "", "issueDate": ""}],
-  "languages": [{"language": "Language", "proficiency": "Native"}],
-  "achievements": [{"title": "", "description": "", "year": ""}]
-}`
+                content: `You are an ATS resume parser. Extract structured data into JSON format only. Return ONLY a valid JSON object matching the full schema.`
               },
-              { role: 'user', content: `Resume Text:\n"""\n${rawText.slice(0, 3000)}\n"""` }
+              { role: 'user', content: `Resume Text:\n"""\n${rawText.slice(0, 5000)}\n"""` }
             ],
-            max_tokens: 1400,
+            max_tokens: 1800,
           });
 
           const respText = aiResult?.response || aiResult?.result?.response || '';
@@ -3670,64 +3716,135 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
       bio: aiParsed.bio || aiParsed.basicInfo?.bio || aiParsed.summary || '',
     };
 
-    // Normalize education
-    const rawEducation = Array.isArray(aiParsed.education) ? aiParsed.education : [];
-    const formattedEducation = rawEducation.map((edu: any) => ({
-      institution: edu.institution || edu.school || edu.university || '',
-      degree: edu.degree || '',
-      field: edu.field || edu.major || '',
-      location: edu.location || '',
-      startYear: String(edu.startYear || edu.startDate || ''),
-      endYear: String(edu.endYear || edu.endDate || ''),
-      cgpa: String(edu.cgpa || edu.gpa || ''),
-      description: edu.description || '',
-    }));
+    // Normalize education (support arrays of objects or strings, and alternative keys)
+    const rawEducation = Array.isArray(aiParsed.education) ? aiParsed.education : (Array.isArray(aiParsed.academics) ? aiParsed.academics : (Array.isArray(aiParsed.qualifications) ? aiParsed.qualifications : []));
+    const formattedEducation = rawEducation.map((edu: any) => {
+      if (typeof edu === 'string') {
+        return {
+          institution: edu,
+          degree: 'Degree',
+          field: '',
+          location: '',
+          startMonth: '',
+          startYear: '',
+          endMonth: '',
+          endYear: '',
+          cgpa: '',
+          description: '',
+        };
+      }
+      return {
+        institution: edu.institution || edu.school || edu.university || edu.college || '',
+        degree: edu.degree || edu.course || edu.program || '',
+        field: edu.field || edu.major || edu.branch || edu.department || '',
+        location: edu.location || '',
+        startMonth: edu.startMonth || '',
+        startYear: String(edu.startYear || edu.startDate || '').replace(/\D/g, '').slice(0, 4),
+        endMonth: edu.endMonth || '',
+        endYear: String(edu.endYear || edu.endDate || edu.graduationYear || '').replace(/\D/g, '').slice(0, 4),
+        cgpa: String(edu.cgpa || edu.gpa || edu.percentage || edu.grade || ''),
+        description: edu.description || edu.highlights || '',
+      };
+    });
 
     // Normalize experience
-    const rawExperience = Array.isArray(aiParsed.experience) ? aiParsed.experience : [];
-    const formattedExperience = rawExperience.map((exp: any) => ({
-      company: exp.company || exp.organization || '',
-      role: exp.role || exp.title || exp.position || '',
-      location: exp.location || '',
-      startYear: String(exp.startYear || exp.startDate || ''),
-      endYear: String(exp.endYear || exp.endDate || ''),
-      current: Boolean(exp.current || String(exp.endYear || '').toLowerCase().includes('present')),
-      description: exp.description || (Array.isArray(exp.responsibilities) ? exp.responsibilities.join('\n') : ''),
-      skills: Array.isArray(exp.skills) ? exp.skills : [],
-    }));
+    const rawExperience = Array.isArray(aiParsed.experience) ? aiParsed.experience : (Array.isArray(aiParsed.workHistory) ? aiParsed.workHistory : (Array.isArray(aiParsed.employment) ? aiParsed.employment : []));
+    const formattedExperience = rawExperience.map((exp: any) => {
+      if (typeof exp === 'string') {
+        return {
+          company: exp,
+          role: 'Developer',
+          location: '',
+          startMonth: '',
+          startYear: '',
+          endMonth: '',
+          endYear: '',
+          current: false,
+          description: '',
+          skills: [],
+        };
+      }
+      return {
+        company: exp.company || exp.organization || '',
+        role: exp.role || exp.title || exp.position || '',
+        location: exp.location || '',
+        startMonth: exp.startMonth || '',
+        startYear: String(exp.startYear || exp.startDate || '').replace(/\D/g, '').slice(0, 4),
+        endMonth: exp.endMonth || '',
+        endYear: String(exp.endYear || exp.endDate || '').replace(/\D/g, '').slice(0, 4),
+        current: Boolean(exp.current || String(exp.endYear || '').toLowerCase().includes('present')),
+        description: exp.description || (Array.isArray(exp.responsibilities) ? exp.responsibilities.join('\n') : ''),
+        skills: Array.isArray(exp.skills) ? exp.skills : [],
+      };
+    });
 
     // Normalize projects
-    const rawProjects = Array.isArray(aiParsed.projects) ? aiParsed.projects : [];
-    const formattedProjects = rawProjects.map((p: any) => ({
-      name: p.name || p.title || '',
-      description: p.description || '',
-      technologies: Array.isArray(p.technologies) ? p.technologies : (Array.isArray(p.techStack) ? p.techStack : []),
-      githubLink: p.githubLink || p.github || '',
-      liveLink: p.liveLink || p.link || p.url || '',
-    }));
+    const rawProjects = Array.isArray(aiParsed.projects) ? aiParsed.projects : (Array.isArray(aiParsed.personalProjects) ? aiParsed.personalProjects : []);
+    const formattedProjects = rawProjects.map((p: any) => {
+      if (typeof p === 'string') {
+        return {
+          name: p,
+          description: '',
+          technologies: [],
+          githubLink: '',
+          liveLink: '',
+        };
+      }
+      return {
+        name: p.name || p.title || '',
+        description: p.description || '',
+        technologies: Array.isArray(p.technologies) ? p.technologies : (Array.isArray(p.techStack) ? p.techStack : []),
+        githubLink: p.githubLink || p.github || '',
+        liveLink: p.liveLink || p.link || p.url || '',
+      };
+    });
 
     // Normalize certifications
-    const rawCertifications = Array.isArray(aiParsed.certifications) ? aiParsed.certifications : [];
-    const formattedCertifications = rawCertifications.map((c: any) => ({
-      name: c.name || c.title || '',
-      organization: c.organization || c.issuer || '',
-      issueDate: String(c.issueDate || c.year || c.date || ''),
-      credentialUrl: c.credentialUrl || c.url || '',
-    }));
+    const rawCertifications = Array.isArray(aiParsed.certifications) ? aiParsed.certifications : (Array.isArray(aiParsed.certificates) ? aiParsed.certificates : (Array.isArray(aiParsed.licenses) ? aiParsed.licenses : []));
+    const formattedCertifications = rawCertifications.map((c: any) => {
+      if (typeof c === 'string') {
+        return {
+          name: c,
+          organization: 'Accredited Organization',
+          issueDate: '',
+          credentialUrl: '',
+        };
+      }
+      return {
+        name: c.name || c.title || c.certificateName || '',
+        organization: c.organization || c.issuer || c.issuingOrganization || '',
+        issueDate: String(c.issueDate || c.year || c.date || ''),
+        credentialUrl: c.credentialUrl || c.url || c.link || '',
+      };
+    });
 
     // Normalize languages
-    const rawLanguages = Array.isArray(aiParsed.languages) ? aiParsed.languages : [];
+    const rawLanguages = Array.isArray(aiParsed.languages) ? aiParsed.languages : (Array.isArray(aiParsed.spokenLanguages) ? aiParsed.spokenLanguages : []);
     const formattedLanguages = rawLanguages.map((l: any) => {
-      if (typeof l === 'string') return { language: l, proficiency: 'Proficient' };
-      return { language: l.language || l.name || '', proficiency: l.proficiency || 'Proficient' };
+      if (typeof l === 'string') return { language: l, proficiency: 'Fluent' };
+      return { language: l.language || l.name || '', proficiency: l.proficiency || 'Fluent' };
     });
 
     // Normalize achievements
-    const rawAchievements = Array.isArray(aiParsed.achievements) ? aiParsed.achievements : [];
+    const rawAchievements = Array.isArray(aiParsed.achievements) ? aiParsed.achievements : (Array.isArray(aiParsed.honors) ? aiParsed.honors : (Array.isArray(aiParsed.awards) ? aiParsed.awards : []));
     const formattedAchievements = rawAchievements.map((a: any) => {
-      if (typeof a === 'string') return { title: a, description: '', year: '' };
-      return { title: a.title || a.name || '', description: a.description || '', year: String(a.year || '') };
+      if (typeof a === 'string') return { title: a, description: a, year: '' };
+      return {
+        title: a.title || a.name || a.award || '',
+        description: a.description || a.details || a.title || '',
+        year: String(a.year || a.date || '').replace(/\D/g, '').slice(0, 4)
+      };
     });
+
+    // Normalize preferences
+    const preferences = {
+      roles: Array.isArray(aiParsed.targetRoles) ? aiParsed.targetRoles : (Array.isArray(aiParsed.preferences?.roles) ? aiParsed.preferences.roles : ['Software Engineer', 'Full-Stack Developer']),
+      industries: Array.isArray(aiParsed.preferredIndustries) ? aiParsed.preferredIndustries : (Array.isArray(aiParsed.preferences?.industries) ? aiParsed.preferences.industries : ['Technology', 'Software Development']),
+      jobType: aiParsed.jobType || aiParsed.preferences?.jobType || 'full-time',
+      experience: aiParsed.experienceLevel || aiParsed.preferences?.experience || 'mid',
+      expectedSalary: aiParsed.expectedSalary || aiParsed.preferences?.expectedSalary || '',
+      workLocationPreference: aiParsed.workLocationPreference || aiParsed.preferences?.workLocationPreference || 'remote',
+    };
 
     const finalResult = {
       basicInfo,
@@ -3746,6 +3863,7 @@ app.post('/api/jobseeker/parse-resume', async (c) => {
       certifications: formattedCertifications,
       languages: formattedLanguages,
       achievements: formattedAchievements,
+      preferences,
     };
 
     return c.json({ success: true, data: finalResult });
