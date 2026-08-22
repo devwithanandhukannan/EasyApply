@@ -178,11 +178,24 @@ export default function OfferTemplatesPage() {
     if (!formData.content) return null;
     try {
       const data = JSON.parse(formData.content);
+      let bodyText = "Formal appointment parameters generated.";
+      if (typeof data.body === 'string') bodyText = data.body;
+      else if (typeof data.text === 'string') bodyText = data.text;
+      else if (typeof data.terms === 'string') bodyText = data.terms;
+      else if (typeof data.terms === 'object' && data.terms !== null) {
+        bodyText = Object.entries(data.terms).map(([k, v]) => `${k}: ${v}`).join('\n');
+      }
+
+      let salaryText = "[Compensation Parameter]";
+      if (typeof data.salary === 'string') salaryText = data.salary;
+      else if (typeof data.terms?.salary === 'string') salaryText = data.terms.salary;
+      else if (typeof data.compensation === 'string') salaryText = data.compensation;
+
       return {
-        body: data.terms || data.body || data.text || "Formal appointment parameters generated.",
-        title: data.title || data.role || "Specified Target Position",
-        salary: data.salary || data.compensation || "[Compensation Parameter]",
-        benefits: data.benefits || data.allowances || null
+        body: bodyText,
+        title: typeof data.title === 'string' ? data.title : (typeof data.role === 'string' ? data.role : (data?.header?.title || "Specified Target Position")),
+        salary: salaryText,
+        benefits: typeof data.benefits === 'string' ? data.benefits : (typeof data.allowances === 'string' ? data.allowances : null)
       };
     } catch (e) {
       return null;
@@ -252,10 +265,21 @@ export default function OfferTemplatesPage() {
                 ? JSON.parse(template.content) 
                 : template.content;
                 
-              parsedTerms = contentObj?.terms || contentObj?.body || contentObj?.text || '';
-              positionTitle = contentObj?.title || contentObj?.role || '';
+              if (typeof contentObj === 'string') {
+                parsedTerms = contentObj;
+              } else if (contentObj && typeof contentObj === 'object') {
+                if (typeof contentObj.body === 'string') parsedTerms = contentObj.body;
+                else if (typeof contentObj.text === 'string') parsedTerms = contentObj.text;
+                else if (typeof contentObj.terms === 'string') parsedTerms = contentObj.terms;
+                else if (typeof contentObj.terms === 'object' && contentObj.terms !== null) {
+                  parsedTerms = Object.entries(contentObj.terms).map(([k, v]) => `${k}: ${v}`).join(' | ');
+                } else {
+                  parsedTerms = JSON.stringify(contentObj);
+                }
+                positionTitle = typeof contentObj.title === 'string' ? contentObj.title : (typeof contentObj.role === 'string' ? contentObj.role : (contentObj?.header?.title || ''));
+              }
             } catch (e) {
-              parsedTerms = String(template.content);
+              parsedTerms = String(template.content || '');
             }
 
             return (
