@@ -1572,13 +1572,42 @@ app.post('/api/kanban/move-card', async (c) => {
 app.get('/api/company/interviews/list', async (c) => {
   try {
     const decoded = await getAuthUser(c);
-    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
-    const list = await c.env.DB.prepare(
-      'SELECT i.*, a.status as appStatus, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "Interview" i JOIN "Application" a ON i.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE j.companyId = ? ORDER BY i.scheduledTime DESC'
+    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [], interviews: [] });
+    const listResult = await c.env.DB.prepare(
+      'SELECT i.*, a.id as appId, a.status as appStatus, j.id as jobId, j.title as jobTitle, j.department as jobDepartment, p.id as candidateId, p.fullName as candidateName, p.email as candidateEmail, p.phone as candidatePhone, p.profilePhotoUrl FROM "Interview" i JOIN "Application" a ON i.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE j.companyId = ? ORDER BY i.scheduledTime DESC'
     ).bind(decoded.companyId).all();
-    return c.json({ success: true, data: list.results || [] });
+
+    const formatted = (listResult.results || []).map((r: any) => ({
+      id: r.id,
+      applicationId: r.applicationId,
+      scheduledTime: r.scheduledTime,
+      status: r.status,
+      type: r.type || 'technical',
+      meetingLink: r.meetingLink || '',
+      notes: r.notes || '',
+      rating: r.rating || null,
+      createdAt: r.createdAt,
+      application: {
+        id: r.appId,
+        status: r.appStatus,
+        jobPosting: {
+          id: r.jobId,
+          title: r.jobTitle || 'Job Role',
+          department: r.jobDepartment || 'General',
+        },
+        jobSeekerProfile: {
+          id: r.candidateId,
+          fullName: r.candidateName || 'Candidate',
+          email: r.candidateEmail || '',
+          phone: r.candidatePhone || '',
+          profilePhotoUrl: r.profilePhotoUrl || null,
+        },
+      },
+    }));
+
+    return c.json({ success: true, data: formatted, interviews: formatted });
   } catch {
-    return c.json({ success: true, data: [] });
+    return c.json({ success: true, data: [], interviews: [] });
   }
 });
 
@@ -1609,6 +1638,133 @@ app.post('/api/company/interviews/:id/respond-reschedule', async (c) => {
 app.post('/api/company/interviews/bulk-schedule', async (c) => {
   return c.json({ success: true, message: 'Interviews scheduled' });
 });
+
+// ─── SPOT JOBS ENDPOINTS ──────────────────────────────────
+const handleCompanySpotDashboard = async (c: any) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
+    const spotJobsRes = await c.env.DB.prepare(
+      'SELECT * FROM "SpotJob" WHERE companyId = ? ORDER BY createdAt DESC'
+    ).bind(decoded.companyId).all();
+
+    const spotJobs = await Promise.all((spotJobsRes.results || []).map(async (sj: any) => {
+      const bookingsRes = await c.env.DB.prepare(
+        'SELECT b.*, p.fullName, p.phone, p.email, p.location as candidateLocation, p.profilePhotoUrl FROM "SpotJobBooking" b JOIN "JobSeekerProfile" p ON b.jobSeekerProfileId = p.id WHERE b.spotJobId = ? ORDER BY b.createdAt DESC'
+      ).bind(sj.id).all().catch(() => ({ results: [] }));
+
+      const bookings = (bookingsRes.results || []).map((b: any) => ({
+        id: b.id,
+        status: b.status,
+        respondedAt: b.respondedAt,
+        createdAt: b.createdAt,
+        jobSeekerProfile: {
+          fullName: b.fullName || 'Candidate',
+          email: b.email || '',
+          phone: b.phone || '',
+          profilePhotoUrl: b.profilePhotoUrl || null,
+        },
+      }));
+
+      let skills = sj.requiredSkills;
+      if (typeof skills === 'string') {
+        try { skills = JSON.parse(skills); } catch { skills = []; }
+      }
+
+      return {
+        ...sj,
+        requiredSkills: Array.isArray(skills) ? skills : [],
+        bookings,
+      };
+    }));
+
+    return c.json({ success: true, data: spotJobs });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleCreateSpotJob = async (c: any) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const body = await c.req.json().catch(() => ({}));
+    const { title, description, requiredSkills, rate, rateType, currency, startTime, endTime, location, coordinates } = body;
+    if (!title || !rate || !rateType || !startTime || !endTime || !location) {
+      return c.json({ success: false, message: 'Missing required configuration fields.' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const skillsJson = JSON.stringify(Array.isArray(requiredSkills) ? requiredSkills : []);
+
+    await c.env.DB.prepare(
+      'INSERT INTO "SpotJob" (id, companyId, title, description, requiredSkills, rate, rateType, currency, startTime, endTime, location, coordinates, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      id,
+      decoded.companyId,
+      title,
+      description || '',
+      skillsJson,
+      Number(rate) || 0,
+      rateType || 'HOURLY',
+      currency || 'INR',
+      new Date(startTime).toISOString(),
+      new Date(endTime).toISOString(),
+      location,
+      coordinates ? JSON.stringify(coordinates) : null,
+      'POSTED',
+      now,
+      now
+    ).run();
+
+    // Match candidates who have spot_available
+    const candidatesRes = await c.env.DB.prepare(
+      'SELECT id, userId, fullName FROM "JobSeekerProfile" WHERE availabilityStatus = "spot_available"'
+    ).all().catch(() => ({ results: [] }));
+
+    const candidates = candidatesRes.results || [];
+    for (const cand of candidates) {
+      const bId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "SpotJobBooking" (id, spotJobId, jobSeekerProfileId, status, createdAt, updatedAt) VALUES (?, ?, ?, "PENDING_RESPONSE", ?, ?)'
+      ).bind(bId, id, cand.id, now, now).run().catch(() => {});
+    }
+
+    if (candidates.length > 0) {
+      await c.env.DB.prepare('UPDATE "SpotJob" SET status = "SEARCHING", updatedAt = ? WHERE id = ?').bind(now, id).run().catch(() => {});
+    }
+
+    return c.json({
+      success: true,
+      message: 'Spot job created and broadcast matching process initialized.',
+      data: { spotJob: { id, title }, matchesFound: candidates.length },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleSpotJobStatus = async (c: any) => {
+  try {
+    const { jobId, id } = c.req.param();
+    const targetId = jobId || id;
+    const { status } = await c.req.json().catch(() => ({}));
+    const now = new Date().toISOString();
+    await c.env.DB.prepare('UPDATE "SpotJob" SET status = ?, updatedAt = ? WHERE id = ?').bind(status, now, targetId).run();
+    return c.json({ success: true, message: 'Spot job status updated' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+app.get('/api/company/spot-jobs/company-dashboard', handleCompanySpotDashboard);
+app.get('/api/spot-jobs/company-dashboard', handleCompanySpotDashboard);
+app.post('/api/company/spot-jobs', handleCreateSpotJob);
+app.post('/api/spot-jobs', handleCreateSpotJob);
+app.patch('/api/company/spot-jobs/:jobId/status', handleSpotJobStatus);
+app.patch('/api/spot-jobs/:jobId/status', handleSpotJobStatus);
+
 
 app.get('/api/company/offers', async (c) => {
   try {
