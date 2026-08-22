@@ -3673,12 +3673,88 @@ app.get('/api/jobseeker/applications/tracker/timeline', async (c) => {
     const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
     if (!profile) return c.json({ success: true, data: [] });
 
-    const apps = await c.env.DB.prepare(
-      'SELECT a.id, a.status, a.appliedAt, a.lastActivityAt, a.matchScore, j.title as jobTitle, j.location as jobLocation, c.name as companyName, c.logoUrl as companyLogoUrl FROM "Application" a JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "Company" c ON j.companyId = c.id WHERE a.jobSeekerProfileId = ? ORDER BY a.appliedAt DESC'
-    ).bind(profile.id).all();
+    const apps = await c.env.DB.prepare(`
+      SELECT 
+        a.id as applicationId,
+        a.status,
+        a.pipelineIndex,
+        a.candidateNotes,
+        a.isWithdrawn,
+        a.appliedAt,
+        a.updatedAt,
+        a.lastActivityAt,
+        a.matchScore,
+        j.id as jobId,
+        j.title as jobTitle,
+        j.department as jobDepartment,
+        j.jobType,
+        j.locationType,
+        j.location as jobLocation,
+        j.experienceRequired,
+        j.salaryRange as compensationContext,
+        c.name as companyName,
+        c.logoUrl as companyLogoUrl,
+        c.industry as companyIndustry,
+        r.id as resumeId,
+        r.name as resumeName,
+        r.filePath as resumeDownloadPath
+      FROM "Application" a 
+      JOIN "JobPosting" j ON a.jobPostingId = j.id 
+      JOIN "Company" c ON j.companyId = c.id 
+      LEFT JOIN "Resume" r ON a.resumeId = r.id
+      WHERE a.jobSeekerProfileId = ? 
+      ORDER BY a.appliedAt DESC
+    `).bind(profile.id).all();
 
-    return c.json({ success: true, data: apps.results || [] });
-  } catch {
+    const formatted = (apps.results || []).map((app: any) => {
+      const stage = app.status || 'applied';
+      const isWithdrawn = Boolean(app.isWithdrawn);
+      return {
+        applicationId: app.applicationId,
+        liveStatusBadge: stage,
+        isWithdrawn,
+        currentStage: stage,
+        pipelineIndex: app.pipelineIndex || 0,
+        candidateNotes: app.candidateNotes || '',
+        appliedAt: app.appliedAt || new Date().toISOString(),
+        updatedAt: app.updatedAt || app.appliedAt || new Date().toISOString(),
+        jobDetails: {
+          id: app.jobId,
+          title: app.jobTitle || 'Job Position',
+          department: app.jobDepartment || 'Engineering',
+          jobType: app.jobType || 'Full-time',
+          locationType: app.locationType || 'Remote',
+          location: app.jobLocation || 'Remote',
+          experienceRequired: app.experienceRequired || '',
+          compensationContext: app.compensationContext || '',
+        },
+        companyDetails: {
+          name: app.companyName || 'Company',
+          logoUrl: app.companyLogoUrl || null,
+          industry: app.companyIndustry || 'Technology',
+        },
+        resumeUsed: {
+          id: app.resumeId || 'default',
+          name: app.resumeName || 'Primary Resume',
+          downloadPath: app.resumeDownloadPath || null,
+        },
+        timelineView: [
+          {
+            stage: 'Applied',
+            status: 'completed',
+            date: app.appliedAt,
+            notes: 'Application submitted successfully',
+          }
+        ],
+        interviewHistory: [],
+        activeOffer: null,
+        canWithdraw: !isWithdrawn && stage !== 'hired' && stage !== 'rejected',
+      };
+    });
+
+    return c.json({ success: true, data: formatted });
+  } catch (err: any) {
+    console.error('timeline error:', err);
     return c.json({ success: true, data: [] });
   }
 });

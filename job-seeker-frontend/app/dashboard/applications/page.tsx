@@ -164,21 +164,22 @@ export default function ApplicationsPage() {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (app) =>
-          app.jobDetails.title.toLowerCase().includes(q) ||
-          app.companyDetails.name.toLowerCase().includes(q) ||
-          app.jobDetails.location.toLowerCase().includes(q)
+          (app.jobDetails?.title || '').toLowerCase().includes(q) ||
+          (app.companyDetails?.name || '').toLowerCase().includes(q) ||
+          (app.jobDetails?.location || '').toLowerCase().includes(q)
       );
     }
 
     if (statusFilter !== 'all') {
       result = result.filter((app) => {
-        if (statusFilter === 'applied') return app.currentStage.toLowerCase() === 'applied' && !app.isWithdrawn;
-        if (statusFilter === 'screened') return app.currentStage.toLowerCase() === 'screened' && !app.isWithdrawn;
-        if (statusFilter === 'technical_round') return app.currentStage.toLowerCase() === 'technical_round' && !app.isWithdrawn;
-        if (statusFilter === 'hr_round') return app.currentStage.toLowerCase() === 'hr_round' && !app.isWithdrawn;
-        if (statusFilter === 'offer_sent') return app.currentStage.toLowerCase() === 'offer_sent';
-        if (statusFilter === 'hired') return app.currentStage.toLowerCase() === 'hired';
-        if (statusFilter === 'rejected') return app.currentStage.toLowerCase() === 'rejected';
+        const stage = (app.currentStage || (app as any).status || 'applied').toLowerCase();
+        if (statusFilter === 'applied') return stage === 'applied' && !app.isWithdrawn;
+        if (statusFilter === 'screened') return stage === 'screened' && !app.isWithdrawn;
+        if (statusFilter === 'technical_round') return stage === 'technical_round' && !app.isWithdrawn;
+        if (statusFilter === 'hr_round') return stage === 'hr_round' && !app.isWithdrawn;
+        if (statusFilter === 'offer_sent') return stage === 'offer_sent';
+        if (statusFilter === 'hired') return stage === 'hired';
+        if (statusFilter === 'rejected') return stage === 'rejected';
         if (statusFilter === 'withdrawn') return app.isWithdrawn;
         return true;
       });
@@ -318,10 +319,10 @@ export default function ApplicationsPage() {
 
   const stats = {
     total: applications.length,
-    applied: applications.filter(a => a.currentStage.toLowerCase() === 'applied' && !a.isWithdrawn).length,
-    activeRounds: applications.filter(a => ['screened', 'technical_round', 'hr_round'].includes(a.currentStage.toLowerCase()) && !a.isWithdrawn).length,
-    offers: applications.filter(a => a.currentStage.toLowerCase() === 'offer_sent' || a.currentStage.toLowerCase() === 'hired').length,
-    rejected: applications.filter(a => a.isWithdrawn || a.currentStage.toLowerCase() === 'rejected').length,
+    applied: applications.filter(a => ((a.currentStage || (a as any).status || 'applied').toLowerCase() === 'applied') && !a.isWithdrawn).length,
+    activeRounds: applications.filter(a => ['screened', 'technical_round', 'hr_round'].includes((a.currentStage || (a as any).status || '').toLowerCase()) && !a.isWithdrawn).length,
+    offers: applications.filter(a => ['offer_sent', 'hired'].includes((a.currentStage || (a as any).status || '').toLowerCase())).length,
+    rejected: applications.filter(a => a.isWithdrawn || ((a.currentStage || (a as any).status || '').toLowerCase() === 'rejected')).length,
   };
 
   return (
