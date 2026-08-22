@@ -56,6 +56,58 @@ async function sendCompanyVerificationEmail(email: string, companyName: string, 
   }
 }
 
+async function sendCompanyPasswordResetEmail(email: string, token: string) {
+  try {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: 'workbridge.anandhu@gmail.com',
+        pass: 'rget fqku jaad wkku',
+      },
+    });
+
+    const resetUrl = `https://cloudflare.easyapply-company.pages.dev/reset-password?token=${token}`;
+
+    await transporter.sendMail({
+      from: '"EasyApply Business" <workbridge.anandhu@gmail.com>',
+      to: email,
+      subject: 'Reset Your Company Account Password - EasyApply',
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
+            <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Company Account Security</p>
+          </div>
+          <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Reset Your Password</h2>
+          <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
+            We received a request to reset the password for your EasyApply company account. Click the button below to set a new password:
+          </p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${resetUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
+              Reset Password
+            </a>
+          </div>
+          <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
+            This reset link expires in 1 hour. If you did not request this, you can safely ignore this email.
+          </p>
+          <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
+          <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+            Or copy and paste this link: <br/>
+            <a href="${resetUrl}" style="color: #0071e3; word-break: break-all;">${resetUrl}</a>
+          </p>
+        </div>
+      `,
+    });
+    console.log(`✉️ Password reset email dispatched via SMTP to: ${email}`);
+    return true;
+  } catch (err: any) {
+    console.error(`❌ SMTP reset password delivery failure for ${email}:`, err.message || err);
+    return false;
+  }
+}
+
 async function getCompanySubscription(db: D1Database, companyId: string) {
   try {
     const sub: any = await db.prepare(`
@@ -1010,6 +1062,136 @@ app.post('/api/company/auth/resend-verification', async (c) => {
     return c.json({
       success: true,
       message: `A new verification link has been sent to ${company.email}. Please check your inbox and click the link to verify.`,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Server error' }, 500);
+  }
+});
+
+app.post('/api/company/auth/forgot-password', async (c) => {
+  try {
+    const { email, type } = await c.req.json().catch(() => ({}));
+    if (!email) {
+      return c.json({ success: false, message: 'Email address is required.' }, 400);
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const jwtSecret = getJwtSecret(c);
+    let emailSent = false;
+
+    // 1. Check Company (Admin account)
+    if (!type || type === 'admin') {
+      const company: any = await c.env.DB.prepare(
+        'SELECT id, name, email FROM "Company" WHERE LOWER(email) = ?'
+      ).bind(cleanEmail).first();
+
+      if (company) {
+        const token = jwt.sign(
+          { companyId: company.id, email: company.email, purpose: 'reset-password' },
+          jwtSecret,
+          { expiresIn: '1h' }
+        );
+        await sendCompanyPasswordResetEmail(company.email, token);
+        emailSent = true;
+      }
+    }
+
+    // 2. Check Team Member account
+    if (!emailSent && (!type || type === 'team' || type === 'admin')) {
+      const user: any = await c.env.DB.prepare(
+        'SELECT id, email, mobileNumber FROM "User" WHERE LOWER(email) = ? OR LOWER(mobileNumber) = ?'
+      ).bind(cleanEmail, cleanEmail).first().catch(() => null);
+
+      if (user) {
+        const member: any = await c.env.DB.prepare(
+          'SELECT id, companyId FROM "TeamMember" WHERE userId = ? AND status = "active"'
+        ).bind(user.id).first().catch(() => null);
+
+        if (member) {
+          const token = jwt.sign(
+            { teamMemberId: member.id, userId: user.id, companyId: member.companyId, email: cleanEmail, purpose: 'reset-password' },
+            jwtSecret,
+            { expiresIn: '1h' }
+          );
+          await sendCompanyPasswordResetEmail(cleanEmail, token);
+          emailSent = true;
+        }
+      }
+    }
+
+    // 3. Fallback: Check company even if type was 'team'
+    if (!emailSent && type === 'team') {
+      const company: any = await c.env.DB.prepare(
+        'SELECT id, name, email FROM "Company" WHERE LOWER(email) = ?'
+      ).bind(cleanEmail).first();
+
+      if (company) {
+        const token = jwt.sign(
+          { companyId: company.id, email: company.email, purpose: 'reset-password' },
+          jwtSecret,
+          { expiresIn: '1h' }
+        );
+        await sendCompanyPasswordResetEmail(company.email, token);
+        emailSent = true;
+      }
+    }
+
+    return c.json({
+      success: true,
+      message: 'If the email is registered with an active company account, a password reset link has been sent.',
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Server error' }, 500);
+  }
+});
+
+app.post('/api/company/auth/reset-password', async (c) => {
+  try {
+    const { token, newPassword } = await c.req.json().catch(() => ({}));
+    if (!token || !newPassword) {
+      return c.json({ success: false, message: 'Token and new password are required.' }, 400);
+    }
+
+    if (newPassword.length < 8) {
+      return c.json({ success: false, message: 'Password must be at least 8 characters long.' }, 400);
+    }
+
+    const jwtSecret = getJwtSecret(c);
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, jwtSecret);
+    } catch {
+      return c.json({ success: false, message: 'Reset link is invalid or has expired. Please request a new one.' }, 400);
+    }
+
+    if (decoded.purpose !== 'reset-password') {
+      return c.json({ success: false, message: 'Invalid token purpose.' }, 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const now = new Date().toISOString();
+
+    if (decoded.companyId && !decoded.teamMemberId) {
+      await c.env.DB.prepare(
+        'UPDATE "Company" SET password = ?, updatedAt = ? WHERE id = ?'
+      ).bind(hashedPassword, now, decoded.companyId).run();
+    } else if (decoded.teamMemberId) {
+      await c.env.DB.prepare(
+        'UPDATE "TeamMember" SET password = ?, updatedAt = ? WHERE id = ?'
+      ).bind(hashedPassword, now, decoded.teamMemberId).run().catch(() => null);
+
+      if (decoded.userId) {
+        await c.env.DB.prepare(
+          'UPDATE "User" SET password = ?, updatedAt = ? WHERE id = ?'
+        ).bind(hashedPassword, now, decoded.userId).run().catch(() => null);
+      }
+    } else {
+      return c.json({ success: false, message: 'Invalid token content.' }, 400);
+    }
+
+    return c.json({
+      success: true,
+      message: 'Password reset successful! You can now log in with your new password.',
     });
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
