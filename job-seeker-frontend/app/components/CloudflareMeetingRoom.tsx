@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff,
   ScreenShare, StopCircle, Users, DoorOpen, ShieldCheck,
-  Clock, CheckCircle, AlertCircle
+  Clock, CheckCircle, AlertCircle, Sparkles
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 
@@ -38,14 +38,16 @@ export default function CloudflareMeetingRoom({
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
-  // Host Gate & Waiting State
-  const [isWaitingForHost, setIsWaitingForHost] = useState(true);
+  // Admission & Waiting State
+  const [isAdmitted, setIsAdmitted] = useState(false);
+  const [isHostPresent, setIsHostPresent] = useState(false);
+  const [isDeclined, setIsDeclined] = useState(false);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
 
   // Connection & Room State
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<string>('Connecting to waiting room...');
+  const [connectionStatus, setConnectionStatus] = useState<string>('Requesting admission to room...');
   const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
 
@@ -55,7 +57,6 @@ export default function CloudflareMeetingRoom({
   const publishPcRef = useRef<RTCPeerConnection | null>(null);
   const subPcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const heartbeatTimerRef = useRef<any>(null);
-  const hostCheckTimerRef = useRef<any>(null);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const isCleaningUpRef = useRef(false);
@@ -67,7 +68,6 @@ export default function CloudflareMeetingRoom({
     ],
   };
 
-  // Helper to completely release camera, microphone, and screenshare hardware
   const releaseAllMediaHardware = useCallback(() => {
     try {
       if (localStreamRef.current) {
@@ -99,7 +99,7 @@ export default function CloudflareMeetingRoom({
     }
   }, [localStream]);
 
-  // Acquire local stream once on mount for preview and calling
+  // Acquire local stream on mount for pre-call check & streaming
   useEffect(() => {
     let active = true;
     navigator.mediaDevices
@@ -127,26 +127,70 @@ export default function CloudflareMeetingRoom({
     };
   }, [releaseAllMediaHardware]);
 
-  // ─── STEP 1: PUBLISH TO CLOUDFLARE CALLS (ONCE HOST IS PRESENT) ───
-  const startLiveStream = useCallback(async (activeStream: MediaStream) => {
-    if (sessionId || isCleaningUpRef.current) return;
-
+  // ─── STEP 1: REQUEST ADMISSION & SETUP WEBRTC SESSION ────────
+  const requestEntry = useCallback(async () => {
     try {
-      setConnectionStatus('Connecting to Cloudflare WebRTC SFU...');
+      setConnectionStatus('Setting up secure session...');
       const sessionRes = await api.post('/calls/session/new');
       if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
-        throw new Error(sessionRes.data?.message || 'Failed to obtain Calls session ID');
+        throw new Error(sessionRes.data?.message || 'Failed to create Calls session');
       }
 
       const newSessionId = sessionRes.data.sessionId;
       setSessionId(newSessionId);
 
+      // Request entry to room
+      const joinRes = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
+        sessionId: newSessionId,
+        name: userName,
+        role: 'candidate',
+        tracks: ['audio', 'video'],
+      });
+
+      if (joinRes.data?.isEnded) {
+        setIsSessionEnded(true);
+        releaseAllMediaHardware();
+        return;
+      }
+
+      if (joinRes.data?.isDeclined) {
+        setIsDeclined(true);
+        releaseAllMediaHardware();
+        return;
+      }
+
+      setIsHostPresent(Boolean(joinRes.data?.isHostPresent));
+
+      if (joinRes.data?.isAdmitted) {
+        setIsAdmitted(true);
+      } else {
+        setIsAdmitted(false);
+      }
+      setConnecting(false);
+    } catch (err: any) {
+      console.error('❌ Request entry error:', err);
+      setConnectionStatus('Connection issue. Retrying...');
+    }
+  }, [roomName, userName, releaseAllMediaHardware]);
+
+  // Initial Entry Request
+  useEffect(() => {
+    requestEntry();
+  }, [requestEntry]);
+
+  // ─── STEP 2: PUBLISH MEDIA TRACKS (ONCE ADMITTED BY HOST) ────
+  const publishMediaTracks = useCallback(async (currentSessionId: string) => {
+    if (publishPcRef.current || isCleaningUpRef.current) return;
+    const stream = localStreamRef.current || localStream;
+    if (!stream) return;
+
+    try {
       const pubPc = new RTCPeerConnection(STUN_SERVERS);
       publishPcRef.current = pubPc;
 
       const tracksToPublish: any[] = [];
-      activeStream.getTracks().forEach((track) => {
-        const sender = pubPc.addTrack(track, activeStream);
+      stream.getTracks().forEach((track) => {
+        const sender = pubPc.addTrack(track, stream);
         const transceiver = pubPc.getTransceivers().find((t) => t.sender === sender);
         const mid = transceiver ? transceiver.mid || String(tracksToPublish.length) : String(tracksToPublish.length);
         tracksToPublish.push({
@@ -173,7 +217,7 @@ export default function CloudflareMeetingRoom({
         }
       });
 
-      const publishRes = await api.post(`/calls/session/${newSessionId}/tracks/new`, {
+      const publishRes = await api.post(`/calls/session/${currentSessionId}/tracks/new`, {
         sessionDescription: {
           type: pubPc.localDescription?.type || 'offer',
           sdp: pubPc.localDescription?.sdp,
@@ -184,70 +228,12 @@ export default function CloudflareMeetingRoom({
       if (publishRes.data?.sessionDescription) {
         await pubPc.setRemoteDescription(new RTCSessionDescription(publishRes.data.sessionDescription));
       }
-
-      // Join room in backend
-      const joinRes = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
-        sessionId: newSessionId,
-        name: userName,
-        role: 'candidate',
-        tracks: ['audio', 'video'],
-      });
-
-      if (joinRes.data?.isEnded) {
-        setIsSessionEnded(true);
-        releaseAllMediaHardware();
-        return;
-      }
-
-      setIsWaitingForHost(false);
-      setConnecting(false);
-      setConnectionStatus('Live in Interview Room');
-    } catch (err: any) {
-      console.error('❌ Candidate start stream error:', err);
-      setConnectionStatus('Reconnecting...');
+    } catch (err) {
+      console.error('❌ Failed to publish candidate tracks:', err);
     }
-  }, [roomName, userName, sessionId, releaseAllMediaHardware]);
+  }, [localStream]);
 
-  // ─── STEP 2: HOST GATING / WAITING ROOM CHECK ─────────────────────
-  useEffect(() => {
-    let cancelled = false;
-
-    const checkHostStatus = async () => {
-      if (cancelled || isCleaningUpRef.current) return;
-      try {
-        const res = await api.get(`/calls/rooms/${encodeURIComponent(roomName)}/status`);
-        if (cancelled) return;
-
-        if (res.data?.isEnded) {
-          setIsSessionEnded(true);
-          releaseAllMediaHardware();
-          return;
-        }
-
-        if (res.data?.isHostPresent) {
-          // Host is in room! Start stream if we have camera/mic ready
-          if (localStreamRef.current && !sessionId) {
-            startLiveStream(localStreamRef.current);
-          }
-        } else {
-          setIsWaitingForHost(true);
-          setConnectionStatus('Waiting for host to start session...');
-        }
-      } catch (err) {
-        console.error('Host check error:', err);
-      }
-    };
-
-    checkHostStatus();
-    hostCheckTimerRef.current = setInterval(checkHostStatus, 2500);
-
-    return () => {
-      cancelled = true;
-      if (hostCheckTimerRef.current) clearInterval(hostCheckTimerRef.current);
-    };
-  }, [roomName, sessionId, startLiveStream, releaseAllMediaHardware]);
-
-  // ─── STEP 3: SUBSCRIBE TO HOST'S AUDIO/VIDEO STREAM ───────────────
+  // ─── STEP 3: SUBSCRIBE TO HOST AUDIO/VIDEO ───────────────────
   const subscribeToParticipant = useCallback(async (remoteSessionId: string, currentSessionId: string) => {
     if (subPcsRef.current[remoteSessionId] || isCleaningUpRef.current) return;
 
@@ -305,16 +291,17 @@ export default function CloudflareMeetingRoom({
     }
   }, []);
 
-  // ─── STEP 4: HEARTBEAT & HOST PRESENCE MONITORING ─────────────────
+  // ─── STEP 4: HEARTBEAT (POLLS ADMISSION STATUS & HOST STREAM) ─
   useEffect(() => {
     if (!sessionId) return;
 
-    const pollParticipants = async () => {
+    const pollStatus = async () => {
       if (isCleaningUpRef.current) return;
       try {
         const res = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/heartbeat`, {
           sessionId,
           role: 'candidate',
+          name: userName,
         });
 
         if (res.data?.isEnded) {
@@ -323,50 +310,65 @@ export default function CloudflareMeetingRoom({
           return;
         }
 
-        if (res.data?.success && Array.isArray(res.data?.participants)) {
-          const others: RemoteParticipant[] = res.data.participants.filter(
-            (p: any) => p.sessionId !== sessionId
-          );
-          setRemoteParticipants(others);
+        if (res.data?.isDeclined) {
+          setIsDeclined(true);
+          releaseAllMediaHardware();
+          return;
+        }
 
-          others.forEach((p) => {
-            if (!subPcsRef.current[p.sessionId]) {
-              subscribeToParticipant(p.sessionId, sessionId);
-            }
-          });
+        setIsHostPresent(Boolean(res.data?.isHostPresent));
 
-          const otherIds = new Set(others.map((p) => p.sessionId));
-          Object.keys(subPcsRef.current).forEach((sid) => {
-            if (!otherIds.has(sid)) {
-              subPcsRef.current[sid]?.close();
-              delete subPcsRef.current[sid];
-              setRemoteStreams((prev) => {
-                const next = { ...prev };
-                delete next[sid];
-                return next;
-              });
-            }
-          });
+        // When Host admits candidate:
+        if (res.data?.isAdmitted) {
+          if (!isAdmitted) {
+            setIsAdmitted(true);
+          }
+          publishMediaTracks(sessionId);
+
+          if (Array.isArray(res.data?.participants)) {
+            const others: RemoteParticipant[] = res.data.participants.filter(
+              (p: any) => p.sessionId !== sessionId
+            );
+            setRemoteParticipants(others);
+
+            others.forEach((p) => {
+              if (!subPcsRef.current[p.sessionId]) {
+                subscribeToParticipant(p.sessionId, sessionId);
+              }
+            });
+
+            const otherIds = new Set(others.map((p) => p.sessionId));
+            Object.keys(subPcsRef.current).forEach((sid) => {
+              if (!otherIds.has(sid)) {
+                subPcsRef.current[sid]?.close();
+                delete subPcsRef.current[sid];
+                setRemoteStreams((prev) => {
+                  const next = { ...prev };
+                  delete next[sid];
+                  return next;
+                });
+              }
+            });
+          }
         }
       } catch (err) {
-        console.error('Heartbeat poll error:', err);
+        console.error('Candidate heartbeat error:', err);
       }
     };
 
-    pollParticipants();
-    heartbeatTimerRef.current = setInterval(pollParticipants, 3000);
+    pollStatus();
+    heartbeatTimerRef.current = setInterval(pollStatus, 2000);
 
     return () => {
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
     };
-  }, [sessionId, roomName, subscribeToParticipant, releaseAllMediaHardware]);
+  }, [sessionId, roomName, userName, isAdmitted, publishMediaTracks, subscribeToParticipant, releaseAllMediaHardware]);
 
   // Clean up on component unmount
   useEffect(() => {
     return () => {
       isCleaningUpRef.current = true;
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-      if (hostCheckTimerRef.current) clearInterval(hostCheckTimerRef.current);
 
       releaseAllMediaHardware();
 
@@ -379,7 +381,7 @@ export default function CloudflareMeetingRoom({
     };
   }, [roomName, sessionId, releaseAllMediaHardware]);
 
-  // ─── MEDIA CONTROLS ───────────────────────────────────────────────
+  // ─── MEDIA CONTROLS ──────────────────────────────────────────
   const toggleAudio = () => {
     if (!localStream) return;
     const audioTrack = localStream.getAudioTracks()[0];
@@ -450,7 +452,7 @@ export default function CloudflareMeetingRoom({
     }
   };
 
-  // ─── SCREEN A: INTERVIEW ENDED BY HOST ────────────────────────────
+  // ─── SCREEN A: SESSION ENDED BY HOST ─────────────────────────
   if (isSessionEnded) {
     return (
       <div className="h-full w-full bg-black flex flex-col items-center justify-center p-6 text-center select-none font-sans">
@@ -459,7 +461,7 @@ export default function CloudflareMeetingRoom({
         </div>
         <h2 className="text-lg font-bold text-white mb-2">Interview Session Ended</h2>
         <p className="text-xs text-zinc-400 max-w-sm leading-relaxed mb-6">
-          The host has concluded this interview. Your camera and microphone have been safely turned off.
+          The interviewer has concluded this session. Your camera and microphone have been safely turned off.
         </p>
         <button
           onClick={handleLeaveCall}
@@ -471,28 +473,54 @@ export default function CloudflareMeetingRoom({
     );
   }
 
-  // ─── SCREEN B: WAITING FOR HOST (GATE) ────────────────────────────
-  if (isWaitingForHost) {
+  // ─── SCREEN B: DECLINED ACCESS ───────────────────────────────
+  if (isDeclined) {
+    return (
+      <div className="h-full w-full bg-black flex flex-col items-center justify-center p-6 text-center select-none font-sans">
+        <div className="w-16 h-16 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-5 shadow-xl">
+          <AlertCircle className="w-8 h-8 text-red-400" />
+        </div>
+        <h2 className="text-lg font-bold text-white mb-2">Interview Access Deferred</h2>
+        <p className="text-xs text-zinc-400 max-w-sm leading-relaxed mb-6">
+          The host has postponed or declined this interview queue request.
+        </p>
+        <button
+          onClick={handleLeaveCall}
+          className="px-6 py-3 rounded-2xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all shadow-lg cursor-pointer"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  // ─── SCREEN C: WAITING FOR HOST ADMISSION (LOBBY GATE) ────────
+  if (!isAdmitted) {
     return (
       <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col items-center justify-center p-6 select-none font-sans relative overflow-hidden">
-        {/* Ambient glow */}
         <div className="absolute w-96 h-96 bg-[#0071e3]/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-md w-full flex flex-col items-center text-center z-10 space-y-5">
-          {/* Waiting animation badge */}
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            <span>Waiting for Interviewer</span>
+          {/* Status Badge */}
+          <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-semibold ${
+            isHostPresent
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+              : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${isHostPresent ? 'bg-emerald-400' : 'bg-amber-400'} animate-ping`} />
+            <span>{isHostPresent ? 'Interviewer Present • Awaiting Admission' : 'Waiting for Interviewer to Join'}</span>
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">You're in the Waiting Room</h2>
+            <h2 className="text-xl font-bold text-white tracking-tight">You're in the Waiting Lobby</h2>
             <p className="text-xs text-[#86868b] mt-1.5 leading-relaxed">
-              The company interviewer will start the interview session shortly. Please check your camera and audio below.
+              {isHostPresent
+                ? 'The interviewer has been notified of your presence and will admit you into the room.'
+                : 'The interview host has not entered yet. You will be admitted as soon as the host connects.'}
             </p>
           </div>
 
-          {/* Camera preview tile */}
+          {/* Camera Pre-Check Preview */}
           <div className="w-full h-56 rounded-3xl overflow-hidden bg-zinc-900 border border-white/[0.08] relative shadow-2xl flex items-center justify-center">
             <video
               ref={previewVideoRef}
@@ -545,7 +573,7 @@ export default function CloudflareMeetingRoom({
               onClick={handleLeaveCall}
               className="px-5 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold transition-all border border-white/[0.08] cursor-pointer"
             >
-              Exit Waiting Room
+              Exit Lobby
             </button>
           </div>
         </div>
@@ -553,7 +581,7 @@ export default function CloudflareMeetingRoom({
     );
   }
 
-  // ─── SCREEN C: ACTIVE LIVE INTERVIEW STREAM ───────────────────────
+  // ─── SCREEN D: ADMITTED & ACTIVE LIVE INTERVIEW STREAM ────────────
   return (
     <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased">
       {/* Top Bar */}
@@ -562,7 +590,7 @@ export default function CloudflareMeetingRoom({
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs font-bold text-white tracking-tight">{roomName}</span>
           <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            Live Stream
+            Admitted • Live
           </span>
         </div>
 
@@ -574,7 +602,7 @@ export default function CloudflareMeetingRoom({
 
       {/* Main Grid */}
       <div className="flex-1 p-3 grid grid-cols-1 gap-3 relative overflow-hidden bg-radial from-zinc-900/40 to-[#09090b]">
-        {/* Remote Host Video (Primary focus) */}
+        {/* Remote Host Video */}
         {remoteParticipants.length > 0 && remoteParticipants[0] ? (
           <div className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.08] flex items-center justify-center shadow-2xl">
             {remoteStreams[remoteParticipants[0].sessionId] ? (
@@ -605,7 +633,7 @@ export default function CloudflareMeetingRoom({
         ) : (
           <div className="rounded-2xl border border-dashed border-white/[0.08] flex flex-col items-center justify-center text-center p-6 bg-zinc-900/30">
             <Users className="w-8 h-8 text-zinc-600 animate-pulse mb-2" />
-            <p className="text-xs text-zinc-400 font-medium">Interviewer is connecting...</p>
+            <p className="text-xs text-zinc-400 font-medium">Connecting to Interviewer...</p>
           </div>
         )}
 

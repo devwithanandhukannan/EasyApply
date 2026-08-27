@@ -3254,11 +3254,17 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
 
     const kvKey = `calls_room:${roomName}`;
     const raw = await c.env.SESSION_KV.get(kvKey);
-    let roomState = raw ? JSON.parse(raw) : { isEnded: false, participants: [] };
+    let roomState = raw ? JSON.parse(raw) : { isEnded: false, participants: [], waitingQueue: [], admittedCandidates: [], declinedCandidates: [] };
 
-    // If company starts the room again, reset ended state
+    if (!Array.isArray(roomState.waitingQueue)) roomState.waitingQueue = [];
+    if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
+    if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
+    if (!Array.isArray(roomState.participants)) roomState.participants = [];
+
+    // If company host joins, reset ended state
     if (role === 'company' && roomState.isEnded) {
-      roomState = { isEnded: false, participants: [] };
+      roomState.isEnded = false;
+      roomState.participants = [];
     }
 
     if (roomState.isEnded) {
@@ -3266,22 +3272,44 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     }
 
     const now = Date.now();
-    let participants = (roomState.participants || []).filter(
+    let participants = roomState.participants.filter(
       (p: any) => p.sessionId !== sessionId && p.participantId !== participantId && (now - p.updatedAt < 120000)
     );
 
     const hasHost = participants.some((p: any) => p.role === 'company') || role === 'company';
 
-    // Gate: Jobseeker cannot enter without company host
-    if (role === 'candidate' && !hasHost) {
-      return c.json({
-        success: true,
-        waitingForHost: true,
-        isHostPresent: false,
-        message: 'Waiting for the interviewer to start the session.',
-      });
+    // ── CANDIDATE ADMISSION CHECK ──
+    if (role === 'candidate') {
+      const isAdmitted = roomState.admittedCandidates.includes(sessionId);
+      const isDeclined = roomState.declinedCandidates.includes(sessionId);
+
+      if (isDeclined) {
+        return c.json({ success: false, isDeclined: true, message: 'Interview access was declined.' }, 403);
+      }
+
+      if (!isAdmitted) {
+        // Add to waiting queue for host review
+        roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId && (now - w.requestedAt < 120000));
+        roomState.waitingQueue.push({
+          sessionId,
+          participantId: participantId || crypto.randomUUID(),
+          name: name || 'Candidate',
+          role: 'candidate',
+          requestedAt: now,
+        });
+
+        await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+        return c.json({
+          success: true,
+          status: 'waiting_admission',
+          isAdmitted: false,
+          isHostPresent: hasHost,
+          message: hasHost ? 'Waiting for the interviewer to admit you.' : 'Waiting for the interviewer to start the session.',
+        });
+      }
     }
 
+    // Admitted or Host — add to active stream participants
     participants.push({
       sessionId,
       participantId: participantId || crypto.randomUUID(),
@@ -3293,9 +3321,61 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     });
 
     roomState.participants = participants;
-    roomState.isEnded = false;
+    // Remove from waiting queue if admitted
+    roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+
     await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
-    return c.json({ success: true, waitingForHost: false, isHostPresent: true, participants });
+    return c.json({ success: true, status: 'admitted', isAdmitted: true, isHostPresent: true, participants });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// Host Admits a Candidate
+app.post('/api/calls/rooms/:roomName/admit', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const { sessionId } = await c.req.json();
+    const kvKey = `calls_room:${roomName}`;
+    const raw = await c.env.SESSION_KV.get(kvKey);
+    if (!raw) return c.json({ success: false, message: 'Room not found' }, 404);
+
+    let roomState = JSON.parse(raw);
+    if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
+    if (!roomState.admittedCandidates.includes(sessionId)) {
+      roomState.admittedCandidates.push(sessionId);
+    }
+    if (Array.isArray(roomState.waitingQueue)) {
+      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+    }
+
+    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    return c.json({ success: true, message: 'Candidate admitted successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// Host Declines a Candidate
+app.post('/api/calls/rooms/:roomName/decline', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const { sessionId } = await c.req.json();
+    const kvKey = `calls_room:${roomName}`;
+    const raw = await c.env.SESSION_KV.get(kvKey);
+    if (!raw) return c.json({ success: false, message: 'Room not found' }, 404);
+
+    let roomState = JSON.parse(raw);
+    if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
+    if (!roomState.declinedCandidates.includes(sessionId)) {
+      roomState.declinedCandidates.push(sessionId);
+    }
+    if (Array.isArray(roomState.waitingQueue)) {
+      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+    }
+
+    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    return c.json({ success: true, message: 'Candidate access declined' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -3320,29 +3400,51 @@ app.get('/api/calls/rooms/:roomName/participants', async (c) => {
 app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId, role } = await c.req.json().catch(() => ({}));
+    const { sessionId, role, name } = await c.req.json().catch(() => ({}));
     const kvKey = `calls_room:${roomName}`;
     const raw = await c.env.SESSION_KV.get(kvKey);
-    if (!raw) return c.json({ success: true, isHostPresent: false, isEnded: false, participants: [] });
+    if (!raw) return c.json({ success: true, isHostPresent: false, isEnded: false, participants: [], waitingQueue: [] });
 
     let roomState = JSON.parse(raw);
     if (roomState.isEnded) {
-      return c.json({ success: true, isEnded: true, isHostPresent: false, participants: [] });
+      return c.json({ success: true, isEnded: true, isHostPresent: false, participants: [], waitingQueue: [] });
     }
 
     const now = Date.now();
-    let participants = (roomState.participants || []).map((p: any) =>
+    if (!Array.isArray(roomState.participants)) roomState.participants = [];
+    if (!Array.isArray(roomState.waitingQueue)) roomState.waitingQueue = [];
+    if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
+    if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
+
+    // Keep active participants updated
+    roomState.participants = roomState.participants.map((p: any) =>
       p.sessionId === sessionId ? { ...p, updatedAt: now } : p
     );
-    roomState.participants = participants;
+
+    // Keep waiting candidates updated
+    roomState.waitingQueue = roomState.waitingQueue.map((w: any) =>
+      w.sessionId === sessionId ? { ...w, requestedAt: now } : w
+    );
+
     await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
 
-    const active = participants.filter((p: any) => (now - p.updatedAt < 120000));
-    const isHostPresent = active.some((p: any) => p.role === 'company');
+    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 120000));
+    const activeWaiting = roomState.waitingQueue.filter((w: any) => (now - w.requestedAt < 120000));
+    const isHostPresent = activeParticipants.some((p: any) => p.role === 'company');
+    const isAdmitted = roomState.admittedCandidates.includes(sessionId);
+    const isDeclined = roomState.declinedCandidates.includes(sessionId);
 
-    return c.json({ success: true, isEnded: false, isHostPresent, participants: active });
+    return c.json({
+      success: true,
+      isEnded: false,
+      isHostPresent,
+      isAdmitted,
+      isDeclined,
+      participants: activeParticipants,
+      waitingQueue: activeWaiting,
+    });
   } catch {
-    return c.json({ success: true, isEnded: false, isHostPresent: false, participants: [] });
+    return c.json({ success: true, isEnded: false, isHostPresent: false, participants: [], waitingQueue: [] });
   }
 });
 

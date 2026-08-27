@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff,
   ScreenShare, StopCircle, Users, DoorOpen, ShieldCheck,
-  Power
+  UserCheck, UserX, Bell, Check, X
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 
@@ -24,6 +24,13 @@ interface RemoteParticipant {
   stream?: MediaStream;
 }
 
+interface WaitingCandidate {
+  sessionId: string;
+  name: string;
+  role: string;
+  requestedAt: number;
+}
+
 export default function CloudflareMeetingRoom({
   roomName,
   role,
@@ -38,12 +45,14 @@ export default function CloudflareMeetingRoom({
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
-  // Connection & Room State
+  // Connection, Room & Waiting Queue State
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
   const [connectionStatus, setConnectionStatus] = useState<string>('Initializing Cloudflare WebRTC...');
   const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
+  const [waitingQueue, setWaitingQueue] = useState<WaitingCandidate[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [admittingMap, setAdmittingMap] = useState<Record<string, boolean>>({});
 
   // Refs for WebRTC & Hardware Cleanup
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -61,7 +70,6 @@ export default function CloudflareMeetingRoom({
     ],
   };
 
-  // Helper to completely release camera, microphone, and screenshare hardware
   const releaseAllMediaHardware = () => {
     try {
       if (localStreamRef.current) {
@@ -106,7 +114,6 @@ export default function CloudflareMeetingRoom({
       }
 
       setConnectionStatus('Connecting to Cloudflare WebRTC Edge...');
-      // 1. Request new Cloudflare Calls session
       const sessionRes = await api.post('/calls/session/new');
       if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
         throw new Error(sessionRes.data?.message || 'Failed to obtain Calls session ID');
@@ -115,7 +122,6 @@ export default function CloudflareMeetingRoom({
       const newSessionId = sessionRes.data.sessionId;
       setSessionId(newSessionId);
 
-      // 2. Setup Publisher PeerConnection
       const pubPc = new RTCPeerConnection(STUN_SERVERS);
       publishPcRef.current = pubPc;
 
@@ -134,7 +140,6 @@ export default function CloudflareMeetingRoom({
       const offer = await pubPc.createOffer();
       await pubPc.setLocalDescription(offer);
 
-      // Wait briefly for ICE gathering
       await new Promise<void>((resolve) => {
         if (pubPc.iceGatheringState === 'complete') resolve();
         else {
@@ -149,7 +154,6 @@ export default function CloudflareMeetingRoom({
         }
       });
 
-      // 3. Publish tracks to Cloudflare Calls
       const publishRes = await api.post(`/calls/session/${newSessionId}/tracks/new`, {
         sessionDescription: {
           type: pubPc.localDescription?.type || 'offer',
@@ -164,7 +168,7 @@ export default function CloudflareMeetingRoom({
 
       await pubPc.setRemoteDescription(new RTCSessionDescription(publishRes.data.sessionDescription));
 
-      // 4. Register in Room as Company Host
+      // Register in Room as Host
       await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
         sessionId: newSessionId,
         name: userName,
@@ -173,7 +177,7 @@ export default function CloudflareMeetingRoom({
       });
 
       setConnecting(false);
-      setConnectionStatus('Live & Ready on Cloudflare');
+      setConnectionStatus('Host Ready • Waiting for Candidate');
     } catch (err: any) {
       console.error('❌ Cloudflare Calls Init Error:', err);
       setConnectionStatus(`Connection Error: ${err.message || 'Check camera permissions'}`);
@@ -239,7 +243,7 @@ export default function CloudflareMeetingRoom({
     }
   }, []);
 
-  // ─── STEP 3: POLL ROOM PARTICIPANTS & HEARTBEAT ──────────────
+  // ─── STEP 3: POLL ROOM PARTICIPANTS & WAITING QUEUE ──────────
   useEffect(() => {
     if (!sessionId) return;
 
@@ -251,30 +255,38 @@ export default function CloudflareMeetingRoom({
           role,
         });
 
-        if (res.data?.success && Array.isArray(res.data?.participants)) {
-          const others: RemoteParticipant[] = res.data.participants.filter(
-            (p: any) => p.sessionId !== sessionId
-          );
-          setRemoteParticipants(others);
+        if (res.data?.success) {
+          // Update active participants
+          if (Array.isArray(res.data?.participants)) {
+            const others: RemoteParticipant[] = res.data.participants.filter(
+              (p: any) => p.sessionId !== sessionId
+            );
+            setRemoteParticipants(others);
 
-          others.forEach((p) => {
-            if (!subPcsRef.current[p.sessionId]) {
-              subscribeToParticipant(p.sessionId, sessionId);
-            }
-          });
+            others.forEach((p) => {
+              if (!subPcsRef.current[p.sessionId]) {
+                subscribeToParticipant(p.sessionId, sessionId);
+              }
+            });
 
-          const otherIds = new Set(others.map((p) => p.sessionId));
-          Object.keys(subPcsRef.current).forEach((sid) => {
-            if (!otherIds.has(sid)) {
-              subPcsRef.current[sid]?.close();
-              delete subPcsRef.current[sid];
-              setRemoteStreams((prev) => {
-                const next = { ...prev };
-                delete next[sid];
-                return next;
-              });
-            }
-          });
+            const otherIds = new Set(others.map((p) => p.sessionId));
+            Object.keys(subPcsRef.current).forEach((sid) => {
+              if (!otherIds.has(sid)) {
+                subPcsRef.current[sid]?.close();
+                delete subPcsRef.current[sid];
+                setRemoteStreams((prev) => {
+                  const next = { ...prev };
+                  delete next[sid];
+                  return next;
+                });
+              }
+            });
+          }
+
+          // Update waiting queue for host admission
+          if (Array.isArray(res.data?.waitingQueue)) {
+            setWaitingQueue(res.data.waitingQueue);
+          }
         }
       } catch (err) {
         console.error('Participant poll error:', err);
@@ -282,7 +294,7 @@ export default function CloudflareMeetingRoom({
     };
 
     pollParticipants();
-    heartbeatTimerRef.current = setInterval(pollParticipants, 3000);
+    heartbeatTimerRef.current = setInterval(pollParticipants, 2500);
 
     return () => {
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
@@ -297,7 +309,6 @@ export default function CloudflareMeetingRoom({
       isCleaningUpRef.current = true;
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
 
-      // Stop all camera and mic hardware instantly
       releaseAllMediaHardware();
 
       if (publishPcRef.current) {
@@ -310,6 +321,32 @@ export default function CloudflareMeetingRoom({
       }
     };
   }, [initializeSession]);
+
+  // ─── HOST ACTIONS: ADMIT / DECLINE CANDIDATE ─────────────────
+  const handleAdmitCandidate = async (candidateSessionId: string) => {
+    try {
+      setAdmittingMap((prev) => ({ ...prev, [candidateSessionId]: true }));
+      await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/admit`, {
+        sessionId: candidateSessionId,
+      });
+      setWaitingQueue((prev) => prev.filter((w) => w.sessionId !== candidateSessionId));
+    } catch (e) {
+      console.error('Failed to admit candidate:', e);
+    } finally {
+      setAdmittingMap((prev) => ({ ...prev, [candidateSessionId]: false }));
+    }
+  };
+
+  const handleDeclineCandidate = async (candidateSessionId: string) => {
+    try {
+      await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/decline`, {
+        sessionId: candidateSessionId,
+      });
+      setWaitingQueue((prev) => prev.filter((w) => w.sessionId !== candidateSessionId));
+    } catch (e) {
+      console.error('Failed to decline candidate:', e);
+    }
+  };
 
   // ─── MEDIA CONTROLS ──────────────────────────────────────────
   const toggleAudio = () => {
@@ -373,7 +410,6 @@ export default function CloudflareMeetingRoom({
     }
   };
 
-  // Completely End Interview (Ends for all participants and shuts off camera/mic)
   const handleEndInterview = async () => {
     releaseAllMediaHardware();
     try {
@@ -388,7 +424,63 @@ export default function CloudflareMeetingRoom({
   };
 
   return (
-    <div className="h-screen w-screen bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased">
+    <div className="h-screen w-screen bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased relative">
+      {/* ─── FLOATING ADMISSION NOTIFICATION BANNER ──────────────────── */}
+      {waitingQueue.length > 0 && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 animate-in slide-in-from-top-4 duration-300">
+          <div className="bg-zinc-900/95 border border-[#0071e3]/40 rounded-2xl p-4 shadow-2xl backdrop-blur-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#0071e3]/10 border border-[#0071e3]/20 flex items-center justify-center text-[#0071e3]">
+                  <Bell className="w-4 h-4 animate-bounce" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-white">Candidate Requesting Entry</h4>
+                  <p className="text-[10px] text-zinc-400">Waiting for your permission to join</p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-[#0071e3]/20 text-[#42a5f5] text-[10px] font-bold">
+                {waitingQueue.length} Waiting
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {waitingQueue.map((cand) => (
+                <div
+                  key={cand.sessionId}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-white/[0.06]"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center text-xs font-bold text-white">
+                      {cand.name.charAt(0)}
+                    </div>
+                    <span className="text-xs font-semibold text-white">{cand.name}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleAdmitCandidate(cand.sessionId)}
+                      disabled={admittingMap[cand.sessionId]}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>{admittingMap[cand.sessionId] ? 'Admitting...' : 'Admit'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeclineCandidate(cand.sessionId)}
+                      className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs transition-colors cursor-pointer"
+                      title="Decline entry"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── TOP HEADER ──────────────────────────────────────────────── */}
       <div className="h-14 px-6 bg-black/60 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between z-20">
         <div className="flex items-center gap-3">
@@ -399,7 +491,7 @@ export default function CloudflareMeetingRoom({
             <h2 className="text-xs font-bold text-white tracking-tight flex items-center gap-2">
               <span>{roomName}</span>
               <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Host Live • Cloudflare SFU
+                Host Active • Cloudflare SFU
               </span>
             </h2>
             <p className="text-[10px] text-[#86868b]">{connectionStatus}</p>
@@ -407,9 +499,15 @@ export default function CloudflareMeetingRoom({
         </div>
 
         <div className="flex items-center gap-2">
+          {waitingQueue.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400 animate-pulse">
+              <Users className="w-3.5 h-3.5" />
+              <span>{waitingQueue.length} In Lobby</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs font-semibold text-zinc-300">
             <Users className="w-3.5 h-3.5 text-[#0071e3]" />
-            <span>{remoteParticipants.length + 1} Connected</span>
+            <span>{remoteParticipants.length + 1} In Room</span>
           </div>
         </div>
       </div>
@@ -452,9 +550,13 @@ export default function CloudflareMeetingRoom({
             <div className="w-16 h-16 rounded-3xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mb-4">
               <Users className="w-8 h-8 text-zinc-600 animate-pulse" />
             </div>
-            <h3 className="text-sm font-bold text-white mb-1">Waiting for candidate to connect...</h3>
+            <h3 className="text-sm font-bold text-white mb-1">
+              {waitingQueue.length > 0 ? 'Candidate is in the waiting lobby!' : 'Waiting for candidate to join...'}
+            </h3>
             <p className="text-xs text-zinc-500 max-w-sm">
-              You are hosting this interview. The candidate will be permitted into this room automatically.
+              {waitingQueue.length > 0
+                ? 'Click "Admit" above to permit the candidate into this live room.'
+                : 'Candidates will appear in the lobby for your admission before video connects.'}
             </p>
           </div>
         ) : (
@@ -533,7 +635,6 @@ export default function CloudflareMeetingRoom({
           {isScreenSharing ? <StopCircle className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
         </button>
 
-        {/* End Interview for All Button */}
         <button
           onClick={handleEndInterview}
           className="px-6 py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-lg shadow-red-600/30 flex items-center gap-2 cursor-pointer ml-2"
