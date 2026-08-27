@@ -1673,16 +1673,24 @@ app.get('/api/company/dashboard', async (c) => {
 app.get('/api/company/jobs', async (c) => {
   try {
     const decoded = await getAuthUser(c);
-    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
-    const jobs = await c.env.DB.prepare('SELECT * FROM "JobPosting" WHERE companyId = ? ORDER BY createdAt DESC').bind(decoded.companyId).all();
+    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [], jobs: [] });
+    const jobs = await c.env.DB.prepare(`
+      SELECT j.*, 
+        (SELECT COUNT(*) FROM "Application" a WHERE a.jobPostingId = j.id AND (a.isWithdrawn = 0 OR a.isWithdrawn IS NULL)) as applicationsCount
+      FROM "JobPosting" j 
+      WHERE j.companyId = ? 
+      ORDER BY j.createdAt DESC
+    `).bind(decoded.companyId).all();
+
     const formatted = (jobs.results || []).map((j: any) => ({
       ...j,
+      applicationsCount: Number(j.applicationsCount) || 0,
       requiredSkills: typeof j.requiredSkills === 'string' ? JSON.parse(j.requiredSkills || '[]') : (j.requiredSkills || []),
       disallowAiCv: Boolean(j.disallowAiCv),
     }));
-    return c.json({ success: true, data: formatted });
+    return c.json({ success: true, data: formatted, jobs: formatted });
   } catch (err: any) {
-    return c.json({ success: true, data: [] });
+    return c.json({ success: true, data: [], jobs: [] });
   }
 });
 

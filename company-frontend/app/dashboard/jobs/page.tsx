@@ -33,8 +33,9 @@ export default function JobsPage() {
     try {
       setIsLoading(true);
       const response = await api.get('/company/jobs');
-      setJobs(response.data.jobs || []);
-      setFilteredJobs(response.data.jobs || []);
+      const jobsList = response.data?.jobs || response.data?.data || [];
+      setJobs(jobsList);
+      setFilteredJobs(jobsList);
     } catch (error) {
       console.error('Error fetching jobs:', error);
       setJobs([]);
