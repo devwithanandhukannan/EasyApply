@@ -3214,7 +3214,38 @@ app.put('/api/calls/session/:sessionId/renegotiate', async (c) => {
   }
 });
 
-// 4. Room Management (Join / Query / Leave) using SESSION_KV
+// 4. Room Management (Join / Status / Heartbeat / Leave / End) using SESSION_KV
+app.get('/api/calls/rooms/:roomName/status', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const kvKey = `calls_room:${roomName}`;
+    const raw = await c.env.SESSION_KV.get(kvKey);
+    const roomState = raw ? JSON.parse(raw) : null;
+    
+    if (!roomState) {
+      return c.json({ success: true, exists: false, isHostPresent: false, isEnded: false, participants: [] });
+    }
+
+    if (roomState.isEnded) {
+      return c.json({ success: true, exists: true, isHostPresent: false, isEnded: true, participants: [] });
+    }
+
+    const now = Date.now();
+    const activeParticipants = (roomState.participants || []).filter((p: any) => (now - p.updatedAt < 120000));
+    const isHostPresent = activeParticipants.some((p: any) => p.role === 'company');
+
+    return c.json({
+      success: true,
+      exists: true,
+      isHostPresent,
+      isEnded: false,
+      participants: activeParticipants,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, isHostPresent: false, isEnded: false, participants: [] });
+  }
+});
+
 app.post('/api/calls/rooms/:roomName/join', async (c) => {
   try {
     const { roomName } = c.req.param();
@@ -3223,10 +3254,33 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
 
     const kvKey = `calls_room:${roomName}`;
     const raw = await c.env.SESSION_KV.get(kvKey);
-    let participants: any[] = raw ? JSON.parse(raw) : [];
+    let roomState = raw ? JSON.parse(raw) : { isEnded: false, participants: [] };
+
+    // If company starts the room again, reset ended state
+    if (role === 'company' && roomState.isEnded) {
+      roomState = { isEnded: false, participants: [] };
+    }
+
+    if (roomState.isEnded) {
+      return c.json({ success: false, isEnded: true, message: 'This interview has been ended by the host.' }, 403);
+    }
 
     const now = Date.now();
-    participants = participants.filter((p: any) => p.sessionId !== sessionId && p.participantId !== participantId && (now - p.updatedAt < 7200000));
+    let participants = (roomState.participants || []).filter(
+      (p: any) => p.sessionId !== sessionId && p.participantId !== participantId && (now - p.updatedAt < 120000)
+    );
+
+    const hasHost = participants.some((p: any) => p.role === 'company') || role === 'company';
+
+    // Gate: Jobseeker cannot enter without company host
+    if (role === 'candidate' && !hasHost) {
+      return c.json({
+        success: true,
+        waitingForHost: true,
+        isHostPresent: false,
+        message: 'Waiting for the interviewer to start the session.',
+      });
+    }
 
     participants.push({
       sessionId,
@@ -3238,8 +3292,10 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
       updatedAt: now,
     });
 
-    await c.env.SESSION_KV.put(kvKey, JSON.stringify(participants), { expirationTtl: 86400 });
-    return c.json({ success: true, participants });
+    roomState.participants = participants;
+    roomState.isEnded = false;
+    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    return c.json({ success: true, waitingForHost: false, isHostPresent: true, participants });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -3250,12 +3306,12 @@ app.get('/api/calls/rooms/:roomName/participants', async (c) => {
     const { roomName } = c.req.param();
     const kvKey = `calls_room:${roomName}`;
     const raw = await c.env.SESSION_KV.get(kvKey);
-    let participants: any[] = raw ? JSON.parse(raw) : [];
+    const roomState = raw ? JSON.parse(raw) : null;
+    if (!roomState || roomState.isEnded) return c.json({ success: true, isEnded: Boolean(roomState?.isEnded), participants: [] });
 
     const now = Date.now();
-    participants = participants.filter((p: any) => (now - p.updatedAt < 120000));
-
-    return c.json({ success: true, participants });
+    const active = (roomState.participants || []).filter((p: any) => (now - p.updatedAt < 120000));
+    return c.json({ success: true, isEnded: false, participants: active });
   } catch (err: any) {
     return c.json({ success: false, participants: [] });
   }
@@ -3264,35 +3320,58 @@ app.get('/api/calls/rooms/:roomName/participants', async (c) => {
 app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId } = await c.req.json().catch(() => ({}));
-    if (!sessionId) return c.json({ success: true });
-
+    const { sessionId, role } = await c.req.json().catch(() => ({}));
     const kvKey = `calls_room:${roomName}`;
     const raw = await c.env.SESSION_KV.get(kvKey);
-    if (!raw) return c.json({ success: true, participants: [] });
+    if (!raw) return c.json({ success: true, isHostPresent: false, isEnded: false, participants: [] });
 
-    let participants: any[] = JSON.parse(raw);
+    let roomState = JSON.parse(raw);
+    if (roomState.isEnded) {
+      return c.json({ success: true, isEnded: true, isHostPresent: false, participants: [] });
+    }
+
     const now = Date.now();
-    participants = participants.map((p: any) => p.sessionId === sessionId ? { ...p, updatedAt: now } : p);
-    await c.env.SESSION_KV.put(kvKey, JSON.stringify(participants), { expirationTtl: 86400 });
+    let participants = (roomState.participants || []).map((p: any) =>
+      p.sessionId === sessionId ? { ...p, updatedAt: now } : p
+    );
+    roomState.participants = participants;
+    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
 
     const active = participants.filter((p: any) => (now - p.updatedAt < 120000));
-    return c.json({ success: true, participants: active });
+    const isHostPresent = active.some((p: any) => p.role === 'company');
+
+    return c.json({ success: true, isEnded: false, isHostPresent, participants: active });
   } catch {
-    return c.json({ success: true });
+    return c.json({ success: true, isEnded: false, isHostPresent: false, participants: [] });
+  }
+});
+
+app.post('/api/calls/rooms/:roomName/end', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const kvKey = `calls_room:${roomName}`;
+    const roomState = { isEnded: true, endedAt: Date.now(), participants: [] };
+    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    return c.json({ success: true, message: 'Room ended successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
   }
 });
 
 app.post('/api/calls/rooms/:roomName/leave', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId } = await c.req.json().catch(() => ({}));
+    const { sessionId, role } = await c.req.json().catch(() => ({}));
     const kvKey = `calls_room:${roomName}`;
     const raw = await c.env.SESSION_KV.get(kvKey);
     if (raw && sessionId) {
-      let participants: any[] = JSON.parse(raw);
-      participants = participants.filter((p: any) => p.sessionId !== sessionId);
-      await c.env.SESSION_KV.put(kvKey, JSON.stringify(participants), { expirationTtl: 86400 });
+      let roomState = JSON.parse(raw);
+      roomState.participants = (roomState.participants || []).filter((p: any) => p.sessionId !== sessionId);
+      if (role === 'company') {
+        roomState.isEnded = true;
+        roomState.endedAt = Date.now();
+      }
+      await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
     }
     return c.json({ success: true });
   } catch {

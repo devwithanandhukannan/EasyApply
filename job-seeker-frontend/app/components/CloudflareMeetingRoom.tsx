@@ -4,8 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff,
-  ScreenShare, StopCircle, Users, CheckCircle2,
-  Sparkles, DoorOpen, ShieldCheck
+  ScreenShare, StopCircle, Users, DoorOpen, ShieldCheck,
+  Clock, CheckCircle, AlertCircle
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 
@@ -38,19 +38,26 @@ export default function CloudflareMeetingRoom({
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
+  // Host Gate & Waiting State
+  const [isWaitingForHost, setIsWaitingForHost] = useState(true);
+  const [isSessionEnded, setIsSessionEnded] = useState(false);
+
   // Connection & Room State
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<string>('Initializing Cloudflare WebRTC...');
+  const [connectionStatus, setConnectionStatus] = useState<string>('Connecting to waiting room...');
   const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
 
-  // Refs for WebRTC & Cleanup
+  // Refs for WebRTC & Hardware Cleanup
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const publishPcRef = useRef<RTCPeerConnection | null>(null);
   const subPcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const heartbeatTimerRef = useRef<any>(null);
+  const hostCheckTimerRef = useRef<any>(null);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
   const isCleaningUpRef = useRef(false);
 
   const STUN_SERVERS: RTCConfiguration = {
@@ -60,22 +67,72 @@ export default function CloudflareMeetingRoom({
     ],
   };
 
-  // ─── STEP 1: INITIALIZE LOCAL MEDIA & CLOUDFLARE SESSION ─────
-  const initializeSession = useCallback(async () => {
+  // Helper to completely release camera, microphone, and screenshare hardware
+  const releaseAllMediaHardware = useCallback(() => {
     try {
-      setConnectionStatus('Acquiring camera & microphone...');
-      const stream = await navigator.mediaDevices.getUserMedia({
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+        localStreamRef.current = null;
+      }
+      if (localStream) {
+        localStream.getTracks().forEach((track) => {
+          track.stop();
+          track.enabled = false;
+        });
+      }
+      if (screenTrackRef.current) {
+        screenTrackRef.current.stop();
+        screenTrackRef.current.enabled = false;
+        screenTrackRef.current = null;
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = null;
+      }
+      if (previewVideoRef.current) {
+        previewVideoRef.current.srcObject = null;
+      }
+    } catch (e) {
+      console.error('Error releasing media hardware:', e);
+    }
+  }, [localStream]);
+
+  // Acquire local stream once on mount for preview and calling
+  useEffect(() => {
+    let active = true;
+    navigator.mediaDevices
+      .getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      })
+      .then((stream) => {
+        if (!active) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        localStreamRef.current = stream;
+        setLocalStream(stream);
+        if (previewVideoRef.current) previewVideoRef.current.srcObject = stream;
+        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      })
+      .catch((err) => {
+        console.warn('Camera/Mic permission warning:', err);
       });
 
-      setLocalStream(stream);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+    return () => {
+      active = false;
+      releaseAllMediaHardware();
+    };
+  }, [releaseAllMediaHardware]);
 
-      setConnectionStatus('Connecting to Cloudflare WebRTC Edge...');
-      // 1. Request new Cloudflare Calls session
+  // ─── STEP 1: PUBLISH TO CLOUDFLARE CALLS (ONCE HOST IS PRESENT) ───
+  const startLiveStream = useCallback(async (activeStream: MediaStream) => {
+    if (sessionId || isCleaningUpRef.current) return;
+
+    try {
+      setConnectionStatus('Connecting to Cloudflare WebRTC SFU...');
       const sessionRes = await api.post('/calls/session/new');
       if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
         throw new Error(sessionRes.data?.message || 'Failed to obtain Calls session ID');
@@ -84,14 +141,13 @@ export default function CloudflareMeetingRoom({
       const newSessionId = sessionRes.data.sessionId;
       setSessionId(newSessionId);
 
-      // 2. Setup Publisher PeerConnection
       const pubPc = new RTCPeerConnection(STUN_SERVERS);
       publishPcRef.current = pubPc;
 
       const tracksToPublish: any[] = [];
-      stream.getTracks().forEach((track) => {
-        const sender = pubPc.addTrack(track, stream);
-        const transceiver = pubPc.getTransceivers().find(t => t.sender === sender);
+      activeStream.getTracks().forEach((track) => {
+        const sender = pubPc.addTrack(track, activeStream);
+        const transceiver = pubPc.getTransceivers().find((t) => t.sender === sender);
         const mid = transceiver ? transceiver.mid || String(tracksToPublish.length) : String(tracksToPublish.length);
         tracksToPublish.push({
           location: 'local',
@@ -103,7 +159,6 @@ export default function CloudflareMeetingRoom({
       const offer = await pubPc.createOffer();
       await pubPc.setLocalDescription(offer);
 
-      // Wait briefly for ICE gathering completion (vanilla trick for anycast SFU)
       await new Promise<void>((resolve) => {
         if (pubPc.iceGatheringState === 'complete') resolve();
         else {
@@ -114,11 +169,10 @@ export default function CloudflareMeetingRoom({
             }
           };
           pubPc.addEventListener('icegatheringstatechange', checkState);
-          setTimeout(resolve, 800); // 800ms fallback
+          setTimeout(resolve, 800);
         }
       });
 
-      // 3. Publish tracks to Cloudflare Calls
       const publishRes = await api.post(`/calls/session/${newSessionId}/tracks/new`, {
         sessionDescription: {
           type: pubPc.localDescription?.type || 'offer',
@@ -127,30 +181,73 @@ export default function CloudflareMeetingRoom({
         tracks: tracksToPublish,
       });
 
-      if (!publishRes.data?.success || !publishRes.data?.sessionDescription) {
-        throw new Error(publishRes.data?.message || 'Failed to publish media tracks to Cloudflare');
+      if (publishRes.data?.sessionDescription) {
+        await pubPc.setRemoteDescription(new RTCSessionDescription(publishRes.data.sessionDescription));
       }
 
-      await pubPc.setRemoteDescription(new RTCSessionDescription(publishRes.data.sessionDescription));
-
-      // 4. Register in Room
-      await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
+      // Join room in backend
+      const joinRes = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
         sessionId: newSessionId,
         name: userName,
-        role: role,
+        role: 'candidate',
         tracks: ['audio', 'video'],
       });
 
-      setConnecting(false);
-      setConnectionStatus('Connected to Cloudflare Calls');
-    } catch (err: any) {
-      console.error('❌ Cloudflare Calls Init Error:', err);
-      setConnectionStatus(`Connection Error: ${err.message || 'Check camera permissions'}`);
-      setConnecting(false);
-    }
-  }, [roomName, role, userName]);
+      if (joinRes.data?.isEnded) {
+        setIsSessionEnded(true);
+        releaseAllMediaHardware();
+        return;
+      }
 
-  // ─── STEP 2: SUBSCRIBE TO REMOTE PARTICIPANT ─────────────────
+      setIsWaitingForHost(false);
+      setConnecting(false);
+      setConnectionStatus('Live in Interview Room');
+    } catch (err: any) {
+      console.error('❌ Candidate start stream error:', err);
+      setConnectionStatus('Reconnecting...');
+    }
+  }, [roomName, userName, sessionId, releaseAllMediaHardware]);
+
+  // ─── STEP 2: HOST GATING / WAITING ROOM CHECK ─────────────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkHostStatus = async () => {
+      if (cancelled || isCleaningUpRef.current) return;
+      try {
+        const res = await api.get(`/calls/rooms/${encodeURIComponent(roomName)}/status`);
+        if (cancelled) return;
+
+        if (res.data?.isEnded) {
+          setIsSessionEnded(true);
+          releaseAllMediaHardware();
+          return;
+        }
+
+        if (res.data?.isHostPresent) {
+          // Host is in room! Start stream if we have camera/mic ready
+          if (localStreamRef.current && !sessionId) {
+            startLiveStream(localStreamRef.current);
+          }
+        } else {
+          setIsWaitingForHost(true);
+          setConnectionStatus('Waiting for host to start session...');
+        }
+      } catch (err) {
+        console.error('Host check error:', err);
+      }
+    };
+
+    checkHostStatus();
+    hostCheckTimerRef.current = setInterval(checkHostStatus, 2500);
+
+    return () => {
+      cancelled = true;
+      if (hostCheckTimerRef.current) clearInterval(hostCheckTimerRef.current);
+    };
+  }, [roomName, sessionId, startLiveStream, releaseAllMediaHardware]);
+
+  // ─── STEP 3: SUBSCRIBE TO HOST'S AUDIO/VIDEO STREAM ───────────────
   const subscribeToParticipant = useCallback(async (remoteSessionId: string, currentSessionId: string) => {
     if (subPcsRef.current[remoteSessionId] || isCleaningUpRef.current) return;
 
@@ -169,14 +266,12 @@ export default function CloudflareMeetingRoom({
         }));
       };
 
-      // Add receive-only transceivers
       const audioTransceiver = subPc.addTransceiver('audio', { direction: 'recvonly' });
       const videoTransceiver = subPc.addTransceiver('video', { direction: 'recvonly' });
 
       const offer = await subPc.createOffer();
       await subPc.setLocalDescription(offer);
 
-      // Wait for ICE
       await new Promise<void>((resolve) => {
         if (subPc.iceGatheringState === 'complete') resolve();
         else {
@@ -191,7 +286,6 @@ export default function CloudflareMeetingRoom({
         }
       });
 
-      // Request Cloudflare to bridge remote tracks to this subscriber
       const subRes = await api.post(`/calls/session/${currentSessionId}/tracks/new`, {
         sessionDescription: {
           type: subPc.localDescription?.type || 'offer',
@@ -207,11 +301,11 @@ export default function CloudflareMeetingRoom({
         await subPc.setRemoteDescription(new RTCSessionDescription(subRes.data.sessionDescription));
       }
     } catch (err) {
-      console.error(`❌ Failed to subscribe to ${remoteSessionId}:`, err);
+      console.error(`❌ Failed to subscribe to host:`, err);
     }
   }, []);
 
-  // ─── STEP 3: POLL ROOM PARTICIPANTS & HEARTBEAT ──────────────
+  // ─── STEP 4: HEARTBEAT & HOST PRESENCE MONITORING ─────────────────
   useEffect(() => {
     if (!sessionId) return;
 
@@ -220,7 +314,14 @@ export default function CloudflareMeetingRoom({
       try {
         const res = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/heartbeat`, {
           sessionId,
+          role: 'candidate',
         });
+
+        if (res.data?.isEnded) {
+          setIsSessionEnded(true);
+          releaseAllMediaHardware();
+          return;
+        }
 
         if (res.data?.success && Array.isArray(res.data?.participants)) {
           const others: RemoteParticipant[] = res.data.participants.filter(
@@ -228,14 +329,12 @@ export default function CloudflareMeetingRoom({
           );
           setRemoteParticipants(others);
 
-          // Subscribe to any new participant
           others.forEach((p) => {
             if (!subPcsRef.current[p.sessionId]) {
               subscribeToParticipant(p.sessionId, sessionId);
             }
           });
 
-          // Cleanup disconnected participants
           const otherIds = new Set(others.map((p) => p.sessionId));
           Object.keys(subPcsRef.current).forEach((sid) => {
             if (!otherIds.has(sid)) {
@@ -250,7 +349,7 @@ export default function CloudflareMeetingRoom({
           });
         }
       } catch (err) {
-        console.error('Participant poll error:', err);
+        console.error('Heartbeat poll error:', err);
       }
     };
 
@@ -260,38 +359,27 @@ export default function CloudflareMeetingRoom({
     return () => {
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
     };
-  }, [sessionId, roomName, subscribeToParticipant]);
+  }, [sessionId, roomName, subscribeToParticipant, releaseAllMediaHardware]);
 
-  // Mount session
+  // Clean up on component unmount
   useEffect(() => {
-    initializeSession();
-
     return () => {
       isCleaningUpRef.current = true;
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      if (hostCheckTimerRef.current) clearInterval(hostCheckTimerRef.current);
 
-      // Stop local tracks
-      if (localStream) {
-        localStream.getTracks().forEach((t) => t.stop());
-      }
-      if (screenTrackRef.current) {
-        screenTrackRef.current.stop();
-      }
+      releaseAllMediaHardware();
 
-      // Close PeerConnections
-      if (publishPcRef.current) {
-        publishPcRef.current.close();
-      }
+      if (publishPcRef.current) publishPcRef.current.close();
       Object.values(subPcsRef.current).forEach((pc) => pc.close());
 
-      // Inform backend we left
       if (sessionId) {
-        api.post(`/calls/rooms/${encodeURIComponent(roomName)}/leave`, { sessionId }).catch(() => {});
+        api.post(`/calls/rooms/${encodeURIComponent(roomName)}/leave`, { sessionId, role: 'candidate' }).catch(() => {});
       }
     };
-  }, [initializeSession]);
+  }, [roomName, sessionId, releaseAllMediaHardware]);
 
-  // ─── MEDIA CONTROLS ──────────────────────────────────────────
+  // ─── MEDIA CONTROLS ───────────────────────────────────────────────
   const toggleAudio = () => {
     if (!localStream) return;
     const audioTrack = localStream.getAudioTracks()[0];
@@ -314,7 +402,6 @@ export default function CloudflareMeetingRoom({
     if (!publishPcRef.current || !localStream) return;
 
     if (isScreenSharing) {
-      // Revert back to camera track
       if (screenTrackRef.current) {
         screenTrackRef.current.stop();
         screenTrackRef.current = null;
@@ -349,12 +436,13 @@ export default function CloudflareMeetingRoom({
 
         setIsScreenSharing(true);
       } catch (err) {
-        console.error('Screen sharing canceled or failed:', err);
+        console.error('Screen sharing error:', err);
       }
     }
   };
 
   const handleLeaveCall = () => {
+    releaseAllMediaHardware();
     if (onDisconnected) {
       onDisconnected();
     } else {
@@ -362,37 +450,167 @@ export default function CloudflareMeetingRoom({
     }
   };
 
-  return (
-    <div className="h-screen w-screen bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased">
-      {/* ─── TOP HEADER ──────────────────────────────────────────────── */}
-      <div className="h-14 px-6 bg-black/60 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between z-20">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0071e3] to-[#42a5f5] flex items-center justify-center shadow-md shadow-[#0071e3]/20">
-            <DoorOpen className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <h2 className="text-xs font-bold text-white tracking-tight flex items-center gap-2">
-              <span>{roomName}</span>
-              <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Cloudflare SFU Live
-              </span>
-            </h2>
-            <p className="text-[10px] text-[#86868b]">{connectionStatus}</p>
-          </div>
+  // ─── SCREEN A: INTERVIEW ENDED BY HOST ────────────────────────────
+  if (isSessionEnded) {
+    return (
+      <div className="h-full w-full bg-black flex flex-col items-center justify-center p-6 text-center select-none font-sans">
+        <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-5 shadow-xl">
+          <CheckCircle className="w-8 h-8 text-emerald-400" />
         </div>
+        <h2 className="text-lg font-bold text-white mb-2">Interview Session Ended</h2>
+        <p className="text-xs text-zinc-400 max-w-sm leading-relaxed mb-6">
+          The host has concluded this interview. Your camera and microphone have been safely turned off.
+        </p>
+        <button
+          onClick={handleLeaveCall}
+          className="px-6 py-3 rounded-2xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all shadow-lg cursor-pointer"
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    );
+  }
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs font-semibold text-zinc-300">
-            <Users className="w-3.5 h-3.5 text-[#0071e3]" />
-            <span>{remoteParticipants.length + 1} In Room</span>
+  // ─── SCREEN B: WAITING FOR HOST (GATE) ────────────────────────────
+  if (isWaitingForHost) {
+    return (
+      <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col items-center justify-center p-6 select-none font-sans relative overflow-hidden">
+        {/* Ambient glow */}
+        <div className="absolute w-96 h-96 bg-[#0071e3]/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-md w-full flex flex-col items-center text-center z-10 space-y-5">
+          {/* Waiting animation badge */}
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>Waiting for Interviewer</span>
+          </div>
+
+          <div>
+            <h2 className="text-xl font-bold text-white tracking-tight">You're in the Waiting Room</h2>
+            <p className="text-xs text-[#86868b] mt-1.5 leading-relaxed">
+              The company interviewer will start the interview session shortly. Please check your camera and audio below.
+            </p>
+          </div>
+
+          {/* Camera preview tile */}
+          <div className="w-full h-56 rounded-3xl overflow-hidden bg-zinc-900 border border-white/[0.08] relative shadow-2xl flex items-center justify-center">
+            <video
+              ref={previewVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : ''}`}
+            />
+            {isVideoMuted && (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-xl text-white">
+                  {userName.charAt(0)}
+                </div>
+                <p className="text-xs text-zinc-500">Camera preview off</p>
+              </div>
+            )}
+
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-xs font-semibold text-white">
+              <span>{userName} (Candidate Preview)</span>
+            </div>
+          </div>
+
+          {/* Quick Pre-Check Controls */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleAudio}
+              className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
+                isAudioMuted
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
+              }`}
+              title={isAudioMuted ? 'Unmute microphone' : 'Mute microphone'}
+            >
+              {isAudioMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+
+            <button
+              onClick={toggleVideo}
+              className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
+                isVideoMuted
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
+              }`}
+              title={isVideoMuted ? 'Turn on camera' : 'Turn off camera'}
+            >
+              {isVideoMuted ? <VideoOff className="w-4 h-4" /> : <VideoIcon className="w-4 h-4" />}
+            </button>
+
+            <button
+              onClick={handleLeaveCall}
+              className="px-5 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold transition-all border border-white/[0.08] cursor-pointer"
+            >
+              Exit Waiting Room
+            </button>
           </div>
         </div>
       </div>
+    );
+  }
 
-      {/* ─── MAIN VIDEO GRID ─────────────────────────────────────────── */}
-      <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-2 gap-4 relative overflow-hidden bg-radial from-zinc-900/40 to-[#09090b]">
-        {/* Local Participant Tile */}
-        <div className="relative rounded-3xl overflow-hidden bg-zinc-900/80 border border-white/[0.08] flex items-center justify-center shadow-2xl group">
+  // ─── SCREEN C: ACTIVE LIVE INTERVIEW STREAM ───────────────────────
+  return (
+    <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased">
+      {/* Top Bar */}
+      <div className="h-12 px-4 bg-black/60 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between z-20 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs font-bold text-white tracking-tight">{roomName}</span>
+          <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            Live Stream
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium">
+          <Users className="w-3.5 h-3.5 text-[#0071e3]" />
+          <span>{remoteParticipants.length + 1} Connected</span>
+        </div>
+      </div>
+
+      {/* Main Grid */}
+      <div className="flex-1 p-3 grid grid-cols-1 gap-3 relative overflow-hidden bg-radial from-zinc-900/40 to-[#09090b]">
+        {/* Remote Host Video (Primary focus) */}
+        {remoteParticipants.length > 0 && remoteParticipants[0] ? (
+          <div className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.08] flex items-center justify-center shadow-2xl">
+            {remoteStreams[remoteParticipants[0].sessionId] ? (
+              <video
+                autoPlay
+                playsInline
+                ref={(el) => {
+                  if (el && el.srcObject !== remoteStreams[remoteParticipants[0].sessionId]) {
+                    el.srcObject = remoteStreams[remoteParticipants[0].sessionId];
+                  }
+                }}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-xl text-white">
+                  {remoteParticipants[0].name.charAt(0)}
+                </div>
+                <p className="text-xs text-zinc-400">Connecting video stream...</p>
+              </div>
+            )}
+
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-[11px] font-semibold text-white">
+              <span>{remoteParticipants[0].name} (Interviewer)</span>
+              <span className="text-[9px] text-[#0071e3] font-bold uppercase">• Host</span>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-white/[0.08] flex flex-col items-center justify-center text-center p-6 bg-zinc-900/30">
+            <Users className="w-8 h-8 text-zinc-600 animate-pulse mb-2" />
+            <p className="text-xs text-zinc-400 font-medium">Interviewer is connecting...</p>
+          </div>
+        )}
+
+        {/* Local Self View Overlay (PiP Style) */}
+        <div className="absolute bottom-4 right-4 w-40 h-28 rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.15] shadow-2xl z-30 group">
           <video
             ref={localVideoRef}
             autoPlay
@@ -401,125 +619,61 @@ export default function CloudflareMeetingRoom({
             className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : ''}`}
           />
           {isVideoMuted && (
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-20 h-20 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-2xl text-white">
-                {userName.charAt(0)}
-              </div>
-              <p className="text-xs text-zinc-400 font-medium">Camera is turned off</p>
+            <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-xs text-zinc-500 font-medium">
+              Camera Off
             </div>
           )}
 
-          {/* Local Participant Overlay */}
-          <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-xs font-semibold text-white">
-            <span>{userName} (You)</span>
-            <span className="text-[10px] text-[#0071e3] font-bold uppercase">• {role}</span>
+          <div className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-lg bg-black/70 backdrop-blur-md text-[9px] font-semibold text-white">
+            You
           </div>
-
-          {isAudioMuted && (
-            <div className="absolute top-4 right-4 p-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400">
-              <MicOff className="w-4 h-4" />
-            </div>
-          )}
         </div>
-
-        {/* Remote Participants Tiles */}
-        {remoteParticipants.length === 0 ? (
-          <div className="rounded-3xl border-2 border-dashed border-white/[0.08] flex flex-col items-center justify-center text-center p-8 bg-zinc-900/20">
-            <div className="w-16 h-16 rounded-3xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mb-4">
-              <Users className="w-8 h-8 text-zinc-600 animate-pulse" />
-            </div>
-            <h3 className="text-sm font-bold text-white mb-1">Waiting for interviewer to join...</h3>
-            <p className="text-xs text-zinc-500 max-w-sm">
-              Your video stream is live. The employer will connect with you in this room.
-            </p>
-          </div>
-        ) : (
-          remoteParticipants.map((p) => {
-            const stream = remoteStreams[p.sessionId];
-            return (
-              <div
-                key={p.sessionId}
-                className="relative rounded-3xl overflow-hidden bg-zinc-900/80 border border-white/[0.08] flex items-center justify-center shadow-2xl"
-              >
-                {stream ? (
-                  <video
-                    autoPlay
-                    playsInline
-                    ref={(el) => {
-                      if (el && el.srcObject !== stream) {
-                        el.srcObject = stream;
-                      }
-                    }}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-20 h-20 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-2xl text-white">
-                      {p.name.charAt(0)}
-                    </div>
-                    <p className="text-xs text-zinc-400 font-medium">Connecting WebRTC video stream...</p>
-                  </div>
-                )}
-
-                {/* Remote Participant Overlay */}
-                <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-xs font-semibold text-white">
-                  <span>{p.name}</span>
-                  <span className="text-[10px] text-emerald-400 font-bold uppercase">• {p.role}</span>
-                </div>
-              </div>
-            );
-          })
-        )}
       </div>
 
-      {/* ─── BOTTOM CONTROLS DOCK ────────────────────────────────────── */}
-      <div className="h-20 px-6 bg-black/80 backdrop-blur-xl border-t border-white/[0.08] flex items-center justify-center gap-3 z-20">
-        {/* Audio Mute Toggle */}
+      {/* Bottom Controls */}
+      <div className="h-16 px-4 bg-black/80 backdrop-blur-xl border-t border-white/[0.08] flex items-center justify-center gap-2.5 z-20 shrink-0">
         <button
           onClick={toggleAudio}
-          className={`p-3.5 rounded-2xl font-semibold transition-all cursor-pointer flex items-center gap-2 text-xs ${
+          className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
             isAudioMuted
               ? 'bg-red-500/20 text-red-400 border border-red-500/30'
               : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
           }`}
           title={isAudioMuted ? 'Unmute microphone' : 'Mute microphone'}
         >
-          {isAudioMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+          {isAudioMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </button>
 
-        {/* Video On/Off Toggle */}
         <button
           onClick={toggleVideo}
-          className={`p-3.5 rounded-2xl font-semibold transition-all cursor-pointer flex items-center gap-2 text-xs ${
+          className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
             isVideoMuted
               ? 'bg-red-500/20 text-red-400 border border-red-500/30'
               : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
           }`}
           title={isVideoMuted ? 'Turn on camera' : 'Turn off camera'}
         >
-          {isVideoMuted ? <VideoOff className="w-5 h-5" /> : <VideoIcon className="w-5 h-5" />}
+          {isVideoMuted ? <VideoOff className="w-4 h-4" /> : <VideoIcon className="w-4 h-4" />}
         </button>
 
-        {/* Screen Share Toggle */}
         <button
           onClick={toggleScreenShare}
-          className={`p-3.5 rounded-2xl font-semibold transition-all cursor-pointer flex items-center gap-2 text-xs ${
+          className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
             isScreenSharing
               ? 'bg-[#0071e3] text-white shadow-lg shadow-[#0071e3]/30'
               : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
           }`}
           title={isScreenSharing ? 'Stop screen share' : 'Share screen'}
         >
-          {isScreenSharing ? <StopCircle className="w-5 h-5" /> : <ScreenShare className="w-5 h-5" />}
+          {isScreenSharing ? <StopCircle className="w-4 h-4" /> : <ScreenShare className="w-4 h-4" />}
         </button>
 
-        {/* End / Leave Call Button */}
         <button
           onClick={handleLeaveCall}
-          className="px-6 py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-lg shadow-red-600/30 flex items-center gap-2 cursor-pointer ml-2"
+          className="px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-lg shadow-red-600/30 flex items-center gap-1.5 cursor-pointer ml-2"
         >
-          <PhoneOff className="w-4 h-4" />
-          <span>Leave Room</span>
+          <PhoneOff className="w-3.5 h-3.5" />
+          <span>Leave</span>
         </button>
       </div>
     </div>
