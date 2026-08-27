@@ -3331,8 +3331,131 @@ app.get('/api/jobseeker/profile', async (c) => {
 
     const profile: any = await c.env.DB.prepare('SELECT * FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
     if (!profile) {
-      return c.json({ success: true, data: { fullName: '', email: '', phone: '', skills: [], education: [], experience: [], projects: [], certifications: [], languages: [], achievements: [] } });
+      return c.json({
+        success: true,
+        data: {
+          fullName: '',
+          email: '',
+          phone: '',
+          location: '',
+          linkedin: '',
+          github: '',
+          portfolio: '',
+          bio: '',
+          profilePic: null,
+          preferences: {
+            roles: [],
+            industries: [],
+            jobType: '',
+            experience: '',
+            expectedSalary: '',
+            workLocationPreference: '',
+          },
+          skills: [],
+          education: [],
+          experience: [],
+          projects: [],
+          certifications: [],
+          languages: [],
+          achievements: [],
+          discoverable: false,
+          availabilityStatus: 'available',
+          completionScore: 0,
+          aiResumeBuilderEnabled: true,
+        }
+      });
     }
+
+    const [skillsRes, eduRes, expRes, projRes, certRes, langRes, achRes] = await Promise.all([
+      c.env.DB.prepare('SELECT name FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare('SELECT * FROM "Education" WHERE jobSeekerProfileId = ? ORDER BY createdAt ASC').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare('SELECT * FROM "Experience" WHERE jobSeekerProfileId = ? ORDER BY createdAt ASC').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare('SELECT * FROM "Project" WHERE jobSeekerProfileId = ? ORDER BY createdAt ASC').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare('SELECT * FROM "Certification" WHERE jobSeekerProfileId = ? ORDER BY createdAt ASC').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare('SELECT * FROM "Language" WHERE jobSeekerProfileId = ? ORDER BY createdAt ASC').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare('SELECT * FROM "Achievement" WHERE jobSeekerProfileId = ? ORDER BY createdAt ASC').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+    ]);
+
+    let preferences: any = {};
+    try {
+      if (profile.jobPreferences) {
+        preferences = typeof profile.jobPreferences === 'string' ? JSON.parse(profile.jobPreferences) : profile.jobPreferences;
+      }
+    } catch (e) {
+      preferences = {};
+    }
+
+    const skills = skillsRes.map((s: any) => s.name);
+    const education = eduRes.map((edu: any) => ({
+      id: edu.id,
+      institution: edu.institution || '',
+      degree: edu.degree || '',
+      field: edu.field || '',
+      location: edu.location || '',
+      startMonth: edu.startMonth || '',
+      startYear: edu.startYear || '',
+      endMonth: edu.endMonth || '',
+      endYear: edu.endYear || '',
+      cgpa: edu.cgpa || '',
+      description: edu.description || '',
+    }));
+    const experience = expRes.map((exp: any) => {
+      let skillsUsed = [];
+      try {
+        skillsUsed = typeof exp.skillsUsed === 'string' ? JSON.parse(exp.skillsUsed) : (exp.skillsUsed || []);
+      } catch (e) {
+        skillsUsed = [];
+      }
+      return {
+        id: exp.id,
+        company: exp.company || '',
+        role: exp.role || '',
+        location: exp.location || '',
+        startMonth: exp.startMonth || '',
+        startYear: exp.startYear || '',
+        endMonth: exp.endMonth || '',
+        endYear: exp.endYear || '',
+        current: Boolean(exp.current),
+        description: exp.description || '',
+        skills: Array.isArray(skillsUsed) ? skillsUsed : [],
+      };
+    });
+    const projects = projRes.map((proj: any) => {
+      let technologies = [];
+      try {
+        technologies = typeof proj.technologies === 'string' ? JSON.parse(proj.technologies) : (proj.technologies || []);
+      } catch (e) {
+        technologies = [];
+      }
+      return {
+        id: proj.id,
+        name: proj.name || '',
+        description: proj.description || '',
+        technologies: Array.isArray(technologies) ? technologies : [],
+        githubLink: proj.githubLink || '',
+        liveLink: proj.liveLink || '',
+        startDate: proj.startDate || '',
+        endDate: proj.endDate || '',
+      };
+    });
+    const certifications = certRes.map((cert: any) => ({
+      id: cert.id,
+      name: cert.name || '',
+      organization: cert.organization || '',
+      issueDate: cert.issueDate || '',
+      credentialUrl: cert.credentialUrl || '',
+    }));
+    const languages = langRes.map((lang: any) => ({
+      id: lang.id,
+      language: lang.language || '',
+      proficiency: lang.proficiency || 'Beginner',
+    }));
+    const achievements = achRes.map((ach: any) => ({
+      id: ach.id,
+      title: ach.title || '',
+      description: ach.description || '',
+      year: ach.year || '',
+    }));
 
     return c.json({
       success: true,
@@ -3347,16 +3470,25 @@ app.get('/api/jobseeker/profile', async (c) => {
         portfolio: profile.portfolio || '',
         bio: profile.bio || '',
         profilePic: profile.profilePhotoUrl || null,
-        skills: [],
-        education: [],
-        experience: [],
-        projects: [],
-        certifications: [],
-        languages: [],
-        achievements: [],
+        preferences: {
+          roles: preferences.roles || [],
+          industries: preferences.industries || [],
+          jobType: preferences.jobType || '',
+          experience: preferences.experience || preferences.experienceLevel || '',
+          expectedSalary: preferences.expectedSalary || '',
+          workLocationPreference: preferences.workLocationPreference || '',
+        },
+        skills,
+        education,
+        experience,
+        projects,
+        certifications,
+        languages,
+        achievements,
+        discoverable: Boolean(profile.discoverable),
         availabilityStatus: profile.availabilityStatus || 'available',
-        completionScore: 50,
-        aiResumeBuilderEnabled: true,
+        completionScore: 80,
+        aiResumeBuilderEnabled: profile.aiResumeBuilderEnabled !== 0,
       },
     });
   } catch (err: any) {
@@ -3367,6 +3499,7 @@ app.get('/api/jobseeker/profile', async (c) => {
 app.put('/api/jobseeker/profile', async (c) => {
   try {
     let profileData: any = {};
+    let profilePhotoUrl: string | null = null;
     const contentType = c.req.header('content-type') || '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -3375,8 +3508,23 @@ app.put('/api/jobseeker/profile', async (c) => {
       if (rawData && typeof rawData === 'string') {
         profileData = JSON.parse(rawData);
       }
+      const imageFile = formData.get('profileImage');
+      if (imageFile && typeof imageFile === 'object' && 'arrayBuffer' in imageFile) {
+        const fileObj = imageFile as File;
+        const arrayBuf = await fileObj.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuf);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        profilePhotoUrl = `data:${fileObj.type || 'image/jpeg'};base64,${btoa(binary)}`;
+      }
     } else {
       profileData = await c.req.json().catch(() => ({}));
+    }
+
+    if (!profilePhotoUrl && profileData.profilePic) {
+      profilePhotoUrl = profileData.profilePic;
     }
 
     let decoded = await getAuthUser(c);
@@ -3401,21 +3549,129 @@ app.put('/api/jobseeker/profile', async (c) => {
     const email = profileData.email?.trim() || '';
     const phone = profileData.phone?.trim() || '';
     const location = profileData.location?.trim() || '';
+    const linkedin = profileData.linkedin?.trim() || '';
+    const github = profileData.github?.trim() || '';
+    const portfolio = profileData.portfolio?.trim() || '';
     const bio = profileData.bio?.trim() || '';
+    const discoverable = profileData.discoverable !== undefined ? (profileData.discoverable ? 1 : 0) : 0;
+    const jobPreferences = JSON.stringify(profileData.preferences || {});
     const now = new Date().toISOString();
 
-    const existing: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(userId).first();
+    let profileId: string;
+    const existing: any = await c.env.DB.prepare('SELECT id, profilePhotoUrl FROM "JobSeekerProfile" WHERE userId = ?').bind(userId).first();
+
+    const photoToSave = profilePhotoUrl !== null ? profilePhotoUrl : (existing?.profilePhotoUrl || null);
 
     if (existing) {
+      profileId = existing.id;
       await c.env.DB.prepare(
-        'UPDATE "JobSeekerProfile" SET fullName = ?, email = ?, phone = ?, location = ?, bio = ?, updatedAt = ? WHERE userId = ?'
-      ).bind(fullName, email, phone, location, bio, now, userId).run();
+        'UPDATE "JobSeekerProfile" SET fullName = ?, email = ?, phone = ?, location = ?, linkedin = ?, github = ?, portfolio = ?, bio = ?, profilePhotoUrl = ?, jobPreferences = ?, discoverable = ?, updatedAt = ? WHERE userId = ?'
+      ).bind(fullName, email, phone, location, linkedin, github, portfolio, bio, photoToSave, jobPreferences, discoverable, now, userId).run();
     } else {
-      const profileId = crypto.randomUUID();
+      profileId = crypto.randomUUID();
       await c.env.DB.prepare(
-        'INSERT INTO "JobSeekerProfile" (id, userId, fullName, email, phone, location, bio, availabilityStatus, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(profileId, userId, fullName, email, phone, location, bio, 'available', 1, now, now).run();
+        'INSERT INTO "JobSeekerProfile" (id, userId, fullName, email, phone, location, linkedin, github, portfolio, bio, profilePhotoUrl, jobPreferences, discoverable, availabilityStatus, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(profileId, userId, fullName, email, phone, location, linkedin, github, portfolio, bio, photoToSave, jobPreferences, discoverable, 'available', 1, now, now).run();
     }
+
+    // Prepare statements to sync child tables
+    const statements: any[] = [
+      c.env.DB.prepare('DELETE FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profileId),
+      c.env.DB.prepare('DELETE FROM "Education" WHERE jobSeekerProfileId = ?').bind(profileId),
+      c.env.DB.prepare('DELETE FROM "Experience" WHERE jobSeekerProfileId = ?').bind(profileId),
+      c.env.DB.prepare('DELETE FROM "Project" WHERE jobSeekerProfileId = ?').bind(profileId),
+      c.env.DB.prepare('DELETE FROM "Certification" WHERE jobSeekerProfileId = ?').bind(profileId),
+      c.env.DB.prepare('DELETE FROM "Language" WHERE jobSeekerProfileId = ?').bind(profileId),
+      c.env.DB.prepare('DELETE FROM "Achievement" WHERE jobSeekerProfileId = ?').bind(profileId),
+    ];
+
+    // Skills
+    if (Array.isArray(profileData.skills)) {
+      for (const skillName of profileData.skills) {
+        if (typeof skillName === 'string' && skillName.trim()) {
+          statements.push(
+            c.env.DB.prepare('INSERT INTO "Skill" (id, jobSeekerProfileId, name, createdAt) VALUES (?, ?, ?, ?)').bind(crypto.randomUUID(), profileId, skillName.trim(), now)
+          );
+        }
+      }
+    }
+
+    // Education
+    if (Array.isArray(profileData.education)) {
+      for (const edu of profileData.education) {
+        if (edu && (edu.institution?.trim() || edu.degree?.trim())) {
+          statements.push(
+            c.env.DB.prepare('INSERT INTO "Education" (id, jobSeekerProfileId, institution, degree, field, location, startMonth, startYear, endMonth, endYear, cgpa, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+              .bind(crypto.randomUUID(), profileId, (edu.institution || '').trim(), (edu.degree || '').trim(), (edu.field || '').trim(), edu.location || '', edu.startMonth || '', edu.startYear || '', edu.endMonth || '', edu.endYear || '', edu.cgpa || '', edu.description || '', now, now)
+          );
+        }
+      }
+    }
+
+    // Experience
+    if (Array.isArray(profileData.experience)) {
+      for (const exp of profileData.experience) {
+        if (exp && (exp.company?.trim() || exp.role?.trim())) {
+          const skillsUsed = JSON.stringify(Array.isArray(exp.skills) ? exp.skills : []);
+          statements.push(
+            c.env.DB.prepare('INSERT INTO "Experience" (id, jobSeekerProfileId, company, role, location, startMonth, startYear, endMonth, endYear, current, description, skillsUsed, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+              .bind(crypto.randomUUID(), profileId, (exp.company || '').trim(), (exp.role || '').trim(), exp.location || '', exp.startMonth || '', exp.startYear || '', exp.endMonth || '', exp.endYear || '', exp.current ? 1 : 0, exp.description || '', skillsUsed, now, now)
+          );
+        }
+      }
+    }
+
+    // Projects
+    if (Array.isArray(profileData.projects)) {
+      for (const proj of profileData.projects) {
+        if (proj && proj.name?.trim()) {
+          const technologies = JSON.stringify(Array.isArray(proj.technologies) ? proj.technologies : []);
+          statements.push(
+            c.env.DB.prepare('INSERT INTO "Project" (id, jobSeekerProfileId, name, description, technologies, githubLink, liveLink, startDate, endDate, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+              .bind(crypto.randomUUID(), profileId, proj.name.trim(), proj.description || '', technologies, proj.githubLink || '', proj.liveLink || '', proj.startDate || '', proj.endDate || '', now, now)
+          );
+        }
+      }
+    }
+
+    // Certifications
+    if (Array.isArray(profileData.certifications)) {
+      for (const cert of profileData.certifications) {
+        if (cert && cert.name?.trim()) {
+          statements.push(
+            c.env.DB.prepare('INSERT INTO "Certification" (id, jobSeekerProfileId, name, organization, issueDate, credentialUrl, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+              .bind(crypto.randomUUID(), profileId, cert.name.trim(), cert.organization || '', cert.issueDate || '', cert.credentialUrl || '', now)
+          );
+        }
+      }
+    }
+
+    // Languages
+    if (Array.isArray(profileData.languages)) {
+      for (const lang of profileData.languages) {
+        if (lang && lang.language?.trim()) {
+          statements.push(
+            c.env.DB.prepare('INSERT INTO "Language" (id, jobSeekerProfileId, language, proficiency, createdAt) VALUES (?, ?, ?, ?, ?)')
+              .bind(crypto.randomUUID(), profileId, lang.language.trim(), lang.proficiency || 'Beginner', now)
+          );
+        }
+      }
+    }
+
+    // Achievements
+    if (Array.isArray(profileData.achievements)) {
+      for (const ach of profileData.achievements) {
+        if (ach && ach.title?.trim()) {
+          statements.push(
+            c.env.DB.prepare('INSERT INTO "Achievement" (id, jobSeekerProfileId, title, description, year, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
+              .bind(crypto.randomUUID(), profileId, ach.title.trim(), ach.description || '', ach.year || '', now)
+          );
+        }
+      }
+    }
+
+    // Execute in batch
+    await c.env.DB.batch(statements);
 
     const jwtSecret = getJwtSecret(c);
     const accessToken = jwt.sign(
