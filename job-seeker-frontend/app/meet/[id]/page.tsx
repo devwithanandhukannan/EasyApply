@@ -428,55 +428,26 @@ function MeetPageContent() {
     };
   }, [roleType, logViolation]);
 
-  // Room Initialization
-  useEffect(() => {
-    if (!interviewId) return;
-    let cancelled = false;
-
-    // Direct token provided via query parameter (e.g. Walk-In Instant Interview)
-    const passedToken = searchParams.get('token');
-    if (passedToken) {
-      setCredentials({
-        token: passedToken,
-        serverUrl: process.env.NEXT_PUBLIC_LIVEKIT_URL || 'http://localhost:7880',
-      });
-      setLoading(false);
-      return;
+  const [roomName, setRoomName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/meet/')[1]?.split('?')[0]?.split('/')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
     }
+    return (Array.isArray(interviewId) ? interviewId[0] : interviewId) || 'walkin-room';
+  });
 
-    const fetchCreds = async () => {
-      try {
-        const endpoint =
-          roleType === 'jobseeker'
-            ? `/interviews/${interviewId}/token/jobseeker`
-            : `/interviews/${interviewId}/token/company`;
-
-        const res = await api.post(endpoint);
-        if (cancelled) return;
-
-        if (res.data?.success && res.data?.token) {
-          setCredentials({ 
-            token: res.data.token, 
-            serverUrl: res.data.livekitUrl || process.env.NEXT_PUBLIC_LIVEKIT_URL || 'http://localhost:7880',
-            iceServers: res.data.iceServers || undefined
-          });
-        } else {
-          setError(res.data?.message || 'Failed to get room token.');
-        }
-      } catch (err: any) {
-        if (cancelled) return;
-        console.error('Token fetch error:', err);
-        setError(err.response?.data?.message || 'Unable to join session.');
-      } finally {
-        if (!cancelled) setLoading(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/meet/')[1]?.split('?')[0]?.split('/')[0];
+      if (match && match !== 'default') {
+        setRoomName(decodeURIComponent(match));
+        return;
       }
-    };
-
-    fetchCreds();
-    return () => { 
-      cancelled = true; 
-    };
-  }, [interviewId, roleType, searchParams]);
+    }
+    if (interviewId && interviewId !== 'default') {
+      setRoomName(Array.isArray(interviewId) ? interviewId[0] : interviewId);
+    }
+  }, [interviewId]);
 
   // Whiteboard canvas redraw
   useEffect(() => {
@@ -811,37 +782,6 @@ function MeetPageContent() {
     );
   };
 
-  if (loading) {
-    return (
-      <div className="flex h-screen w-screen items-center justify-center bg-black">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-6 h-6 text-white/40 animate-spin" />
-          <p className="text-[11px] text-white/25 tracking-widest uppercase">Joining session</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !credentials) {
-    return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-black gap-4 p-6">
-        <div className="w-10 h-10 rounded-2xl bg-red-950/60 border border-red-900/40 flex items-center justify-center">
-          <AlertTriangle size={18} className="text-red-400" />
-        </div>
-        <div className="text-center">
-          <p className="text-white text-sm font-medium mb-1">Unable to join</p>
-          <p className="text-white/40 text-xs max-w-xs">{error || 'Session credentials unavailable.'}</p>
-        </div>
-        <button
-          onClick={() => router.replace('/dashboard/interviews')}
-          className="mt-2 px-5 py-2 bg-white text-black text-xs font-semibold rounded-xl hover:bg-white/90 transition-colors"
-        >
-          Back to Dashboard
-        </button>
-      </div>
-    );
-  }
-
   const isVideoOnly = activeTab === 'video_only';
 
   return (
@@ -1097,7 +1037,7 @@ function MeetPageContent() {
           style={{ background: '#000' }}
         >
           <CloudflareMeetingRoom
-            roomName={typeof interviewId === 'string' ? interviewId : 'walkin-default'}
+            roomName={roomName}
             role={roleType === 'company' ? 'company' : 'candidate'}
             userName={roleType === 'company' ? 'Interviewer' : 'Candidate'}
             onDisconnected={handleDisconnected}

@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -16,21 +16,40 @@ function UnifiedMeetContent() {
   const router = useRouter();
   
   const roleType = searchParams.get('role') === 'candidate' ? 'candidate' : 'company';
-  const idStr = Array.isArray(interviewId) ? interviewId[0] : (interviewId || 'walkin-default');
+  const [roomName, setRoomName] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/meet/')[1]?.split('?')[0]?.split('/')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    return (Array.isArray(interviewId) ? interviewId[0] : interviewId) || 'walkin-room';
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/meet/')[1]?.split('?')[0]?.split('/')[0];
+      if (match && match !== 'default') {
+        setRoomName(decodeURIComponent(match));
+        return;
+      }
+    }
+    if (interviewId && interviewId !== 'default') {
+      setRoomName(Array.isArray(interviewId) ? interviewId[0] : interviewId);
+    }
+  }, [interviewId]);
 
   const handleDisconnected = () => {
     if (
-      idStr.startsWith('walkin-') ||
-      idStr.startsWith('room_') ||
-      idStr === 'default' ||
+      roomName.startsWith('walkin-') ||
+      roomName.startsWith('room_') ||
+      roomName === 'default' ||
       searchParams.get('token')?.startsWith('meet-')
     ) {
       router.replace('/dashboard/walkin');
       return;
     }
 
-    if (roleType === 'company' && idStr && idStr !== 'default' && !idStr.startsWith('room_')) {
-      router.replace(`/dashboard/interviews/${idStr}/review`);
+    if (roleType === 'company' && roomName && roomName !== 'default' && !roomName.startsWith('room_')) {
+      router.replace(`/dashboard/interviews/${roomName}/review`);
     } else {
       router.replace('/dashboard/interviews');
     }
@@ -38,7 +57,7 @@ function UnifiedMeetContent() {
 
   return (
     <CloudflareMeetingRoom
-      roomName={idStr}
+      roomName={roomName}
       role={roleType}
       userName={roleType === 'company' ? 'Interviewer' : 'Candidate'}
       onDisconnected={handleDisconnected}
