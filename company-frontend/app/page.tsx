@@ -13,7 +13,9 @@ import {
   Laptop, ExternalLink
 } from 'lucide-react';
 
-const JOBSEEKER_URL = typeof window !== 'undefined' && (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply'))
+const JOBSEEKER_URL = typeof window !== 'undefined' && window.location.hostname.includes('dearresume.com')
+  ? 'https://dearresume.com'
+  : typeof window !== 'undefined' && (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply'))
   ? 'https://cloudflare.easyapply-jobseeker.pages.dev'
   : (process.env.NEXT_PUBLIC_JOBSEEKER_URL || 'http://localhost:3000');
 
@@ -187,7 +189,7 @@ export default function CompanyFrontPage() {
               </span>
               <span className="text-[#111827] dark:text-white">Next-Gen Recruitment Operating System</span>
               <span className="text-[#86868b]">•</span>
-              <a href="http://localhost:3000/companies" target="_blank" rel="noreferrer" className="text-[#0071e3] hover:underline flex items-center gap-0.5">
+              <a href={`${JOBSEEKER_URL}/companies`} target="_blank" rel="noreferrer" className="text-[#0071e3] hover:underline flex items-center gap-0.5">
                 View Directory <ExternalLink className="w-3 h-3" />
               </a>
             </div>
@@ -359,7 +361,7 @@ export default function CompanyFrontPage() {
                 <ArrowRight className="w-4 h-4" />
               </button>
               <a
-                href="http://localhost:3000/companies?tab=walkin"
+                href={`${JOBSEEKER_URL}/companies?tab=walkin`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#111827] dark:text-[#f5f5f7] border border-black/[0.06] dark:border-white/[0.08] text-xs font-bold flex items-center justify-center gap-2 transition"

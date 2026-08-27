@@ -696,7 +696,7 @@ export default function Home() {
             <p>© {new Date().getFullYear()} DearResume AI. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <Link href="/companies" className="hover:text-[#0071e3]">
-                http://localhost:3000/companies
+                Explore Directory
               </Link>
             </div>
           </div>
