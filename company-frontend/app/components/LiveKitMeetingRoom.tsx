@@ -57,7 +57,11 @@ export default function LiveKitMeetingRoom({
   const [connectionError, setConnectionError] = useState<Error | null>(null);
   const router = useRouter();
 
-  const isWalkIn = typeof interviewId === 'string' && interviewId.startsWith('walkin-');
+  const isWalkIn =
+    typeof interviewId === 'string' &&
+    (interviewId.startsWith('walkin-') ||
+      interviewId.startsWith('room_') ||
+      interviewId === 'default');
   const roomCode = isWalkIn ? interviewId.replace(/^walkin-/, '').split('-')[0] : null;
 
   return (
@@ -71,9 +75,14 @@ export default function LiveKitMeetingRoom({
         token={token}
         serverUrl={serverUrl}
         onDisconnected={() => {
-          if (onDisconnected) onDisconnected();
-          if (!isWalkIn) {
+          if (onDisconnected) {
+            onDisconnected();
+          } else if (isWalkIn) {
+            router.push('/dashboard/walkin');
+          } else if (interviewId && interviewId !== 'default') {
             router.push(`/dashboard/interviews/${interviewId}/review`);
+          } else {
+            router.push('/dashboard/interviews');
           }
         }}
         onConnected={() => console.log('✅ LiveKit connected to room:', interviewId)}

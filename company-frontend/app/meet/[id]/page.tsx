@@ -72,17 +72,23 @@ function UnifiedLiveKitMeetContent() {
 
   const handleDisconnected = () => {
     console.log('🚪 Gracefully leaving room layout context.');
+    const idStr = Array.isArray(interviewId) ? interviewId[0] : (interviewId || '');
     
     // Walk-In rooms return directly back to walk-in dashboard
-    if (typeof interviewId === 'string' && interviewId.startsWith('walkin-')) {
+    if (
+      idStr.startsWith('walkin-') ||
+      idStr.startsWith('room_') ||
+      idStr === 'default' ||
+      searchParams.get('token')?.startsWith('meet-')
+    ) {
       router.replace('/dashboard/walkin');
       return;
     }
 
     // Standard scheduled interviewers are routed to the feedback submission screen
-    if (roleType === 'company' && interviewId) {
-      console.log(`Redirecting host node to evaluation matrix: /dashboard/interviews/${interviewId}/review`);
-      router.replace(`/dashboard/interviews/${interviewId}/review`);
+    if (roleType === 'company' && idStr && idStr !== 'default' && !idStr.startsWith('room_')) {
+      console.log(`Redirecting host node to evaluation matrix: /dashboard/interviews/${idStr}/review`);
+      router.replace(`/dashboard/interviews/${idStr}/review`);
     } else {
       router.replace('/dashboard/interviews');
     }
