@@ -3121,6 +3121,178 @@ app.post('/api/walkin/queue/batch-status', async (c) => {
   }
 });
 
+// ─── CLOUDFLARE CALLS (WEBRTC SFU) API ─────────────────────
+const CALLS_BASE_URL = 'https://rtc.live.cloudflare.com/v1/apps';
+
+function getCallsCredentials(env: any) {
+  const appId = env.CALLS_APP_ID || '02592ddefba24b423a23a6aa9796f716';
+  const appToken = env.CALLS_APP_TOKEN || 'a8515980194cacf12eafdbaa71f0eb2d7900b237ae2bab8e8f126bd2a1b66623';
+  return { appId, appToken };
+}
+
+// 1. Create a new Cloudflare Calls WebRTC Session
+app.post('/api/calls/session/new', async (c) => {
+  try {
+    const { appId, appToken } = getCallsCredentials(c.env);
+    const res = await fetch(`${CALLS_BASE_URL}/${appId}/sessions/new`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${appToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data: any = await res.json();
+    if (!res.ok) {
+      return c.json({ success: false, message: data.error || 'Failed to create Calls session' }, res.status as any);
+    }
+
+    return c.json({ success: true, sessionId: data.sessionId });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// 2. Publish / Subscribe tracks to Cloudflare Calls Session
+app.post('/api/calls/session/:sessionId/tracks/new', async (c) => {
+  try {
+    const { sessionId } = c.req.param();
+    const { appId, appToken } = getCallsCredentials(c.env);
+    const body = await c.req.json();
+
+    const res = await fetch(`${CALLS_BASE_URL}/${appId}/sessions/${sessionId}/tracks/new`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${appToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data: any = await res.json();
+    if (!res.ok) {
+      return c.json({ success: false, message: data.error || 'Failed to negotiate tracks' }, res.status as any);
+    }
+
+    return c.json({ success: true, ...data });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// 3. Renegotiate tracks in session
+app.put('/api/calls/session/:sessionId/renegotiate', async (c) => {
+  try {
+    const { sessionId } = c.req.param();
+    const { appId, appToken } = getCallsCredentials(c.env);
+    const body = await c.req.json();
+
+    const res = await fetch(`${CALLS_BASE_URL}/${appId}/sessions/${sessionId}/renegotiate`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${appToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data: any = await res.json();
+    if (!res.ok) {
+      return c.json({ success: false, message: data.error || 'Failed to renegotiate' }, res.status as any);
+    }
+
+    return c.json({ success: true, ...data });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// 4. Room Management (Join / Query / Leave) using SESSION_KV
+app.post('/api/calls/rooms/:roomName/join', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const body = await c.req.json();
+    const { sessionId, participantId, name, role, tracks } = body;
+
+    const kvKey = `calls_room:${roomName}`;
+    const raw = await c.env.SESSION_KV.get(kvKey);
+    let participants: any[] = raw ? JSON.parse(raw) : [];
+
+    const now = Date.now();
+    participants = participants.filter((p: any) => p.sessionId !== sessionId && p.participantId !== participantId && (now - p.updatedAt < 7200000));
+
+    participants.push({
+      sessionId,
+      participantId: participantId || crypto.randomUUID(),
+      name: name || 'Participant',
+      role: role || 'candidate',
+      tracks: tracks || ['audio', 'video'],
+      joinedAt: now,
+      updatedAt: now,
+    });
+
+    await c.env.SESSION_KV.put(kvKey, JSON.stringify(participants), { expirationTtl: 86400 });
+    return c.json({ success: true, participants });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.get('/api/calls/rooms/:roomName/participants', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const kvKey = `calls_room:${roomName}`;
+    const raw = await c.env.SESSION_KV.get(kvKey);
+    let participants: any[] = raw ? JSON.parse(raw) : [];
+
+    const now = Date.now();
+    participants = participants.filter((p: any) => (now - p.updatedAt < 120000));
+
+    return c.json({ success: true, participants });
+  } catch (err: any) {
+    return c.json({ success: false, participants: [] });
+  }
+});
+
+app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const { sessionId } = await c.req.json().catch(() => ({}));
+    if (!sessionId) return c.json({ success: true });
+
+    const kvKey = `calls_room:${roomName}`;
+    const raw = await c.env.SESSION_KV.get(kvKey);
+    if (!raw) return c.json({ success: true, participants: [] });
+
+    let participants: any[] = JSON.parse(raw);
+    const now = Date.now();
+    participants = participants.map((p: any) => p.sessionId === sessionId ? { ...p, updatedAt: now } : p);
+    await c.env.SESSION_KV.put(kvKey, JSON.stringify(participants), { expirationTtl: 86400 });
+
+    const active = participants.filter((p: any) => (now - p.updatedAt < 120000));
+    return c.json({ success: true, participants: active });
+  } catch {
+    return c.json({ success: true });
+  }
+});
+
+app.post('/api/calls/rooms/:roomName/leave', async (c) => {
+  try {
+    const { roomName } = c.req.param();
+    const { sessionId } = await c.req.json().catch(() => ({}));
+    const kvKey = `calls_room:${roomName}`;
+    const raw = await c.env.SESSION_KV.get(kvKey);
+    if (raw && sessionId) {
+      let participants: any[] = JSON.parse(raw);
+      participants = participants.filter((p: any) => p.sessionId !== sessionId);
+      await c.env.SESSION_KV.put(kvKey, JSON.stringify(participants), { expirationTtl: 86400 });
+    }
+    return c.json({ success: true });
+  } catch {
+    return c.json({ success: true });
+  }
+});
+
 // ─── AUTH: SEND OTP & VERIFY OTP ─────────────────────────
 app.post('/api/auth/send-otp', async (c) => {
   try {

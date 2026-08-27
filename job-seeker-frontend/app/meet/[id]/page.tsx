@@ -12,7 +12,7 @@ import axios from 'axios';
 import dynamic from 'next/dynamic';
 
 const Editor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
-const LiveKitMeetingRoom = dynamic(() => import('@/app/components/LiveKitMeetingRoom'), { ssr: false });
+const CloudflareMeetingRoom = dynamic(() => import('@/app/components/CloudflareMeetingRoom'), { ssr: false });
 
 type WorkspaceTab = 'video_only' | 'code_editor' | 'whiteboard';
 type ToolMode = 'pencil' | 'eraser' | 'rectangle' | 'circle';
@@ -1096,16 +1096,12 @@ function MeetPageContent() {
           className={`${isVideoOnly ? 'w-full' : 'w-[420px] md:w-[480px]'} h-full shrink-0 flex flex-col relative`}
           style={{ background: '#000' }}
         >
-          {credentials && (
-            <LiveKitMeetingRoom
-              token={credentials.token}
-              serverUrl={credentials.serverUrl}
-              iceServers={credentials.iceServers}
-              onDisconnected={handleDisconnected}
-              screenShareActive={screenShareActive}
-              debugMode={false}
-            />
-          )}
+          <CloudflareMeetingRoom
+            roomName={typeof interviewId === 'string' ? interviewId : 'walkin-default'}
+            role={roleType === 'company' ? 'company' : 'candidate'}
+            userName={roleType === 'company' ? 'Interviewer' : 'Candidate'}
+            onDisconnected={handleDisconnected}
+          />
         </div>
       </main>
 
