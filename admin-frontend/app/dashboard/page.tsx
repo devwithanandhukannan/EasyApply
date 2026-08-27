@@ -75,7 +75,7 @@ export default function DashboardPage() {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               System Operational
             </span>
-            <span className="text-xs text-zinc-400 font-medium">EasyApply Core v2.4</span>
+            <span className="text-xs text-zinc-400 font-medium">DearResume Core v2.4</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] dark:text-white tracking-tight">
             Platform Command Center

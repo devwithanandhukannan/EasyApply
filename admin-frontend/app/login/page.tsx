@@ -22,7 +22,7 @@ function LoginForm() {
       if (res.data.success) {
         localStorage.setItem('admin_token', res.data.token);
         localStorage.setItem('admin_user', JSON.stringify(res.data.admin));
-        showToast('Authenticated', 'Welcome back to EasyApply Admin Console', 'success');
+        showToast('Authenticated', 'Welcome back to DearResume Admin Console', 'success');
         router.push('/dashboard');
       }
     } catch (err: any) {

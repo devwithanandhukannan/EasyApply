@@ -55,6 +55,8 @@ function LoginPageComponent() {
     }
   };
 
+  const [verifiedToken, setVerifiedToken] = useState<string>('');
+
   const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -70,9 +72,12 @@ function LoginPageComponent() {
       const user = response.data.user;
 
       if (token) {
+        setVerifiedToken(token);
         setAccessToken(token);
-        localStorage.setItem('seeker_access_token', token);
-        localStorage.setItem('token', token);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('seeker_access_token', token);
+          localStorage.setItem('token', token);
+        }
       }
 
       console.log('📊 Lean User Payload Check:', user);
@@ -128,7 +133,6 @@ function LoginPageComponent() {
     try {
       setIsSubmitting(true);
 
-      // Structure object mapping precisely to your backend transaction expectations
       const payload = {
         fullName: fullName.trim(),
         email: email.trim(),
@@ -150,36 +154,35 @@ function LoginPageComponent() {
         }
       };
 
-      // Wrap compilation properties inside a valid form-data wrapper boundary
-      const formData = new FormData();
-      formData.append('profileData', JSON.stringify(payload));
-
-      // Re-sync token from localStorage before PUT (handles module re-initialization edge case)
-      const currentToken = typeof window !== 'undefined' ? localStorage.getItem('seeker_access_token') : '';
-      if (currentToken) {
-        setAccessToken(currentToken);
+      const activeToken = verifiedToken || (typeof window !== 'undefined' ? (localStorage.getItem('seeker_access_token') || localStorage.getItem('token')) : '') || '';
+      if (activeToken) {
+        setAccessToken(activeToken);
       }
 
-      await api.put('/jobseeker/profile', formData, {
+      const res = await api.put('/jobseeker/profile', payload, {
         headers: {
-          'Content-Type': 'multipart/form-data',
-          ...(currentToken ? { 'Authorization': `Bearer ${currentToken}` } : {}),
+          'Content-Type': 'application/json',
+          ...(activeToken ? { 'Authorization': `Bearer ${activeToken}` } : {}),
         }
       });
 
-      const savedToken = (typeof window !== 'undefined' ? localStorage.getItem('seeker_access_token') : '') || undefined;
+      const finalToken = res.data?.accessToken || res.data?.token || activeToken;
+      if (finalToken) {
+        setAccessToken(finalToken);
+      }
+
       login({
         mobileNumber: phoneNumber,
         hasEmail: true,
         hasFullName: true,
         fullName: fullName.trim(),
         email: email.trim(),
-      }, savedToken);
+      }, finalToken || undefined);
       
       showToast('Success', 'Profile created successfully!', 'success');
     } catch (error: any) {
       console.log('❌ Profile submission error:', error);
-      showToast('Failed', error.response?.data?.error || 'Failed to update registration profile details.', 'danger');
+      showToast('Failed', error.response?.data?.message || error.response?.data?.error || 'Failed to update registration profile details.', 'danger');
     } finally {
       setIsSubmitting(false);
     }

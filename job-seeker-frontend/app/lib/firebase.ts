@@ -8,8 +8,7 @@ const firebaseConfig = {
   projectId: "interview-platform-6c2d5",
   storageBucket: "interview-platform-6c2d5.firebasestorage.app",
   messagingSenderId: "481624099070",
-  appId: "1:481624099070:web:aa692fb59e47551d2f7daf",
-  measurementId: "G-VC2JZW9LC0"
+  appId: "1:481624099070:web:aa692fb59e47551d2f7daf"
 };
 
 // 1. Initialize Firebase safely (prevents duplicate app initialization errors during hot-reloads)

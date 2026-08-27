@@ -196,7 +196,7 @@ export default function SettingsPage() {
                 </span>
               </div>
               <p className="text-xs text-[#86868b] font-medium mt-1 leading-relaxed">
-                Allow all verified companies on EasyApply to browse your profile, match your skills, and invite you to interviews directly.
+                Allow all verified companies on DearResume to browse your profile, match your skills, and invite you to interviews directly.
               </p>
             </div>
           </div>

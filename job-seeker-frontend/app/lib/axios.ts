@@ -22,11 +22,16 @@ export const getAccessToken = () => {
 };
 
 const getApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname.includes('dearresume.com')) {
+      return 'https://api.dearresume.com/api';
+    }
+    if (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply')) {
+      return 'https://easyapply-backend.stibelabs.workers.dev/api';
+    }
+  }
   if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')) {
     return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined' && (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply'))) {
-    return 'https://easyapply-backend.stibelabs.workers.dev/api';
   }
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 };
@@ -44,9 +49,19 @@ const api = axios.create({
 // Request interceptor – attach Bearer token if present
 api.interceptors.request.use(
   (config) => {
-    const token = accessToken || (typeof window !== 'undefined' ? localStorage.getItem('seeker_access_token') : '');
+    config.baseURL = getApiUrl();
+    const token = accessToken || (typeof window !== 'undefined' ? (localStorage.getItem('seeker_access_token') || localStorage.getItem('token')) : '');
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      if (config.headers && typeof (config.headers as any).set === 'function') {
+        if (!(config.headers as any).has('Authorization')) {
+          (config.headers as any).set('Authorization', `Bearer ${token}`);
+        }
+      } else {
+        config.headers = config.headers || {};
+        if (!config.headers['Authorization']) {
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
     }
     return config;
   },
@@ -83,18 +98,17 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Skip retry on auth endpoints to prevent infinite refresh loops
+    // Skip retry on auth and profile creation endpoints to prevent infinite refresh loops or token clearing
     if (
-      originalRequest?.url?.includes('/auth/me') ||
-      originalRequest?.url?.includes('/auth/refresh') ||
-      originalRequest?.url?.includes('/auth/logout') ||
-      originalRequest?.url?.includes('/auth/send-otp') ||
-      originalRequest?.url?.includes('/auth/verify-otp')
+      !originalRequest ||
+      originalRequest._retry ||
+      originalRequest.url?.includes('/auth/') ||
+      originalRequest.url?.includes('/login')
     ) {
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -115,15 +129,21 @@ api.interceptors.response.use(
           {},
           { withCredentials: true }
         );
-        const newToken = refreshResponse.data.accessToken;
-        setAccessToken(newToken);
-        processQueue(null, newToken);
-
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        return api(originalRequest);
+        if (refreshResponse?.data?.success && refreshResponse?.data?.accessToken) {
+          const newToken = refreshResponse.data.accessToken;
+          setAccessToken(newToken);
+          processQueue(null, newToken);
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return api(originalRequest);
+        } else {
+          throw new Error('No new access token returned');
+        }
       } catch (refreshError) {
         processQueue(refreshError, null);
-        setAccessToken('');
+        // Only remove token if not on public/login screens
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          setAccessToken('');
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

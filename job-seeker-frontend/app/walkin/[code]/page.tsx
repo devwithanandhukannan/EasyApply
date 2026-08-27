@@ -495,7 +495,7 @@ export default function WalkInRoomJoinPage({ params }: { params: Promise<{ code:
               </div>
               <h3 className="text-lg font-bold text-white">Join {room.company.name}&apos;s Walk-In Queue</h3>
               <p className="text-xs text-zinc-400 leading-relaxed">
-                Sign in to your EasyApply account to upload or select your CV, compute your real-time skill score match, and join the live video evaluation room queue.
+                Sign in to your DearResume account to upload or select your CV, compute your real-time skill score match, and join the live video evaluation room queue.
               </p>
             </div>
 

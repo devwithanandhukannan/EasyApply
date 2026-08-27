@@ -109,7 +109,7 @@ export default function CompanyFrontPage() {
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-base tracking-tight text-[#111827] dark:text-white group-hover:text-[#0071e3] transition-colors">
-                EasyApply <span className="text-xs font-semibold text-[#0071e3] ml-1">for Employers</span>
+                DearResume <span className="text-xs font-semibold text-[#0071e3] ml-1">for Employers</span>
               </span>
               <span className="text-[10px] font-semibold text-[#86868b] -mt-1 hidden sm:inline">
                 Hiring Intelligence &amp; Live Walk-In Suite
@@ -423,7 +423,7 @@ export default function CompanyFrontPage() {
                   <Rocket className="w-4 h-4 -rotate-12 fill-white/20" />
                 </div>
                 <span className="font-bold text-base tracking-tight text-[#111827] dark:text-white">
-                  EasyApply for Employers
+                  DearResume for Employers
                 </span>
               </div>
               <p className="text-xs text-[#86868b] leading-relaxed font-medium">
@@ -509,7 +509,7 @@ export default function CompanyFrontPage() {
           </div>
 
           <div className="pt-8 border-t border-black/[0.04] dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#86868b] font-medium">
-            <p>© {new Date().getFullYear()} EasyApply Enterprise. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} DearResume Enterprise. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <a href={`${JOBSEEKER_URL}/companies`} target="_blank" rel="noreferrer" className="hover:text-[#0071e3]">
                 {JOBSEEKER_URL}/companies

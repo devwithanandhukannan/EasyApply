@@ -33,7 +33,7 @@ export default function EasyApplyLogo({
         <Rocket className={`${icon} -rotate-12 fill-white/20`} />
       </div>
       <span className={`${text} text-[#0071e3] dark:text-[#2997ff] tracking-tight font-sans`}>
-        EasyApply
+        DearResume
       </span>
       {badge && (
         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#0071e3]/10 text-[#0071e3] dark:bg-[#2997ff]/10 dark:text-[#2997ff] border border-[#0071e3]/20 dark:border-[#2997ff]/20">

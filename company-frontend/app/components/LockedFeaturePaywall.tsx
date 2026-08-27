@@ -76,7 +76,7 @@ export default function LockedFeaturePaywall({
         </div>
 
         <p className="text-[11px] text-gray-400 mt-4">
-          Default Free tier includes Core Job Postings & Kanban Pipeline. Custom enterprise packages are provisioned by EasyApply administrators.
+          Default Free tier includes Core Job Postings & Kanban Pipeline. Custom enterprise packages are provisioned by DearResume administrators.
         </p>
       </div>
 

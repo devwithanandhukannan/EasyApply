@@ -116,7 +116,7 @@ export default function CustomBusinessRequestModal({ isOpen, onClose, initialFea
                 Request Custom Business Features
               </h2>
               <p className="text-xs text-zinc-500 dark:text-[#86868b] mt-1 leading-relaxed">
-                Select the specific modules and capacities your hiring team needs. EasyApply administrators will create a tailored subscription package for your company.
+                Select the specific modules and capacities your hiring team needs. DearResume administrators will create a tailored subscription package for your company.
               </p>
             </div>
 

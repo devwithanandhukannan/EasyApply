@@ -6,7 +6,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "EasyApply Admin",
+  title: "DearResume Admin",
   description: "Platform Administration Panel",
 };
 

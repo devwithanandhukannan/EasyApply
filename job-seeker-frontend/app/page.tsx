@@ -123,7 +123,7 @@ export default function Home() {
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-base tracking-tight text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors">
-                EasyApply
+                DearResume
               </span>
               <span className="text-[10px] font-semibold text-[#86868b] -mt-1 hidden sm:inline">
                 Career Intelligence Platform
@@ -228,7 +228,7 @@ export default function Home() {
               variants={fadeInUp}
               className="text-base sm:text-lg text-[#86868b] font-medium leading-relaxed max-w-2xl mx-auto"
             >
-              EasyApply eliminates months of silence. Join active walk-in video queues, get evaluated instantly by verified engineering teams, and discover dream opportunities publicly.
+              DearResume eliminates months of silence. Join active walk-in video queues, get evaluated instantly by verified engineering teams, and discover dream opportunities publicly.
             </motion.p>
 
             {/* CTAs */}
@@ -290,7 +290,7 @@ export default function Home() {
                   <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
                   <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
                   <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
-                  <span className="text-[11px] font-bold text-[#86868b] ml-2">EasyApply Live Queue & Match Suite</span>
+                  <span className="text-[11px] font-bold text-[#86868b] ml-2">DearResume Live Queue & Match Suite</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#34c759]/10 text-[#248a3d] dark:text-[#30d158] border border-[#34c759]/20 flex items-center gap-1">
@@ -615,7 +615,7 @@ export default function Home() {
                   <Rocket className="w-4 h-4 -rotate-12" />
                 </div>
                 <span className="font-bold text-base tracking-tight text-[#1d1d1f] dark:text-white">
-                  EasyApply
+                  DearResume
                 </span>
               </div>
               <p className="text-xs text-[#86868b] leading-relaxed font-medium">
@@ -693,7 +693,7 @@ export default function Home() {
           </div>
 
           <div className="pt-8 border-t border-black/[0.04] dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#86868b] font-medium">
-            <p>© {new Date().getFullYear()} EasyApply AI. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} DearResume AI. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <Link href="/companies" className="hover:text-[#0071e3]">
                 http://localhost:3000/companies

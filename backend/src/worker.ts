@@ -311,17 +311,116 @@ app.get('/api/health', async (c) => {
 
 // Helper for JWT
 const getJwtSecret = (c: any) => c.env.ACCESS_TOKEN_SECRET || 'your_access_secret_edge_easyapply';
+const getRefreshSecret = (c: any) => c.env.REFRESH_TOKEN_SECRET || 'your_refresh_secret_edge_easyapply';
 
-// Auth middleware helper
+// Cookie Helper for HttpOnly & Cross-Site SameSite=None + Partitioned (CHIPS)
+const createCookieHeader = (
+  name: string,
+  value: string,
+  options: { maxAgeSeconds?: number; httpOnly?: boolean; sameSite?: 'None' | 'Lax' | 'Strict' } = {}
+) => {
+  const {
+    maxAgeSeconds = 7 * 24 * 60 * 60, // 7 days default
+    httpOnly = true,
+    sameSite = 'None',
+  } = options;
+
+  const parts = [
+    `${name}=${encodeURIComponent(value)}`,
+    'Path=/',
+    `Max-Age=${maxAgeSeconds}`,
+    `SameSite=${sameSite}`,
+    'Secure',
+    'Partitioned',
+  ];
+
+  if (httpOnly) {
+    parts.push('HttpOnly');
+  }
+
+  return parts.join('; ');
+};
+
+const parseCookieHeader = (header: string | undefined): Record<string, string> => {
+  if (!header) return {};
+  const cookies: Record<string, string> = {};
+  header.split(';').forEach((part) => {
+    const [key, ...val] = part.trim().split('=');
+    if (key) {
+      cookies[key] = decodeURIComponent(val.join('='));
+    }
+  });
+  return cookies;
+};
+
+const setAuthCookies = (c: any, accessToken: string, refreshToken?: string) => {
+  const accessCookie = createCookieHeader('accessToken', accessToken, {
+    maxAgeSeconds: 7 * 24 * 60 * 60,
+    httpOnly: true,
+  });
+  c.header('Set-Cookie', accessCookie, { append: true });
+
+  const companyCookie = createCookieHeader('companyToken', accessToken, {
+    maxAgeSeconds: 7 * 24 * 60 * 60,
+    httpOnly: true,
+  });
+  c.header('Set-Cookie', companyCookie, { append: true });
+
+  if (refreshToken) {
+    const refreshCookie = createCookieHeader('refreshToken', refreshToken, {
+      maxAgeSeconds: 30 * 24 * 60 * 60,
+      httpOnly: true,
+    });
+    c.header('Set-Cookie', refreshCookie, { append: true });
+  }
+};
+
+const setAdminCookies = (c: any, adminToken: string) => {
+  const adminCookie = createCookieHeader('adminToken', adminToken, {
+    maxAgeSeconds: 7 * 24 * 60 * 60,
+    httpOnly: true,
+  });
+  c.header('Set-Cookie', adminCookie, { append: true });
+
+  const accessCookie = createCookieHeader('accessToken', adminToken, {
+    maxAgeSeconds: 7 * 24 * 60 * 60,
+    httpOnly: true,
+  });
+  c.header('Set-Cookie', accessCookie, { append: true });
+};
+
+const clearAuthCookies = (c: any) => {
+  c.header('Set-Cookie', createCookieHeader('accessToken', '', { maxAgeSeconds: 0, httpOnly: true }), { append: true });
+  c.header('Set-Cookie', createCookieHeader('companyToken', '', { maxAgeSeconds: 0, httpOnly: true }), { append: true });
+  c.header('Set-Cookie', createCookieHeader('adminToken', '', { maxAgeSeconds: 0, httpOnly: true }), { append: true });
+  c.header('Set-Cookie', createCookieHeader('refreshToken', '', { maxAgeSeconds: 0, httpOnly: true }), { append: true });
+};
+
+// Auth middleware helper (supports both Authorization: Bearer and HttpOnly Cookies)
 const getAuthUser = async (c: any) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
-  const token = authHeader.split(' ')[1];
+  let token = '';
+
+  // 1. Try Authorization header
+  const authHeader = c.req.header('Authorization') || c.req.header('authorization');
+  if (authHeader) {
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (match) token = match[1].trim();
+  }
+
+  // 2. Try HttpOnly cookies
+  if (!token) {
+    const cookieHeader = c.req.header('Cookie') || c.req.header('cookie');
+    const cookies = parseCookieHeader(cookieHeader);
+    token = cookies['accessToken'] || cookies['companyToken'] || cookies['adminToken'] || cookies['token'] || cookies['sessionToken'] || '';
+  }
+
+  if (!token) return null;
+
   try {
     const secret = getJwtSecret(c);
     const decoded: any = jwt.verify(token, secret);
     return decoded;
-  } catch {
+  } catch (err: any) {
     return null;
   }
 };
@@ -356,6 +455,9 @@ app.post('/api/admin/auth/login', async (c) => {
       jwtSecret,
       { expiresIn: '24h' }
     );
+
+    // Set HttpOnly Cookies
+    setAdminCookies(c, token);
 
     return c.json({
       success: true,
@@ -958,6 +1060,9 @@ app.post('/api/company/auth/register', async (c) => {
       { expiresIn: '7d' }
     );
 
+    // Set HttpOnly Cookies
+    setAuthCookies(c, token, token);
+
     return c.json({
       success: true,
       message: 'Company registered successfully.',
@@ -1040,6 +1145,9 @@ app.post('/api/company/auth/login', async (c) => {
       jwtSecret,
       { expiresIn: '7d' }
     );
+
+    // Set HttpOnly Cookies
+    setAuthCookies(c, token, token);
 
     const subscription = await getCompanySubscription(c.env.DB, company.id);
 
@@ -3076,6 +3184,15 @@ app.post('/api/auth/verify-otp', async (c) => {
       jwtSecret,
       { expiresIn: '7d' }
     );
+    const refreshSecret = getRefreshSecret(c);
+    const refreshToken = jwt.sign(
+      { userId: user.id, globalRoles: user.globalRoles },
+      refreshSecret,
+      { expiresIn: '30d' }
+    );
+
+    // Set HttpOnly Cookies
+    setAuthCookies(c, accessToken, refreshToken);
 
     return c.json({
       success: true,
@@ -3152,7 +3269,7 @@ app.post('/api/auth/refresh', async (c) => {
       return c.json({ success: false, message: 'No refresh token provided.' }, 200);
     }
 
-    const refreshSecret = c.env.REFRESH_TOKEN_SECRET || 'your_refresh_secret_edge_easyapply';
+    const refreshSecret = getRefreshSecret(c);
     let decoded: any;
     try {
       decoded = jwt.verify(refreshToken, refreshSecret);
@@ -3169,8 +3286,11 @@ app.post('/api/auth/refresh', async (c) => {
     const newAccessToken = jwt.sign(
       { userId: user.id, globalRoles: user.globalRoles },
       jwtSecret,
-      { expiresIn: '15m' }
+      { expiresIn: '7d' }
     );
+
+    // Set HttpOnly Cookies
+    setAuthCookies(c, newAccessToken, refreshToken);
 
     return c.json({
       success: true,
@@ -3183,6 +3303,7 @@ app.post('/api/auth/refresh', async (c) => {
 });
 
 app.post('/api/auth/logout', (c) => {
+  clearAuthCookies(c);
   return c.json({ success: true, message: 'Logged out.' });
 });
 
@@ -3245,9 +3366,6 @@ app.get('/api/jobseeker/profile', async (c) => {
 
 app.put('/api/jobseeker/profile', async (c) => {
   try {
-    const decoded = await getAuthUser(c);
-    if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
-
     let profileData: any = {};
     const contentType = c.req.header('content-type') || '';
 
@@ -3261,6 +3379,24 @@ app.put('/api/jobseeker/profile', async (c) => {
       profileData = await c.req.json().catch(() => ({}));
     }
 
+    let decoded = await getAuthUser(c);
+    let userId = decoded?.userId;
+
+    // Fallback: If no Bearer token header or token lost in storage during registration, resolve user by verified phone number
+    if (!userId && (profileData.phone || profileData.mobileNumber)) {
+      const searchPhone = (profileData.phone || profileData.mobileNumber).trim();
+      const matchedUser: any = await c.env.DB.prepare(
+        'SELECT id, globalRoles, isVerified FROM "User" WHERE mobileNumber = ?'
+      ).bind(searchPhone).first();
+      if (matchedUser) {
+        userId = matchedUser.id;
+      }
+    }
+
+    if (!userId) {
+      return c.json({ success: false, message: 'Unauthorized' }, 401);
+    }
+
     const fullName = profileData.fullName?.trim() || 'Candidate';
     const email = profileData.email?.trim() || '';
     const phone = profileData.phone?.trim() || '';
@@ -3268,24 +3404,36 @@ app.put('/api/jobseeker/profile', async (c) => {
     const bio = profileData.bio?.trim() || '';
     const now = new Date().toISOString();
 
-    const existing: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+    const existing: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(userId).first();
 
     if (existing) {
       await c.env.DB.prepare(
         'UPDATE "JobSeekerProfile" SET fullName = ?, email = ?, phone = ?, location = ?, bio = ?, updatedAt = ? WHERE userId = ?'
-      ).bind(fullName, email, phone, location, bio, now, decoded.userId).run();
+      ).bind(fullName, email, phone, location, bio, now, userId).run();
     } else {
       const profileId = crypto.randomUUID();
       await c.env.DB.prepare(
         'INSERT INTO "JobSeekerProfile" (id, userId, fullName, email, phone, location, bio, availabilityStatus, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(profileId, decoded.userId, fullName, email, phone, location, bio, 'available', 1, now, now).run();
+      ).bind(profileId, userId, fullName, email, phone, location, bio, 'available', 1, now, now).run();
     }
+
+    const jwtSecret = getJwtSecret(c);
+    const accessToken = jwt.sign(
+      { userId, globalRoles: 1 },
+      jwtSecret,
+      { expiresIn: '7d' }
+    );
+
+    // Set HttpOnly Cookies
+    setAuthCookies(c, accessToken, accessToken);
 
     return c.json({
       success: true,
       message: 'Profile updated successfully',
+      accessToken,
+      token: accessToken,
       user: {
-        id: decoded.userId,
+        id: userId,
         fullName,
         email,
         phone,

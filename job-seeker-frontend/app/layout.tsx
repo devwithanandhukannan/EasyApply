@@ -5,7 +5,7 @@ import { ToastProvider } from '@/app/components/GlassToastContainer';
 import { ThemeProvider } from '@/app/lib/theme';
 
 export const metadata = {
-  title: 'EasyApply — Find Your Next Role Faster',
+  title: 'DearResume — Find Your Next Role Faster',
   description: 'AI-powered job matching platform. Build an ATS-optimized profile, clear proctored assessments, and attend real-time technical interviews.',
 };
 

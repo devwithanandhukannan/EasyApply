@@ -4,7 +4,7 @@ import { ThemeProvider } from '@/app/lib/theme';
 import '@/app/globals.css';
 
 export const metadata = {
-  title: 'EasyApply for Business — Hire Smarter, Faster',
+  title: 'DearResume for Business — Hire Smarter, Faster',
   description: 'Enterprise hiring platform for managing candidate pipelines, running live technical interviews, and deploying AI-powered job matching.',
 };
 

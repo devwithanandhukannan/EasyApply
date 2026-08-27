@@ -28,11 +28,16 @@ export const getAccessToken = () => {
 };
 
 const getApiUrl = () => {
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname.includes('dearresume.com')) {
+      return 'https://api.dearresume.com/api';
+    }
+    if (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply')) {
+      return 'https://easyapply-backend.stibelabs.workers.dev/api';
+    }
+  }
   if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')) {
     return process.env.NEXT_PUBLIC_API_URL;
-  }
-  if (typeof window !== 'undefined' && (window.location.hostname.includes('pages.dev') || window.location.hostname.includes('easyapply'))) {
-    return 'https://easyapply-backend.stibelabs.workers.dev/api';
   }
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 };
@@ -50,6 +55,7 @@ const api = axios.create({
 // Request Interceptor: Attach the access token from memory or localStorage
 api.interceptors.request.use(
   (config) => {
+    config.baseURL = getApiUrl();
     const token = getAccessToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;

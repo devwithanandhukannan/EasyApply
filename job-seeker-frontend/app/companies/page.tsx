@@ -370,7 +370,7 @@ function CompaniesDirectoryContent() {
               <Rocket className="w-4 h-4 -rotate-12 fill-white/20" />
             </div>
             <span className="text-base font-bold tracking-tight text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors">
-              EasyApply <span className="text-[#86868b] font-normal text-xs">for Seekers</span>
+              DearResume <span className="text-[#86868b] font-normal text-xs">for Seekers</span>
             </span>
           </button>
 
@@ -830,7 +830,7 @@ function CompaniesDirectoryContent() {
 
                         {/* Tagline */}
                         <p className="text-xs text-[#86868b] font-medium line-clamp-2 leading-relaxed mb-6">
-                          {comp.tagline || 'Leading engineering team hiring top talent on EasyApply.'}
+                          {comp.tagline || 'Leading engineering team hiring top talent on DearResume.'}
                         </p>
                       </div>
 
@@ -1313,9 +1313,9 @@ function CompaniesDirectoryContent() {
             <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-[#0071e3] to-[#2563eb] flex items-center justify-center text-white shadow-xs">
               <Rocket className="w-3.5 h-3.5 -rotate-12 fill-white/20" />
             </div>
-            <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">EasyApply Ecosystem</span>
+            <span className="text-xs font-bold text-[#1d1d1f] dark:text-white">DearResume Ecosystem</span>
           </div>
-          <p className="text-xs text-[#86868b] font-medium">© 2026 EasyApply. Connecting ambitious talent with world-class teams.</p>
+          <p className="text-xs text-[#86868b] font-medium">© 2026 DearResume. Connecting ambitious talent with world-class teams.</p>
           <div className="flex items-center gap-6">
             <button
               onClick={() => router.push('/')}

@@ -48,7 +48,7 @@ export default function SettingsPage() {
   const [smtpUser, setSmtpUser] = useState('');
   const [smtpPass, setSmtpPass] = useState('');
   const [emailFrom, setEmailFrom] = useState('');
-  const [emailFromName, setEmailFromName] = useState('EasyApply');
+  const [emailFromName, setEmailFromName] = useState('DearResume');
   const [testEmailRecipient, setTestEmailRecipient] = useState('');
   const [testingEmail, setTestingEmail] = useState(false);
 
@@ -62,7 +62,7 @@ export default function SettingsPage() {
   const [livekitApiSecret, setLivekitApiSecret] = useState('');
 
   // General
-  const [platformName, setPlatformName] = useState('EasyApply');
+  const [platformName, setPlatformName] = useState('DearResume');
   const [platformLogoUrl, setPlatformLogoUrl] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -93,7 +93,7 @@ export default function SettingsPage() {
         setSmtpUser(s.smtpUser || '');
         setSmtpPass(s.smtpPass || '');
         setEmailFrom(s.emailFrom || '');
-        setEmailFromName(s.emailFromName || 'EasyApply');
+        setEmailFromName(s.emailFromName || 'DearResume');
 
         setGroqApiKey(s.groqApiKey || '');
         setGroqModel(s.groqModel || 'llama-3.3-70b-versatile');
@@ -102,7 +102,7 @@ export default function SettingsPage() {
         setLivekitApiKey(s.livekitApiKey || '');
         setLivekitApiSecret(s.livekitApiSecret || '');
 
-        setPlatformName(s.platformName || 'EasyApply');
+        setPlatformName(s.platformName || 'DearResume');
         setPlatformLogoUrl(s.platformLogoUrl || '');
         setSupportEmail(s.supportEmail || '');
         setMaintenanceMode(!!s.maintenanceMode);
@@ -377,11 +377,11 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">From Address</label>
-                  <input className="input" value={emailFrom} onChange={(e) => setEmailFrom(e.target.value)} placeholder="noreply@easyapply.com" />
+                  <input className="input" value={emailFrom} onChange={(e) => setEmailFrom(e.target.value)} placeholder="noreply@dearresume.com" />
                 </div>
                 <div>
                   <label className="label">Sender Display Name</label>
-                  <input className="input" value={emailFromName} onChange={(e) => setEmailFromName(e.target.value)} placeholder="EasyApply" />
+                  <input className="input" value={emailFromName} onChange={(e) => setEmailFromName(e.target.value)} placeholder="DearResume" />
                 </div>
               </div>
 
@@ -510,11 +510,11 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Platform Name</label>
-                  <input className="input" value={platformName} onChange={(e) => setPlatformName(e.target.value)} placeholder="EasyApply" />
+                  <input className="input" value={platformName} onChange={(e) => setPlatformName(e.target.value)} placeholder="DearResume" />
                 </div>
                 <div>
                   <label className="label">Support Email</label>
-                  <input className="input" value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="support@easyapply.com" />
+                  <input className="input" value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="support@dearresume.com" />
                 </div>
               </div>
 

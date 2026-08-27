@@ -804,7 +804,7 @@ function ATSPanel({
             <p className="text-xs text-zinc-400 dark:text-[#86868b] font-medium flex items-center gap-2">
               <span>Saved on {new Date(resume.createdAt).toLocaleDateString(undefined, { dateStyle: 'long' })}</span>
               <span>•</span>
-              <span>Ready for EasyApply 1-Click Applications</span>
+              <span>Ready for DearResume 1-Click Applications</span>
             </p>
           </div>
 

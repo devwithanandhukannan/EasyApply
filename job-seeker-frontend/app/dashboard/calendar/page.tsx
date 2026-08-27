@@ -120,67 +120,24 @@ export default function JobSeekerCalendarPage() {
     return `${year}-${month}-${day}`;
   };
 
-  // Load custom notes from localStorage with rich samples
+  // Load custom notes from localStorage
   useEffect(() => {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        setCustomNotes(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        // Clean out any legacy sample- notes
+        const userNotes = Array.isArray(parsed)
+          ? parsed.filter((n: CustomNote) => !n.id?.startsWith('sample-'))
+          : [];
+        setCustomNotes(userNotes);
+        localStorage.setItem(storageKey, JSON.stringify(userNotes));
       } else {
-        const todayStr = formatDateKey(new Date());
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = formatDateKey(tomorrow);
-
-        const initialSampleNotes: CustomNote[] = [
-          {
-            id: 'sample-1',
-            title: 'System Design Mock (Kafka & Redis)',
-            date: todayStr,
-            startTime: '10:00',
-            durationMinutes: 90,
-            isAllDay: false,
-            category: 'interview_prep',
-            companyName: 'Stripe',
-            content: 'Review rate limiting, sharding, and consensus algorithms.',
-            color: 'purple',
-            isCompleted: false,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: 'sample-2',
-            title: 'HR Recruiter Follow-up',
-            date: todayStr,
-            startTime: '14:00',
-            durationMinutes: 45,
-            isAllDay: false,
-            category: 'follow_up',
-            companyName: 'Linear',
-            content: 'Check on next technical evaluation round status and timeline.',
-            color: 'blue',
-            isCompleted: false,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: 'sample-3',
-            title: 'Take-home Coding Assignment Deadline',
-            date: tomorrowStr,
-            startTime: '16:00',
-            durationMinutes: 120,
-            isAllDay: false,
-            category: 'deadline',
-            companyName: 'Vercel',
-            content: 'Submit full-stack Next.js + LiveKit real-time dashboard challenge.',
-            color: 'amber',
-            isCompleted: false,
-            createdAt: new Date().toISOString(),
-          },
-        ];
-        setCustomNotes(initialSampleNotes);
-        localStorage.setItem(storageKey, JSON.stringify(initialSampleNotes));
+        setCustomNotes([]);
+        localStorage.setItem(storageKey, JSON.stringify([]));
       }
     } catch {
-      // ignore
+      setCustomNotes([]);
     }
   }, [storageKey]);
 
