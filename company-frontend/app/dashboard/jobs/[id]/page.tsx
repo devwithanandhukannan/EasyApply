@@ -65,23 +65,50 @@ export default function JobDetailsPage() {
   const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
 
+  const [jobId, setJobId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/jobs/')[1]?.split('/')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    return (Array.isArray(params.id) ? params.id[0] : params.id) || '';
+  });
+
   useEffect(() => {
-    if (params.id) initPageData();
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/jobs/')[1]?.split('/')[0];
+      if (match && match !== 'default') {
+        setJobId(decodeURIComponent(match));
+        return;
+      }
+    }
+    if (params.id && params.id !== 'default') {
+      setJobId(Array.isArray(params.id) ? params.id[0] : params.id);
+    }
   }, [params.id]);
 
   useEffect(() => {
-    if (params.id && !isLoading) fetchApplications();
+    if (jobId && jobId !== 'default') {
+      initPageData(jobId);
+    }
+  }, [jobId]);
+
+  useEffect(() => {
+    if (jobId && jobId !== 'default' && !isLoading) {
+      fetchApplications(jobId);
+    }
   }, [statusFilter]);
 
-  const initPageData = async () => {
+  const initPageData = async (targetId?: string) => {
+    const idToUse = targetId || jobId;
+    if (!idToUse || idToUse === 'default') return;
     try {
       setIsLoading(true);
       const [jobRes, appsRes] = await Promise.all([
-        api.get(`/company/jobs/${params.id}`),
-        api.get(`/company/jobs/${params.id}/applications`)
+        api.get(`/company/jobs/${idToUse}`),
+        api.get(`/company/jobs/${idToUse}/applications`)
       ]);
-      setJob(jobRes.data.job);
-      setApplications(appsRes.data.applications || []);
+      setJob(jobRes.data?.job || jobRes.data?.data);
+      setApplications(appsRes.data?.applications || appsRes.data?.data || []);
     } catch {
       router.push('/dashboard/jobs');
     } finally {
@@ -89,14 +116,16 @@ export default function JobDetailsPage() {
     }
   };
 
-  const fetchApplications = async () => {
+  const fetchApplications = async (targetId?: string) => {
+    const idToUse = targetId || jobId;
+    if (!idToUse || idToUse === 'default') return;
     try {
       setAppsLoading(true);
       const url = statusFilter === 'all'
-        ? `/company/jobs/${params.id}/applications`
-        : `/company/jobs/${params.id}/applications?status=${statusFilter}`;
+        ? `/company/jobs/${idToUse}/applications`
+        : `/company/jobs/${idToUse}/applications?status=${statusFilter}`;
       const r = await api.get(url);
-      setApplications(r.data.applications || []);
+      setApplications(r.data?.applications || r.data?.data || []);
       setSelectedApplicationIds([]);
     } catch (e) {
       console.error(e);
@@ -731,8 +760,8 @@ export default function JobDetailsPage() {
 
       {/* Modals Container */}
       <JobPostingModal isOpen={editOpen} onClose={() => setEditOpen(false)} onSuccess={() => { initPageData(); setEditOpen(false); }} editJob={job} />
-      <AIFilterModal isOpen={aiFilterOpen} onClose={() => setAiFilterOpen(false)} jobId={params.id as string} jobTitle={job.title} />
-      <ScheduleInterviewsModal isOpen={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)} jobId={params.id as string} selectedApplicationIds={selectedApplicationIds} onSuccess={handleBulkSchedulingSuccess} />
+      <AIFilterModal isOpen={aiFilterOpen} onClose={() => setAiFilterOpen(false)} jobId={jobId} jobTitle={job?.title || ''} />
+      <ScheduleInterviewsModal isOpen={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)} jobId={jobId} selectedApplicationIds={selectedApplicationIds} onSuccess={handleBulkSchedulingSuccess} />
     </div>
   );
 }

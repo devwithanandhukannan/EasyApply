@@ -1697,13 +1697,16 @@ app.get('/api/company/jobs', async (c) => {
 app.get('/api/company/jobs/:id', async (c) => {
   try {
     const { id } = c.req.param();
+    if (!id || id === 'default') {
+      return c.json({ success: true, data: null, job: null });
+    }
     const decoded = await getAuthUser(c);
     if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
     const job: any = await c.env.DB.prepare('SELECT * FROM "JobPosting" WHERE id = ? AND companyId = ?').bind(id, decoded.companyId).first();
-    if (!job) return c.json({ success: false, message: 'Job not found' }, 404);
+    if (!job) return c.json({ success: true, data: null, job: null });
     job.requiredSkills = typeof job.requiredSkills === 'string' ? JSON.parse(job.requiredSkills || '[]') : (job.requiredSkills || []);
     job.disallowAiCv = Boolean(job.disallowAiCv);
-    return c.json({ success: true, data: job });
+    return c.json({ success: true, data: job, job });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -1894,14 +1897,18 @@ app.delete('/api/company/jobs/:id', async (c) => {
 app.get('/api/company/jobs/:id/applications', async (c) => {
   try {
     const { id } = c.req.param();
+    if (!id || id === 'default') {
+      return c.json({ success: true, data: [], applications: [] });
+    }
     const decoded = await getAuthUser(c);
-    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [] });
+    if (!decoded || !decoded.companyId) return c.json({ success: true, data: [], applications: [] });
     const apps = await c.env.DB.prepare(
       'SELECT a.*, p.fullName, p.email, p.phone, p.location as candidateLocation, p.profilePhotoUrl, r.name as resumeName, r.filePath as resumeUrl, r.atsScore FROM "Application" a JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id LEFT JOIN "Resume" r ON a.resumeId = r.id WHERE a.jobPostingId = ? ORDER BY a.appliedAt DESC'
     ).bind(id).all();
-    return c.json({ success: true, data: apps.results || [] });
+    const list = apps.results || [];
+    return c.json({ success: true, data: list, applications: list });
   } catch (err: any) {
-    return c.json({ success: true, data: [] });
+    return c.json({ success: true, data: [], applications: [] });
   }
 });
 
