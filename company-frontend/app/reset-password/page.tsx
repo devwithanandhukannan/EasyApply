@@ -6,6 +6,7 @@ import { Lock, ArrowRight, ShieldAlert, CheckCircle2, ArrowLeft } from 'lucide-r
 import { AxiosError } from 'axios';
 import Link from 'next/link';
 import api from '@/app/lib/axios';
+import EasyApplyLogo from '@/app/components/EasyApplyLogo';
 
 function ResetPasswordContent() {
   const router = useRouter();
@@ -78,9 +79,9 @@ function ResetPasswordContent() {
       <div className="w-full max-w-md">
         
         {/* Header Icon & Branding */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl mb-4">
-            <span className="text-black font-semibold text-xl">J</span>
+        <div className="flex flex-col items-center text-center mb-6">
+          <div className="mb-4">
+            <EasyApplyLogo size="xl" badge="Business" />
           </div>
           <h1 className="text-2xl font-semibold text-white mb-2">Reset Password</h1>
           <p className="text-gray-500 text-sm">Enter your new security credentials</p>

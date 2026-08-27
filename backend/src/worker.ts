@@ -8,7 +8,7 @@ async function sendSmtpEmail({
   to,
   subject,
   html,
-  from = '"EasyApply Business" <workbridge.anandhu@gmail.com>',
+  from = '"DearResume Business" <workbridge.anandhu@gmail.com>',
 }: {
   to: string;
   subject: string;
@@ -75,7 +75,7 @@ async function sendSmtpEmail({
       throw new Error(`SMTP Banner unexpected: ${banner}`);
     }
 
-    const ehloRes = await sendCommand('EHLO easyapply.pages.dev');
+    const ehloRes = await sendCommand('EHLO dearresume.com');
     if (!ehloRes.startsWith('250')) {
       throw new Error(`EHLO error: ${ehloRes}`);
     }
@@ -110,7 +110,7 @@ async function sendSmtpEmail({
       throw new Error(`DATA error: ${dataRes}`);
     }
 
-    const messageId = `<${crypto.randomUUID()}@easyapply.pages.dev>`;
+    const messageId = `<${crypto.randomUUID()}@dearresume.com>`;
     const dateStr = new Date().toUTCString();
     const rawMessage = [
       `From: ${from}`,
@@ -149,19 +149,19 @@ async function sendSmtpEmail({
 }
 
 async function sendCompanyVerificationEmail(email: string, companyName: string, token: string) {
-  const verifyUrl = `https://cloudflare.easyapply-company.pages.dev/verify-email?token=${token}`;
+  const verifyUrl = `https://company.dearresume.com/verify-email?token=${token}`;
   return await sendSmtpEmail({
     to: email,
-    subject: `Verify your corporate workspace - ${companyName || 'EasyApply'}`,
+    subject: `Verify your corporate workspace - ${companyName || 'DearResume'}`,
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
         <div style="text-align: center; margin-bottom: 24px;">
-          <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
+          <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">DearResume</h1>
           <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Employer Workspace Verification</p>
         </div>
         <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Confirm Your Corporate Email</h2>
         <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
-          Welcome to EasyApply Business! Please click the button below to verify your email address (<strong>${email}</strong>) and activate your employer workspace:
+          Welcome to DearResume Business! Please click the button below to verify your email address (<strong>${email}</strong>) and activate your employer workspace:
         </p>
         <div style="text-align: center; margin: 32px 0;">
           <a href="${verifyUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
@@ -174,7 +174,7 @@ async function sendCompanyVerificationEmail(email: string, companyName: string, 
         </p>
         <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
         <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
-          This email was sent automatically by EasyApply. If you did not create an employer workspace, please ignore this email.
+          This email was sent automatically by DearResume. If you did not create an employer workspace, please ignore this email.
         </p>
       </div>
     `,
@@ -182,19 +182,19 @@ async function sendCompanyVerificationEmail(email: string, companyName: string, 
 }
 
 async function sendCompanyPasswordResetEmail(email: string, token: string) {
-  const resetUrl = `https://cloudflare.easyapply-company.pages.dev/reset-password?token=${token}`;
+  const resetUrl = `https://company.dearresume.com/reset-password?token=${token}`;
   return await sendSmtpEmail({
     to: email,
-    subject: 'Reset Your Company Account Password - EasyApply',
+    subject: 'Reset Your Company Account Password - DearResume',
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
         <div style="text-align: center; margin-bottom: 24px;">
-          <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">EasyApply</h1>
+          <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">DearResume</h1>
           <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Company Account Security</p>
         </div>
         <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Reset Your Password</h2>
         <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
-          We received a request to reset the password for your EasyApply company account. Click the button below to set a new password:
+          We received a request to reset the password for your DearResume company account. Click the button below to set a new password:
         </p>
         <div style="text-align: center; margin: 32px 0;">
           <a href="${resetUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
@@ -204,10 +204,13 @@ async function sendCompanyPasswordResetEmail(email: string, token: string) {
         <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
           This reset link expires in 1 hour. If you did not request this, you can safely ignore this email.
         </p>
-        <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
-        <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+        <p style="font-size: 12px; color: #86868b; margin-top: 8px; line-height: 1.5;">
           Or copy and paste this link: <br/>
           <a href="${resetUrl}" style="color: #0071e3; word-break: break-all;">${resetUrl}</a>
+        </p>
+        <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
+        <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+          This email was sent automatically by DearResume. If you did not request a password reset, please ignore this email.
         </p>
       </div>
     `,
