@@ -2937,7 +2937,8 @@ app.post('/api/walkin/rooms/:roomCode/call-next', async (c) => {
     if (!user || !user.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
 
     const { roomCode } = c.req.param();
-    const { targetEntryId } = await c.req.json().catch(() => ({}));
+    const body = await c.req.json().catch(() => ({}));
+    const targetEntryId = body.targetEntryId || body.entryId;
 
     const room: any = await c.env.DB.prepare(
       'SELECT id, roomCode, livekitRoom FROM "WalkInRoom" WHERE (roomCode = ? OR id = ?) AND companyId = ?'
@@ -2953,7 +2954,7 @@ app.post('/api/walkin/rooms/:roomCode/call-next', async (c) => {
     } else {
       topCandidate = await c.env.DB.prepare(`
         SELECT * FROM "WalkInQueueEntry" 
-        WHERE roomId = ? AND status IN ("waiting", "priority") 
+        WHERE roomId = ? AND status IN ("waiting", "priority", "applied") 
         ORDER BY (priorityScore + agingBonus) DESC, waitingSince ASC 
         LIMIT 1
       `).bind(room.id).first();
@@ -2968,11 +2969,20 @@ app.post('/api/walkin/rooms/:roomCode/call-next', async (c) => {
       'UPDATE "WalkInQueueEntry" SET status = "interviewing", updatedAt = ? WHERE id = ?'
     ).bind(now, topCandidate.id).run();
 
+    const seeker: any = await c.env.DB.prepare('SELECT fullName, email FROM "JobSeekerProfile" WHERE id = ?').bind(topCandidate.jobSeekerProfileId).first();
+    const candidateData = {
+      ...topCandidate,
+      jobSeekerProfile: seeker || { fullName: 'Candidate', email: '' }
+    };
+
     return c.json({
       success: true,
       message: 'Calling candidate now.',
-      candidate: topCandidate,
+      candidate: candidateData,
+      entry: candidateData,
       livekitRoom: room.livekitRoom,
+      recruiterToken: `meet-${topCandidate.id}`,
+      livekitToken: `meet-${topCandidate.id}`,
     });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);

@@ -479,20 +479,28 @@ export default function CompanyWalkInKanbanPage() {
     try {
       const res = await api.post(`/walkin/rooms/${activeRoom.roomCode}/call-next`, {
         entryId: entry?.id || undefined,
+        targetEntryId: entry?.id || undefined,
       });
       if (res.data?.success) {
+        const candidateName =
+          res.data.entry?.jobSeekerProfile?.fullName ||
+          res.data.candidate?.jobSeekerProfile?.fullName ||
+          entry?.jobSeekerProfile?.fullName ||
+          'candidate';
+
         showToast(
           'Connecting...',
-          `Starting interview with ${res.data.entry.jobSeekerProfile?.fullName || 'candidate'}`,
+          `Starting interview with ${candidateName}`,
           'success'
         );
         const tokenToUse = res.data.recruiterToken || res.data.livekitToken || '';
-        router.push(`/meet/${activeRoom.livekitRoom}?token=${encodeURIComponent(tokenToUse)}&role=company`);
+        const roomName = activeRoom.livekitRoom || activeRoom.roomCode;
+        router.push(`/meet/${encodeURIComponent(roomName)}?token=${encodeURIComponent(tokenToUse)}&role=company`);
       } else {
         showToast('Queue Empty', res.data?.message || 'No candidates waiting', 'info');
       }
     } catch (err: any) {
-      showToast('Error', err.response?.data?.message || 'Failed to call candidate', 'danger');
+      showToast('Error', err.response?.data?.message || err.message || 'Failed to call candidate', 'danger');
     } finally {
       setCallingNext(false);
     }
