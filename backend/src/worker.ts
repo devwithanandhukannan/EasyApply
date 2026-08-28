@@ -3788,22 +3788,32 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
     if (!Array.isArray(roomState.participants)) roomState.participants = [];
 
-    // If company host joins, reset ended state
-    if (role === 'company' && roomState.isEnded) {
-      roomState.isEnded = false;
-      roomState.participants = [];
-    }
-
-    if (roomState.isEnded) {
-      return c.json({ success: false, isEnded: true, message: 'This interview has been ended by the host.' }, 403);
-    }
-
     const now = Date.now();
+
+    // If company host joins, reset ended state
+    if (role === 'company') {
+      roomState.isEnded = false;
+    }
+
+    // If room was ended long ago, reset for new session
+    if (roomState.isEnded && roomState.endedAt && (now - roomState.endedAt > 300000)) {
+      roomState.isEnded = false;
+    }
+
     let participants = roomState.participants.filter(
       (p: any) => p.sessionId !== sessionId && p.participantId !== participantId && (now - p.updatedAt < 120000)
     );
 
     const hasHost = participants.some((p: any) => p.role === 'company') || role === 'company';
+
+    // If host is active, room is never considered ended
+    if (hasHost) {
+      roomState.isEnded = false;
+    }
+
+    if (roomState.isEnded) {
+      return c.json({ success: false, isEnded: true, message: 'This interview has been ended by the host.' }, 403);
+    }
 
     // ── CANDIDATE ADMISSION CHECK ──
     if (role === 'candidate') {
@@ -4001,14 +4011,10 @@ app.post('/api/calls/rooms/:roomName/end', async (c) => {
 app.post('/api/calls/rooms/:roomName/leave', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId, role } = await c.req.json().catch(() => ({}));
+    const { sessionId } = await c.req.json().catch(() => ({}));
     let roomState = await getCallsRoomState(c, roomName);
     if (roomState && sessionId) {
       roomState.participants = (roomState.participants || []).filter((p: any) => p.sessionId !== sessionId);
-      if (role === 'company') {
-        roomState.isEnded = true;
-        roomState.endedAt = Date.now();
-      }
       await saveCallsRoomState(c, roomName, roomState);
     }
     return c.json({ success: true });
