@@ -228,8 +228,8 @@ async function getCompanySubscription(db: D1Database, companyId: string) {
     `).bind(companyId).first();
 
     if (!sub) {
-      const freePlan: any = await db.prepare('SELECT * FROM "SubscriptionPlan" WHERE id = "plan-pro" OR id = "plan-free" ORDER BY id DESC LIMIT 1').first();
-      const defaultFeatures = {
+      const freePlan: any = await db.prepare('SELECT * FROM "SubscriptionPlan" WHERE id = "plan-free" OR LOWER(name) = "free" LIMIT 1').first();
+      const baseFeatures = {
         jobPostings: true,
         atsScoring: true,
         aiResumeScan: true,
@@ -237,22 +237,22 @@ async function getCompanySubscription(db: D1Database, companyId: string) {
         kanban: true,
         offerLetters: true,
         interviewScheduling: true,
-        walkinInterview: true,
-        seekerDiscovery: true,
-        crmTalentPool: true,
-        spotJobs: true,
-        teamWorkspace: true,
+        walkinInterview: false,
+        seekerDiscovery: false,
+        crmTalentPool: false,
+        spotJobs: false,
+        teamWorkspace: false,
       };
       return {
-        id: 'pro-default',
+        id: 'free',
         isActive: true,
-        features: defaultFeatures,
+        features: baseFeatures,
         plan: {
-          id: freePlan?.id || 'plan-pro',
-          name: 'Professional Tier',
-          features: defaultFeatures,
-          maxJobPostings: 50,
-          maxTeamMembers: 10,
+          id: freePlan?.id || 'plan-free',
+          name: freePlan?.name || 'Free Tier',
+          features: baseFeatures,
+          maxJobPostings: freePlan?.maxJobPostings || 3,
+          maxTeamMembers: freePlan?.maxTeamMembers || 2,
         },
       };
     }
@@ -1155,6 +1155,8 @@ app.post('/api/company/auth/login', async (c) => {
 
     // Set HttpOnly Cookies
     setAuthCookies(c, token, token);
+
+    const subscription = await getCompanySubscription(c.env.DB, company.id);
 
     const companyObj = {
       id: company.id,

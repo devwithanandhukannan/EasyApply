@@ -94,13 +94,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         atsScoring: raw.atsScoring ?? true,
         aiResumeScan: raw.aiResumeScan ?? true,
         aiResumeBuilder: raw.aiResumeBuilder ?? true,
-        walkinInterview: raw.walkinInterview ?? true,
-        seekerDiscovery: raw.seekerDiscovery ?? true,
-        crmTalentPool: raw.crmTalentPool ?? true,
-        spotJobs: raw.spotJobs ?? true,
         offerLetters: raw.offerLetters ?? true,
         interviewScheduling: raw.interviewScheduling ?? true,
-        teamWorkspace: raw.teamWorkspace ?? true,
+        walkinInterview: raw.walkinInterview ?? false,
+        seekerDiscovery: raw.seekerDiscovery ?? false,
+        crmTalentPool: raw.crmTalentPool ?? false,
+        spotJobs: raw.spotJobs ?? false,
+        teamWorkspace: raw.teamWorkspace ?? false,
       };
     }
     return {
@@ -109,13 +109,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       atsScoring: true,
       aiResumeScan: true,
       aiResumeBuilder: true,
-      walkinInterview: true,
-      seekerDiscovery: true,
-      crmTalentPool: true,
-      spotJobs: true,
       offerLetters: true,
       interviewScheduling: true,
-      teamWorkspace: true,
+      walkinInterview: false,
+      seekerDiscovery: false,
+      crmTalentPool: false,
+      spotJobs: false,
+      teamWorkspace: false,
     };
   }, [company]);
 
