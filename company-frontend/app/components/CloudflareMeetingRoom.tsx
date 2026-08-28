@@ -330,9 +330,20 @@ export default function CloudflareMeetingRoom({
   const handleAdmitCandidate = async (candidateSessionId: string) => {
     try {
       setAdmittingMap((prev) => ({ ...prev, [candidateSessionId]: true }));
-      await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/admit`, {
+      const res = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/admit`, {
         sessionId: candidateSessionId,
       });
+
+      if (res.data?.success && Array.isArray(res.data?.participants)) {
+        const others = res.data.participants.filter((p: any) => p.sessionId !== sessionId);
+        setRemoteParticipants(others);
+        others.forEach((p: any) => {
+          if (!subPcsRef.current[p.sessionId] && sessionId) {
+            subscribeToParticipant(p.sessionId, sessionId);
+          }
+        });
+      }
+
       setWaitingQueue((prev) => prev.filter((w) => w.sessionId !== candidateSessionId));
     } catch (e) {
       console.error('Failed to admit candidate:', e);

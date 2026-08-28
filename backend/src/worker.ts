@@ -3863,12 +3863,27 @@ app.post('/api/calls/rooms/:roomName/admit', async (c) => {
     if (!roomState.admittedCandidates.includes(targetSessionId)) {
       roomState.admittedCandidates.push(targetSessionId);
     }
+
+    const candQueueItem = (roomState.waitingQueue || []).find((w: any) => w.sessionId === targetSessionId);
     if (Array.isArray(roomState.waitingQueue)) {
       roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== targetSessionId);
     }
 
+    // Immediately register admitted candidate in participants so host sees candidate right away
+    if (!Array.isArray(roomState.participants)) roomState.participants = [];
+    roomState.participants = roomState.participants.filter((p: any) => p.role !== 'candidate');
+    roomState.participants.push({
+      sessionId: targetSessionId,
+      participantId: candQueueItem?.participantId || targetSessionId,
+      name: candQueueItem?.name || 'Candidate',
+      role: 'candidate',
+      tracks: ['audio', 'video'],
+      joinedAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
     await saveCallsRoomState(c, roomName, roomState);
-    return c.json({ success: true, message: 'Candidate admitted successfully' });
+    return c.json({ success: true, message: 'Candidate admitted successfully', participants: roomState.participants });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
