@@ -6917,17 +6917,119 @@ app.post('/api/walkin/rooms/:id/leave', async (c) => {
   }
 });
 
-// ─── MISSING ENDPOINTS: INTERVIEWS ───────────────────────
+// ─── MISSING ENDPOINTS: INTERVIEWS & FEEDBACK ───────────────
 app.get('/api/interviews/:id', async (c) => {
   try {
     const { id } = c.req.param();
-    const interview: any = await c.env.DB.prepare('SELECT * FROM "Interview" WHERE id = ?').bind(id).first();
-    if (!interview) return c.json({ success: false, message: 'Interview not found' }, 404);
-    return c.json({ success: true, data: interview });
+    const row: any = await c.env.DB.prepare(
+      'SELECT i.*, a.id as appId, a.status as appStatus, j.id as jobId, j.title as jobTitle, j.department as jobDepartment, p.id as candidateId, p.fullName as candidateName, p.email as candidateEmail, p.phone as candidatePhone, p.profilePhotoUrl FROM "Interview" i LEFT JOIN "Application" a ON i.applicationId = a.id LEFT JOIN "JobPosting" j ON a.jobPostingId = j.id LEFT JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE i.id = ?'
+    ).bind(id).first();
+    
+    if (!row) return c.json({ success: false, message: 'Interview not found' }, 404);
+    
+    const formatted = {
+      id: row.id,
+      applicationId: row.applicationId,
+      scheduledTime: row.scheduledTime,
+      durationMinutes: row.durationMinutes || 30,
+      format: row.format || 'video',
+      status: row.status,
+      type: row.type || 'technical',
+      meetingLink: row.joinLink || row.meetingLink || '',
+      notes: row.notes || '',
+      rating: row.rating || null,
+      createdAt: row.createdAt,
+      application: {
+        id: row.appId || row.applicationId,
+        status: row.appStatus || 'scheduled',
+        jobPosting: {
+          id: row.jobId,
+          title: row.jobTitle || 'Job Position',
+          department: row.jobDepartment || 'Engineering',
+        },
+        jobSeekerProfile: {
+          id: row.candidateId,
+          fullName: row.candidateName || 'Candidate',
+          email: row.candidateEmail || '',
+          phone: row.candidatePhone || '',
+          profilePhotoUrl: row.profilePhotoUrl || null,
+        },
+      },
+    };
+
+    return c.json({ success: true, data: formatted, interview: formatted });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
 });
+
+app.get('/api/interviews/:id/feedback', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const rows = await c.env.DB.prepare(
+      'SELECT f.*, u.id as uId, p.fullName as interviewerName FROM "InterviewFeedback" f LEFT JOIN "User" u ON f.interviewerId = u.id LEFT JOIN "JobSeekerProfile" p ON p.userId = u.id WHERE f.interviewId = ? ORDER BY f.createdAt DESC'
+    ).bind(id).all();
+
+    const formatted = (rows.results || []).map((r: any) => ({
+      id: r.id,
+      interviewerId: r.interviewerId,
+      technicalRating: r.technicalRating,
+      communicationRating: r.communicationRating,
+      problemSolvingRating: r.problemSolvingRating,
+      verdict: r.verdict,
+      notes: r.notes || '',
+      createdAt: r.createdAt,
+      interviewer: {
+        id: r.interviewerId,
+        jobSeekerProfile: {
+          fullName: r.interviewerName || 'Interviewer',
+        },
+      },
+    }));
+
+    return c.json({ success: true, data: formatted });
+  } catch (err: any) {
+    return c.json({ success: true, data: [] });
+  }
+});
+
+const handleInterviewFeedback = async (c: any) => {
+  try {
+    const { id: interviewId } = c.req.param();
+    const decoded = await getAuthUser(c);
+    const interviewerId = decoded?.userId || 'system-host';
+    const { technicalRating, communicationRating, problemSolvingRating, verdict, notes } = await c.req.json().catch(() => ({}));
+
+    const existing: any = await c.env.DB.prepare(
+      'SELECT id FROM "InterviewFeedback" WHERE interviewId = ? AND interviewerId = ?'
+    ).bind(interviewId, interviewerId).first();
+
+    const fid = existing?.id || crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    if (existing) {
+      await c.env.DB.prepare(
+        'UPDATE "InterviewFeedback" SET technicalRating = ?, communicationRating = ?, problemSolvingRating = ?, verdict = ?, notes = ?, createdAt = ? WHERE id = ?'
+      ).bind(technicalRating, communicationRating, problemSolvingRating, verdict, notes || '', now, fid).run();
+    } else {
+      await c.env.DB.prepare(
+        'INSERT INTO "InterviewFeedback" (id, interviewId, interviewerId, technicalRating, communicationRating, problemSolvingRating, verdict, notes, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(fid, interviewId, interviewerId, technicalRating, communicationRating, problemSolvingRating, verdict, notes || '', now).run();
+    }
+
+    // Also update overall interview rating & status
+    const avg = ((Number(technicalRating) + Number(communicationRating) + Number(problemSolvingRating)) / 3).toFixed(1);
+    await c.env.DB.prepare(
+      'UPDATE "Interview" SET status = ?, rating = ?, notes = ?, updatedAt = ? WHERE id = ?'
+    ).bind('completed', Number(avg), notes || '', now, interviewId).run().catch(() => {});
+
+    return c.json({ success: true, message: 'Feedback submitted successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+app.put('/api/interviews/:id/feedback', handleInterviewFeedback);
+app.post('/api/interviews/:id/feedback', handleInterviewFeedback);
 
 // ─── MISSING: NOTIFICATION TOKEN & INSIGHTS ──────────────
 app.post('/api/jobseeker/notification/token', async (c) => c.json({ success: true }));

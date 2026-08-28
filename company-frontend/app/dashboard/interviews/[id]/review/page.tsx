@@ -80,8 +80,17 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string 
 };
 
 export default function PostInterviewReviewPage() {
-  const { id } = useParams();
+  const params = useParams();
   const router = useRouter();
+
+  const [resolvedId, setResolvedId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/interviews/')[1]?.split('/review')[0]?.split('?')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const pId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+    return pId && pId !== 'default' ? pId : '';
+  });
 
   const [interview, setInterview] = useState<InterviewContext | null>(null);
   const [feedbacks, setFeedbacks] = useState<FeedbackEntry[]>([]);
@@ -90,29 +99,46 @@ export default function PostInterviewReviewPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [poolModalOpen, setPoolModalOpen] = useState(false); // NEW
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/interviews/')[1]?.split('/review')[0]?.split('?')[0];
+      if (match && match !== 'default') {
+        setResolvedId(decodeURIComponent(match));
+        return;
+      }
+    }
+    if (params?.id && params.id !== 'default') {
+      setResolvedId(Array.isArray(params.id) ? params.id[0] : params.id);
+    }
+  }, [params?.id]);
+
   const loadData = async () => {
+    if (!resolvedId) return;
     try {
       setIsLoading(true);
 
-      const [sessionRes, listRes, fbRes] = await Promise.all([
-        api.get('/company/auth/session'),
-        api.get('/company/interviews/list'),
-        api.get(`/interviews/${id}/feedback`),
+      const [sessionRes, detailRes, listRes, fbRes] = await Promise.all([
+        api.get('/company/auth/session').catch(() => ({ data: { success: false } })),
+        api.get(`/interviews/${resolvedId}`).catch(() => ({ data: { success: false } })),
+        api.get('/company/interviews/list').catch(() => ({ data: { success: false } })),
+        api.get(`/interviews/${resolvedId}/feedback`).catch(() => ({ data: { success: false } })),
       ]);
 
-      if (sessionRes.data.success) {
+      if (sessionRes.data?.success) {
         setSession({
           companyRoles: sessionRes.data.companyRoles ?? 0,
           userId: sessionRes.data.userId ?? '',
         });
       }
 
-      if (listRes.data.success) {
-        const match = listRes.data.interviews.find((item: any) => item.id === id);
+      if (detailRes.data?.success && detailRes.data?.data) {
+        setInterview(detailRes.data.data);
+      } else if (listRes.data?.success && Array.isArray(listRes.data?.interviews)) {
+        const match = listRes.data.interviews.find((item: any) => item.id === resolvedId);
         if (match) setInterview(match);
       }
 
-      if (fbRes.data.success) {
+      if (fbRes.data?.success) {
         setFeedbacks(fbRes.data.data ?? []);
       }
     } catch (err) {
@@ -123,19 +149,18 @@ export default function PostInterviewReviewPage() {
   };
 
   useEffect(() => {
-    if (id) loadData();
-  }, [id]);
+    if (resolvedId) loadData();
+  }, [resolvedId]);
 
   const handleFeedbackSuccess = async () => {
+    if (!resolvedId) return;
     try {
-      const fbRes = await api.get(`/interviews/${id}/feedback`);
-      if (fbRes.data.success) setFeedbacks(fbRes.data.data ?? []);
-      // Also refresh interview status
-      const listRes = await api.get('/company/interviews/list');
-      if (listRes.data.success) {
-        const match = listRes.data.interviews.find((item: any) => item.id === id);
-        if (match) setInterview(match);
-      }
+      const [fbRes, detailRes] = await Promise.all([
+        api.get(`/interviews/${resolvedId}/feedback`),
+        api.get(`/interviews/${resolvedId}`),
+      ]);
+      if (fbRes.data?.success) setFeedbacks(fbRes.data.data ?? []);
+      if (detailRes.data?.success && detailRes.data?.data) setInterview(detailRes.data.data);
     } catch (e) {}
     setIsModalOpen(false);
   };
