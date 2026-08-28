@@ -3965,15 +3965,25 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
       roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
     }
 
-    // If unadmitted candidate, ensure not in active participants
+    // If unadmitted candidate, ensure not in active participants and ensure registered in waitingQueue
     if (role === 'candidate' && !roomState.admittedCandidates.includes(sessionId)) {
       roomState.participants = roomState.participants.filter((p: any) => p.sessionId !== sessionId);
+      const existingQueueIdx = roomState.waitingQueue.findIndex((w: any) => w.sessionId === sessionId);
+      if (existingQueueIdx >= 0) {
+        roomState.waitingQueue[existingQueueIdx].requestedAt = now;
+        if (name && name !== 'Candidate') {
+          roomState.waitingQueue[existingQueueIdx].name = name;
+        }
+      } else {
+        roomState.waitingQueue.push({
+          sessionId,
+          participantId: sessionId,
+          name: name || 'Candidate',
+          role: 'candidate',
+          requestedAt: now,
+        });
+      }
     }
-
-    // Keep waiting candidates updated
-    roomState.waitingQueue = roomState.waitingQueue.map((w: any) =>
-      w.sessionId === sessionId ? { ...w, requestedAt: now } : w
-    );
 
     await saveCallsRoomState(c, roomName, roomState);
 

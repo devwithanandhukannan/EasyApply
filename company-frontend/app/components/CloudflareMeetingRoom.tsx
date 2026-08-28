@@ -551,17 +551,27 @@ export default function CloudflareMeetingRoom({
         {/* Remote Candidate Tile */}
         {remoteParticipants.length === 0 ? (
           <div className="rounded-3xl border-2 border-dashed border-white/[0.08] flex flex-col items-center justify-center text-center p-8 bg-zinc-900/20">
-            <div className="w-16 h-16 rounded-3xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mb-4">
-              <Users className="w-8 h-8 text-zinc-600 animate-pulse" />
+            <div className={`w-16 h-16 rounded-3xl ${waitingQueue.length > 0 ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400' : 'bg-white/[0.03] border border-white/[0.06] text-zinc-600'} flex items-center justify-center mb-4`}>
+              <Users className="w-8 h-8 animate-pulse" />
             </div>
             <h3 className="text-sm font-bold text-white mb-1">
-              {waitingQueue.length > 0 ? 'Candidate is in the waiting lobby!' : 'Waiting for candidate to join...'}
+              {waitingQueue.length > 0 ? `${waitingQueue[0].name || 'Candidate'} is in the Waiting Lobby` : 'Waiting for candidate to join...'}
             </h3>
-            <p className="text-xs text-zinc-500 max-w-sm">
+            <p className="text-xs text-zinc-400 max-w-sm mb-4">
               {waitingQueue.length > 0
-                ? 'Click "Admit" above to permit the candidate into this live room.'
+                ? 'Candidate is ready. Click Admit below to permit entry and begin the live interview.'
                 : 'Candidates will appear in the lobby for your admission before video connects.'}
             </p>
+            {waitingQueue.length > 0 && (
+              <button
+                onClick={() => handleAdmitCandidate(waitingQueue[0].sessionId)}
+                disabled={admittingMap[waitingQueue[0].sessionId]}
+                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>{admittingMap[waitingQueue[0].sessionId] ? 'Admitting...' : `Admit ${waitingQueue[0].name || 'Candidate'}`}</span>
+              </button>
+            )}
           </div>
         ) : (
           remoteParticipants.map((p) => {
