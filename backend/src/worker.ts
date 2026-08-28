@@ -3851,16 +3851,19 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
 app.post('/api/calls/rooms/:roomName/admit', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId } = await c.req.json().catch(() => ({}));
+    const body = await c.req.json().catch(() => ({}));
+    const targetSessionId = body.sessionId || body.candidateSessionId;
+    if (!targetSessionId) return c.json({ success: false, message: 'Session ID required' }, 400);
+
     let roomState = await getCallsRoomState(c, roomName);
     if (!roomState) return c.json({ success: false, message: 'Room not found' }, 404);
 
     if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
-    if (!roomState.admittedCandidates.includes(sessionId)) {
-      roomState.admittedCandidates.push(sessionId);
+    if (!roomState.admittedCandidates.includes(targetSessionId)) {
+      roomState.admittedCandidates.push(targetSessionId);
     }
     if (Array.isArray(roomState.waitingQueue)) {
-      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== targetSessionId);
     }
 
     await saveCallsRoomState(c, roomName, roomState);
@@ -3874,16 +3877,19 @@ app.post('/api/calls/rooms/:roomName/admit', async (c) => {
 app.post('/api/calls/rooms/:roomName/decline', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId } = await c.req.json().catch(() => ({}));
+    const body = await c.req.json().catch(() => ({}));
+    const targetSessionId = body.sessionId || body.candidateSessionId;
+    if (!targetSessionId) return c.json({ success: false, message: 'Session ID required' }, 400);
+
     let roomState = await getCallsRoomState(c, roomName);
     if (!roomState) return c.json({ success: false, message: 'Room not found' }, 404);
 
     if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
-    if (!roomState.declinedCandidates.includes(sessionId)) {
-      roomState.declinedCandidates.push(sessionId);
+    if (!roomState.declinedCandidates.includes(targetSessionId)) {
+      roomState.declinedCandidates.push(targetSessionId);
     }
     if (Array.isArray(roomState.waitingQueue)) {
-      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== targetSessionId);
     }
 
     await saveCallsRoomState(c, roomName, roomState);
