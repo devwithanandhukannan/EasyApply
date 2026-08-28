@@ -645,6 +645,9 @@ export default function JobDetailsPage() {
                   const targetId = app.applicationId || app.id;
                   const isSelected = selectedApplicationIds.includes(targetId);
                   const profile = app.candidate || app.jobSeekerProfile || {};
+                  const fullName = profile.fullName || app.fullName || 'Candidate';
+                  const email = profile.email || app.email || '';
+                  const atsScore = app.resume?.atsScore ?? app.atsScore;
                   return (
                     <div
                       key={targetId}
@@ -664,25 +667,25 @@ export default function JobDetailsPage() {
                           )}
                         </div>
                       )}
-                      <div className="h-10 w-10 rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] border border-black/[0.04] dark:border-white/[0.06] flex items-center justify-center text-[#1d1d1f] dark:text-white font-bold text-sm shrink-0">
-                        {profile.fullName?.charAt(0)?.toUpperCase() || '?'}
+                      <div className="h-10 w-10 rounded-2xl bg-[#0071e3]/10 border border-[#0071e3]/20 flex items-center justify-center text-[#0071e3] font-bold text-sm shrink-0">
+                        {fullName.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                          <p className="font-bold text-[#1d1d1f] dark:text-white text-sm">{profile.fullName}</p>
+                          <p className="font-bold text-[#1d1d1f] dark:text-white text-sm">{fullName}</p>
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${STATUS_STYLES[app.status] || ''}`}>
                             {app.status.replace('_', ' ')}
                           </span>
                         </div>
-                        <p className="text-[#86868b] text-xs font-medium truncate">{profile.email}</p>
+                        <p className="text-[#86868b] text-xs font-medium truncate">{email}</p>
                       </div>
-                      {app.resume?.atsScore != null && (
+                      {atsScore != null && (
                         <div className="text-right shrink-0">
                           <p className="text-[10px] font-semibold text-[#86868b] uppercase tracking-wider">ATS Score</p>
                           <p className={`text-sm font-bold ${
-                            app.resume.atsScore >= 70 ? 'text-[#248a3d] dark:text-[#30d158]' :
-                            app.resume.atsScore >= 40 ? 'text-[#ff9500]' : 'text-[#ff3b30]'
-                          }`}>{app.resume.atsScore}%</p>
+                            atsScore >= 70 ? 'text-[#248a3d] dark:text-[#30d158]' :
+                            atsScore >= 40 ? 'text-[#ff9500]' : 'text-[#ff3b30]'
+                          }`}>{atsScore}%</p>
                         </div>
                       )}
                       <ChevronRight size={16} className="text-[#86868b] group-hover:text-[#1d1d1f] dark:group-hover:text-white transition shrink-0" />
@@ -718,6 +721,7 @@ export default function JobDetailsPage() {
                         columnCards.map(card => {
                           const cardId = card.applicationId || card.id;
                           const profile = card.jobSeekerProfile || card.candidate || {};
+                          const fullName = profile.fullName || card.fullName || 'Candidate';
                           return (
                             <div
                               key={cardId}

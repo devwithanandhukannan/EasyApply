@@ -2056,7 +2056,35 @@ app.get('/api/company/jobs/:id/applications', async (c) => {
     const apps = await c.env.DB.prepare(
       'SELECT a.*, p.fullName, p.email, p.phone, p.location as candidateLocation, p.profilePhotoUrl, r.name as resumeName, r.filePath as resumeUrl, r.atsScore FROM "Application" a JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id LEFT JOIN "Resume" r ON a.resumeId = r.id WHERE a.jobPostingId = ? ORDER BY a.appliedAt DESC'
     ).bind(id).all();
-    const list = apps.results || [];
+    const rawList = apps.results || [];
+    const list = rawList.map((a: any) => ({
+      ...a,
+      applicationId: a.id,
+      jobSeekerProfile: {
+        id: a.jobSeekerProfileId,
+        fullName: a.fullName || 'Candidate',
+        email: a.email || '',
+        phone: a.phone || '',
+        location: a.candidateLocation || '',
+        profilePhotoUrl: a.profilePhotoUrl || null,
+        skills: [],
+      },
+      candidate: {
+        id: a.jobSeekerProfileId,
+        fullName: a.fullName || 'Candidate',
+        email: a.email || '',
+        phone: a.phone || '',
+        location: a.candidateLocation || '',
+        profilePhotoUrl: a.profilePhotoUrl || null,
+      },
+      resume: a.resumeId ? {
+        id: a.resumeId,
+        name: a.resumeName || 'Resume',
+        filePath: a.resumeUrl,
+        url: a.resumeUrl,
+        atsScore: a.atsScore != null ? a.atsScore : 85,
+      } : null,
+    }));
     return c.json({ success: true, data: list, applications: list });
   } catch (err: any) {
     return c.json({ success: true, data: [], applications: [] });
@@ -2073,7 +2101,55 @@ app.get('/api/company/selection/applications/:id', async (c) => {
     if (app.resumeContent && typeof app.resumeContent === 'string') {
       try { app.resumeContent = JSON.parse(app.resumeContent); } catch {}
     }
-    return c.json({ success: true, data: app });
+
+    const skillsRes: any = await c.env.DB.prepare('SELECT name FROM "Skill" WHERE jobSeekerProfileId = ?').bind(app.jobSeekerProfileId).all().catch(() => ({ results: [] }));
+    const skillsList = (skillsRes.results || []).map((s: any) => s.name).filter(Boolean);
+
+    const formatted = {
+      ...app,
+      applicationId: app.id,
+      jobSeekerProfile: {
+        id: app.jobSeekerProfileId,
+        fullName: app.fullName || 'Candidate',
+        email: app.email || '',
+        phone: app.phone || '',
+        location: app.location || '',
+        linkedin: app.linkedin || '',
+        github: app.github || '',
+        portfolio: app.portfolio || '',
+        bio: app.bio || '',
+        profilePhotoUrl: app.profilePhotoUrl || null,
+        skills: skillsList,
+      },
+      candidate: {
+        id: app.jobSeekerProfileId,
+        fullName: app.fullName || 'Candidate',
+        email: app.email || '',
+        phone: app.phone || '',
+        location: app.location || '',
+        linkedin: app.linkedin || '',
+        github: app.github || '',
+        portfolio: app.portfolio || '',
+        bio: app.bio || '',
+        profilePhotoUrl: app.profilePhotoUrl || null,
+        skills: skillsList,
+      },
+      jobPosting: {
+        id: app.jobPostingId,
+        title: app.jobTitle,
+        department: app.jobDepartment,
+      },
+      resume: app.resumeId ? {
+        id: app.resumeId,
+        name: app.resumeName || 'Resume',
+        filePath: app.resumeUrl,
+        url: app.resumeUrl,
+        atsScore: app.atsScore != null ? app.atsScore : 85,
+        content: app.resumeContent,
+      } : null,
+    };
+
+    return c.json({ success: true, data: formatted });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
