@@ -4235,18 +4235,255 @@ app.put('/api/jobseeker/profile', async (c) => {
 });
 
 app.get('/api/jobseeker/dashboard', async (c) => {
-  return c.json({
-    success: true,
-    data: {
-      applicationsCount: 0,
-      interviewsCount: 0,
-      savedJobsCount: 0,
-      resumesCount: 0,
-      recentApplications: [],
-      upcomingInterviews: [],
-      recommendedJobs: [],
-    },
-  });
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.userId) {
+      return c.json({
+        success: true,
+        data: {
+          profile: null,
+          applicationSummary: { total: 0, active: 0, hired: 0, rejected: 0, inInterview: 0, offerStage: 0, rejectedThisMonth: 0, byStatus: {} },
+          recentApplications: [],
+          upcomingInterviews: [],
+          pendingOffers: [],
+          resume: null,
+        }
+      });
+    }
+
+    const profile: any = await c.env.DB.prepare(
+      'SELECT * FROM "JobSeekerProfile" WHERE userId = ?'
+    ).bind(decoded.userId).first();
+
+    if (!profile) {
+      return c.json({
+        success: true,
+        data: {
+          profile: null,
+          applicationSummary: { total: 0, active: 0, hired: 0, rejected: 0, inInterview: 0, offerStage: 0, rejectedThisMonth: 0, byStatus: {} },
+          recentApplications: [],
+          upcomingInterviews: [],
+          pendingOffers: [],
+          resume: null,
+        }
+      });
+    }
+
+    const [skillsRes, primaryResumeRes, appsRes, interviewsRes, offersRes] = await Promise.all([
+      c.env.DB.prepare('SELECT name FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare('SELECT id, name, atsScore, updatedAt, isPrimary FROM "Resume" WHERE jobSeekerProfileId = ? ORDER BY isPrimary DESC, createdAt DESC LIMIT 1').bind(profile.id).first().catch(() => null),
+      c.env.DB.prepare(`
+        SELECT a.id as applicationId, a.status, a.createdAt as appliedAt, a.isWithdrawn,
+               j.id as jobId, j.title as jobTitle, j.location as jobLocation, j.jobType,
+               c.name as companyName, c.logoUrl as companyLogo
+        FROM "Application" a
+        JOIN "JobPosting" j ON a.jobPostingId = j.id
+        JOIN "Company" c ON j.companyId = c.id
+        WHERE a.jobSeekerProfileId = ?
+        ORDER BY a.createdAt DESC LIMIT 10
+      `).bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare(`
+        SELECT i.id as interviewId, i.scheduledTime, i.durationMinutes, i.format, i.status,
+               j.title as job, c.name as companyName, c.logoUrl as companyLogo
+        FROM "Interview" i
+        JOIN "Application" a ON i.applicationId = a.id
+        JOIN "JobPosting" j ON a.jobPostingId = j.id
+        JOIN "Company" c ON j.companyId = c.id
+        WHERE a.jobSeekerProfileId = ? AND i.status IN ("scheduled", "confirmed")
+        ORDER BY i.scheduledTime ASC LIMIT 5
+      `).bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+      c.env.DB.prepare(`
+        SELECT o.id as offerId, o.position, o.salary, o.currency, o.status, o.createdAt,
+               c.name as companyName, c.logoUrl as companyLogo
+        FROM "OfferLetter" o
+        JOIN "Application" a ON o.applicationId = a.id
+        JOIN "Company" c ON o.companyId = c.id
+        WHERE a.jobSeekerProfileId = ? AND o.status IN ("sent", "viewed", "pending")
+        ORDER BY o.createdAt DESC LIMIT 5
+      `).bind(profile.id).all().then((r: any) => r.results || []).catch(() => []),
+    ]);
+
+    const skillsList = skillsRes.map((s: any) => s.name).filter(Boolean);
+
+    // Profile Completion Score Calculation
+    let completionScore = 0;
+    const completionTips: string[] = [];
+
+    if (profile.fullName && profile.fullName.trim().length > 0 && profile.fullName !== 'Candidate') {
+      completionScore += 15;
+    } else {
+      completionTips.push('Add your full name to your profile');
+    }
+
+    if (profile.email && profile.email.trim().length > 0) {
+      completionScore += 10;
+    } else {
+      completionTips.push('Verify your email address');
+    }
+
+    if (profile.phone && profile.phone.trim().length > 0) {
+      completionScore += 10;
+    } else {
+      completionTips.push('Add your contact phone number for recruiter outreach');
+    }
+
+    if (profile.location && profile.location.trim().length > 0) {
+      completionScore += 10;
+    } else {
+      completionTips.push('Add your location to unlock nearby walk-in opportunities');
+    }
+
+    if (profile.bio && profile.bio.trim().length > 0) {
+      completionScore += 15;
+    } else {
+      completionTips.push('Write a short bio describing your engineering background');
+    }
+
+    if (profile.profilePhotoUrl && profile.profilePhotoUrl.trim().length > 0) {
+      completionScore += 10;
+    } else {
+      completionTips.push('Upload a profile photo to stand out to employers');
+    }
+
+    if (skillsList.length >= 3) {
+      completionScore += 15;
+    } else {
+      completionTips.push('Add at least 3 core technical skills to your profile');
+    }
+
+    if (primaryResumeRes) {
+      completionScore += 15;
+    } else {
+      completionTips.push('Upload your primary resume to boost ATS shortlisting');
+    }
+
+    // Application summary
+    const totalApps = appsRes.length;
+    const hiredApps = appsRes.filter((a: any) => a.status === 'hired').length;
+    const rejectedApps = appsRes.filter((a: any) => a.status === 'rejected').length;
+    const inInterviewApps = appsRes.filter((a: any) => ['technical_round', 'hr_round', 'in_interview'].includes(a.status)).length;
+    const offerStageApps = appsRes.filter((a: any) => a.status === 'offer_sent').length;
+    const activeApps = totalApps - hiredApps - rejectedApps;
+
+    const byStatus: Record<string, number> = {};
+    appsRes.forEach((a: any) => {
+      byStatus[a.status] = (byStatus[a.status] || 0) + 1;
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        profile: {
+          id: profile.id,
+          fullName: profile.fullName || '',
+          email: profile.email || '',
+          phone: profile.phone || '',
+          location: profile.location || '',
+          profilePhotoUrl: profile.profilePhotoUrl || null,
+          availabilityStatus: profile.availabilityStatus || 'available',
+          skills: skillsList,
+          completionScore: Math.min(100, completionScore),
+          completionTips,
+        },
+        applicationSummary: {
+          total: totalApps,
+          active: activeApps,
+          hired: hiredApps,
+          rejected: rejectedApps,
+          inInterview: inInterviewApps,
+          offerStage: offerStageApps,
+          rejectedThisMonth: 0,
+          byStatus,
+        },
+        recentApplications: appsRes.map((a: any) => ({
+          applicationId: a.applicationId,
+          status: a.status,
+          appliedAt: a.appliedAt,
+          isWithdrawn: Boolean(a.isWithdrawn),
+          job: {
+            id: a.jobId,
+            title: a.jobTitle,
+            location: a.jobLocation,
+            type: a.jobType,
+            company: {
+              name: a.companyName,
+              logoUrl: a.companyLogo || null,
+            },
+          },
+        })),
+        upcomingInterviews: interviewsRes.map((i: any) => ({
+          interviewId: i.interviewId,
+          scheduledTime: i.scheduledTime,
+          durationMinutes: i.durationMinutes || 45,
+          format: i.format || 'video',
+          status: i.status,
+          job: i.job,
+          company: {
+            name: i.companyName,
+            logoUrl: i.companyLogo || null,
+          },
+        })),
+        pendingOffers: offersRes.map((o: any) => ({
+          offerId: o.offerId,
+          position: o.position,
+          salary: o.salary,
+          currency: o.currency || 'USD',
+          status: o.status,
+          createdAt: o.createdAt,
+          company: {
+            name: o.companyName,
+            logoUrl: o.companyLogo || null,
+          },
+        })),
+        resume: primaryResumeRes ? {
+          id: primaryResumeRes.id,
+          name: primaryResumeRes.name || 'Primary Resume',
+          atsScore: primaryResumeRes.atsScore || 85,
+          updatedAt: primaryResumeRes.updatedAt,
+        } : null,
+      },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.get('/api/jobseeker/insights', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.userId) {
+      return c.json({ success: true, data: { weeklyActivity: [], statusBreakdown: {} } });
+    }
+
+    const profile: any = await c.env.DB.prepare(
+      'SELECT id FROM "JobSeekerProfile" WHERE userId = ?'
+    ).bind(decoded.userId).first();
+
+    if (!profile) {
+      return c.json({ success: true, data: { weeklyActivity: [], statusBreakdown: {} } });
+    }
+
+    const apps: any = await c.env.DB.prepare(
+      'SELECT status, createdAt FROM "Application" WHERE jobSeekerProfileId = ?'
+    ).bind(profile.id).all();
+
+    const results = apps.results || [];
+    const statusBreakdown: Record<string, number> = {};
+    results.forEach((a: any) => {
+      statusBreakdown[a.status] = (statusBreakdown[a.status] || 0) + 1;
+    });
+
+    return c.json({
+      success: true,
+      data: {
+        totalApplications: results.length,
+        statusBreakdown,
+        weeklyActivity: [],
+      },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
 });
 
 app.get('/api/jobseeker/resumes', async (c) => {
