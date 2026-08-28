@@ -5441,14 +5441,25 @@ app.post('/api/jobseeker/applications/apply', async (c) => {
       resumeId = newResumeId;
     }
 
-    // Fallback: If resumeId is still empty or 'default', find user's primary/latest resume
-    if (!resumeId || resumeId === 'default') {
-      const defaultRes: any = await c.env.DB.prepare('SELECT id FROM "Resume" WHERE jobSeekerProfileId = ? ORDER BY isPrimary DESC, updatedAt DESC LIMIT 1').bind(profile.id).first();
-      resumeId = defaultRes?.id || null;
-    }
-
     const existing = await c.env.DB.prepare('SELECT id FROM "Application" WHERE jobSeekerProfileId = ? AND jobPostingId = ?').bind(profile.id, jobPostingId).first();
     if (existing) return c.json({ success: false, message: 'You have already applied to this job.' }, 409);
+
+    // Enforce disallowAiCv (Manual PDF Upload Requirement)
+    const jobPosting: any = await c.env.DB.prepare('SELECT id, disallowAiCv FROM "JobPosting" WHERE id = ?').bind(jobPostingId).first();
+    if (jobPosting && (jobPosting.disallowAiCv === 1 || jobPosting.disallowAiCv === true)) {
+      if (!applyWithNew) {
+        if (!resumeId) {
+          return c.json({ success: false, message: 'This employer requires a manually uploaded PDF resume. Please upload your document.' }, 400);
+        }
+        const checkResume: any = await c.env.DB.prepare('SELECT source FROM "Resume" WHERE id = ?').bind(resumeId).first();
+        if (checkResume && checkResume.source !== 'uploaded') {
+          return c.json({
+            success: false,
+            message: 'This employer requires a manually uploaded PDF resume. Direct platform-generated AI resumes cannot be attached. Please download your resume as a PDF and upload the document file.',
+          }, 400);
+        }
+      }
+    }
 
     const appId = crypto.randomUUID();
     await c.env.DB.prepare(
