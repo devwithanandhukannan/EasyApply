@@ -179,26 +179,33 @@ export default function LoginPage() {
           </div>
         )}
 
-        {/* Error Handling Layout block */}
+        {/* Error / Verification Pending Handling */}
         {errorMessage && (
-          <div className="mb-6 bg-[#ff3b30]/10 border border-[#ff3b30]/30 rounded-2xl p-4 text-sm text-[#d70015] dark:text-[#ff453a] flex flex-col space-y-3 font-medium">
+          <div className={`mb-6 rounded-2xl p-4 text-sm flex flex-col space-y-3 font-medium ${
+            isUnverified
+              ? 'bg-[#ff9500]/10 border border-[#ff9500]/30 text-[#b25000] dark:text-[#ff9f0a]'
+              : 'bg-[#ff3b30]/10 border border-[#ff3b30]/30 text-[#d70015] dark:text-[#ff453a]'
+          }`}>
             <div className="flex items-start space-x-3">
-              <ShieldAlert className="flex-shrink-0 mt-0.5 text-[#ff3b30]" size={18} />
-              <span className="flex-1">{errorMessage}</span>
+              <ShieldAlert className={`flex-shrink-0 mt-0.5 ${isUnverified ? 'text-[#ff9500]' : 'text-[#ff3b30]'}`} size={18} />
+              <div className="flex-1">
+                {isUnverified && <p className="font-bold text-xs uppercase tracking-wider mb-1">Verification Pending</p>}
+                <span>{errorMessage}</span>
+              </div>
             </div>
             
             {/* Resend Verification Link Action Button */}
             {isUnverified && (
-              <div className="pt-2 border-t border-[#ff3b30]/20 flex items-center justify-between">
+              <div className="pt-2 border-t border-[#ff9500]/20 flex items-center justify-between">
                 <button
                   type="button"
                   onClick={handleResendEmail}
                   disabled={cooldown > 0 || isSendingEmail}
-                  className="text-xs text-[#0071e3] hover:underline disabled:text-[#86868b] disabled:no-underline font-semibold transition-colors flex items-center space-x-1.5"
+                  className="text-xs text-[#0071e3] hover:underline disabled:text-[#86868b] disabled:no-underline font-semibold transition-colors flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Mail size={14} />
                   <span>
-                    {isSendingEmail && 'Sending email...'}
+                    {isSendingEmail && 'Sending verification email...'}
                     {!isSendingEmail && cooldown > 0 && `Resend link in ${cooldown}s`}
                     {!isSendingEmail && cooldown === 0 && 'Resend verification link'}
                   </span>

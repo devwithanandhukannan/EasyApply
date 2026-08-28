@@ -1041,15 +1041,15 @@ app.post('/api/company/auth/register', async (c) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Create a User record for the company owner
+    // Create a User record for the company owner (unverified until corporate email is confirmed)
     await c.env.DB.prepare(
       'INSERT INTO "User" (id, mobileNumber, globalRoles, isVerified, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(userId, mobileNumber || '', 2, 1, now, now).run();
+    ).bind(userId, mobileNumber || '', 2, 0, now, now).run();
 
-    // Create company (email+password stored directly on Company, verified via mobile OTP)
+    // Create company as unverified with badge none
     await c.env.DB.prepare(
       'INSERT INTO "Company" (id, name, email, password, industry, size, registrationNumber, isVerified, verificationBadge, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(companyId, companyName, email, passwordHash, industry || 'Other', companySize || 'small', gstNumber || null, true, 'verified', true, now, now).run();
+    ).bind(companyId, companyName, cleanEmail, passwordHash, industry || 'Other', companySize || 'small', gstNumber || null, 0, 'none', true, now, now).run();
 
     // Create TeamMember (owner) — roles=1 means owner/admin
     await c.env.DB.prepare(
@@ -1057,26 +1057,19 @@ app.post('/api/company/auth/register', async (c) => {
     ).bind(memberId, companyId, userId, 1, 'active', passwordHash, now, now).run();
 
     const jwtSecret = getJwtSecret(c);
-    const token = jwt.sign(
-      { memberId, companyId, userId, role: 'owner' },
+    const verifyToken = jwt.sign(
+      { companyId, email: cleanEmail, purpose: 'company_email_verification' },
       jwtSecret,
-      { expiresIn: '7d' }
+      { expiresIn: '24h' }
     );
 
-    // Set HttpOnly Cookies
-    setAuthCookies(c, token, token);
+    // Dispatch verification link to registered corporate email
+    await sendCompanyVerificationEmail(cleanEmail, companyName, verifyToken);
 
     return c.json({
       success: true,
-      message: 'Company registered successfully.',
-      token,
-      user: {
-        id: memberId,
-        name: companyName,
-        email,
-        role: 'owner',
-        company: { id: companyId, name: companyName, verificationBadge: 'none' },
-      },
+      emailVerified: false,
+      message: `Company registered successfully. We have sent a verification link to your registered corporate email (${cleanEmail}). Please check your inbox and verify your email before logging in.`,
     });
   } catch (err: any) {
     if (err?.message?.includes('UNIQUE constraint failed: Company.name')) {

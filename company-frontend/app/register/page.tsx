@@ -335,10 +335,6 @@ function RegisterPageComponent() {
       });
 
       if (response.data.success) {
-        if (response.data.token) {
-          localStorage.setItem('companyToken', response.data.token);
-          localStorage.setItem('token', response.data.token);
-        }
         setStep('success');
       }
     } catch (error) {
@@ -860,29 +856,23 @@ function RegisterPageComponent() {
             </form>
           )}
 
-          {/* Success Step */}
+          {/* Success Step - Verification Link Sent */}
           {step === 'success' && (
             <div className="text-center py-6 space-y-4">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#34c759]/10 border border-[#34c759]/25 rounded-full text-[#34c759] mb-1">
-                <CheckCircle2 size={36} />
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-[#0071e3]/10 border border-[#0071e3]/25 rounded-full text-[#0071e3] mb-1">
+                <Mail size={36} />
               </div>
-              <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white">Workspace Activated!</h2>
+              <h2 className="text-xl font-bold text-[#1d1d1f] dark:text-white">Verification Link Sent!</h2>
               <p className="text-xs sm:text-sm text-[#86868b] max-w-md mx-auto leading-relaxed font-medium">
-                Your corporate account for <strong className="text-[#1d1d1f] dark:text-white">{formData.companyName}</strong> (<span className="text-[#0071e3] font-semibold">{formData.email}</span>) has been created and verified.
+                We have sent a verification link to your registered corporate email (<strong className="text-[#0071e3] font-semibold">{formData.email}</strong>). Please check your inbox and click the link to verify your workspace before signing in.
               </p>
-              <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
-                <button
-                  onClick={() => router.push('/dashboard')}
-                  className="w-full sm:w-auto px-8 py-3.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all text-xs cursor-pointer flex items-center justify-center space-x-2"
-                >
-                  <span>Go to Company Dashboard</span>
-                  <ArrowRight size={16} />
-                </button>
+              <div className="pt-4 flex justify-center">
                 <button
                   onClick={() => router.push('/login')}
-                  className="w-full sm:w-auto px-6 py-3.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-2xl font-bold transition-all text-xs cursor-pointer"
+                  className="w-full sm:w-auto px-8 py-3.5 bg-[#0071e3] hover:bg-[#0077ed] text-white rounded-2xl font-bold shadow-[0_4px_14px_rgba(0,113,227,0.3)] transition-all text-xs cursor-pointer flex items-center justify-center space-x-2"
                 >
-                  Proceed to Sign In
+                  <span>Proceed to Sign In</span>
+                  <ArrowRight size={16} />
                 </button>
               </div>
             </div>
