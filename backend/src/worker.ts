@@ -228,20 +228,31 @@ async function getCompanySubscription(db: D1Database, companyId: string) {
     `).bind(companyId).first();
 
     if (!sub) {
-      const freePlan: any = await db.prepare('SELECT * FROM "SubscriptionPlan" WHERE id = "plan-free" OR LOWER(name) = "free" LIMIT 1').first();
-      const freeFeatures = freePlan?.features ? (typeof freePlan.features === 'string' ? JSON.parse(freePlan.features) : freePlan.features) : {
-        jobPostings: true, atsScoring: true, aiResumeScan: true, aiResumeBuilder: true, kanban: true, offerLetters: true, interviewScheduling: true
+      const freePlan: any = await db.prepare('SELECT * FROM "SubscriptionPlan" WHERE id = "plan-pro" OR id = "plan-free" ORDER BY id DESC LIMIT 1').first();
+      const defaultFeatures = {
+        jobPostings: true,
+        atsScoring: true,
+        aiResumeScan: true,
+        aiResumeBuilder: true,
+        kanban: true,
+        offerLetters: true,
+        interviewScheduling: true,
+        walkinInterview: true,
+        seekerDiscovery: true,
+        crmTalentPool: true,
+        spotJobs: true,
+        teamWorkspace: true,
       };
       return {
-        id: 'free',
+        id: 'pro-default',
         isActive: true,
-        features: freeFeatures,
+        features: defaultFeatures,
         plan: {
-          id: freePlan?.id || 'plan-free',
-          name: freePlan?.name || 'Free Tier',
-          features: freeFeatures,
-          maxJobPostings: freePlan?.maxJobPostings || 3,
-          maxTeamMembers: freePlan?.maxTeamMembers || 2,
+          id: freePlan?.id || 'plan-pro',
+          name: 'Professional Tier',
+          features: defaultFeatures,
+          maxJobPostings: 50,
+          maxTeamMembers: 10,
         },
       };
     }
@@ -1145,25 +1156,27 @@ app.post('/api/company/auth/login', async (c) => {
     // Set HttpOnly Cookies
     setAuthCookies(c, token, token);
 
-    const subscription = await getCompanySubscription(c.env.DB, company.id);
+    const companyObj = {
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      verificationBadge: company.verificationBadge || 'none',
+      subscription,
+    };
 
     return c.json({
       success: true,
       message: 'Login successful',
       token,
+      company: companyObj,
       user: {
         id: memberId,
         name: company.name,
         email: company.email,
         role: 'owner',
         rolesMask: 2,
-        company: {
-          id: company.id,
-          name: company.name,
-          email: company.email,
-          verificationBadge: company.verificationBadge || 'none',
-          subscription,
-        },
+        companyRoles: 2,
+        company: companyObj,
       },
     });
   } catch (err: any) {
@@ -1423,24 +1436,28 @@ app.get('/api/company/auth/session', async (c) => {
 
     const subscription = await getCompanySubscription(c.env.DB, company.id);
 
+    const companyObj = {
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      logoUrl: company.logoUrl,
+      industry: company.industry,
+      size: company.size,
+      verificationBadge: company.verificationBadge || 'none',
+      subscription,
+    };
+
     return c.json({
       success: true,
+      company: companyObj,
       user: {
         id: decoded.memberId,
         name: company.name,
         email: company.email,
         role: decoded.role || 'owner',
         rolesMask: 2, // Company Admin
-        company: {
-          id: company.id,
-          name: company.name,
-          email: company.email,
-          logoUrl: company.logoUrl,
-          industry: company.industry,
-          size: company.size,
-          verificationBadge: company.verificationBadge || 'none',
-          subscription,
-        },
+        companyRoles: 2,
+        company: companyObj,
       },
     });
   } catch (err: any) {

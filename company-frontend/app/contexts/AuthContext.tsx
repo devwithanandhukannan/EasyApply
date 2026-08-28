@@ -91,31 +91,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return {
         jobPostings: raw.jobPostings ?? true,
         kanban: raw.kanban ?? true,
-        atsScoring: raw.atsScoring ?? false,
-        aiResumeScan: raw.aiResumeScan ?? false,
-        aiResumeBuilder: raw.aiResumeBuilder ?? false,
-        walkinInterview: raw.walkinInterview ?? false,
-        seekerDiscovery: raw.seekerDiscovery ?? false,
-        crmTalentPool: raw.crmTalentPool ?? false,
-        spotJobs: raw.spotJobs ?? false,
-        offerLetters: raw.offerLetters ?? false,
-        interviewScheduling: raw.interviewScheduling ?? false,
-        teamWorkspace: raw.teamWorkspace ?? ((company?.subscription?.plan?.maxTeamMembers ?? 1) > 1),
+        atsScoring: raw.atsScoring ?? true,
+        aiResumeScan: raw.aiResumeScan ?? true,
+        aiResumeBuilder: raw.aiResumeBuilder ?? true,
+        walkinInterview: raw.walkinInterview ?? true,
+        seekerDiscovery: raw.seekerDiscovery ?? true,
+        crmTalentPool: raw.crmTalentPool ?? true,
+        spotJobs: raw.spotJobs ?? true,
+        offerLetters: raw.offerLetters ?? true,
+        interviewScheduling: raw.interviewScheduling ?? true,
+        teamWorkspace: raw.teamWorkspace ?? true,
       };
     }
     return {
       jobPostings: true,
       kanban: true,
-      atsScoring: false,
-      aiResumeScan: false,
-      aiResumeBuilder: false,
-      walkinInterview: false,
-      seekerDiscovery: false,
-      crmTalentPool: false,
-      spotJobs: false,
-      offerLetters: false,
-      interviewScheduling: false,
-      teamWorkspace: false,
+      atsScoring: true,
+      aiResumeScan: true,
+      aiResumeBuilder: true,
+      walkinInterview: true,
+      seekerDiscovery: true,
+      crmTalentPool: true,
+      spotJobs: true,
+      offerLetters: true,
+      interviewScheduling: true,
+      teamWorkspace: true,
     };
   }, [company]);
 
@@ -167,23 +167,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const response = await api.get('/company/auth/session');
-        if (response.data.success && response.data.user) {
+        if (response.data.success && (response.data.user || response.data.company)) {
           setIsAuthenticated(true);
 
+          const rawUser = response.data.user || {};
+          const rawCompany = response.data.company || rawUser.company || {};
+          const computedRolesMask = rawUser.rolesMask || rawUser.companyRoles || rawUser.roles || (rawUser.role === 'owner' || rawUser.role === 'admin' ? 2 : 2);
+
           setUser({
-            id: response.data.user.id,
-            userId: response.data.user.id,
-            name: response.data.user.name || (response.data.user.company?.name || 'Company') + ' Team',
-            email: response.data.user.email,
-            avatar: response.data.user.avatar || null,
-            rolesMask: response.data.user.companyRoles || 2,
-            globalRolesMask: response.data.user.globalRoles || 2,
+            id: rawUser.id || rawCompany.id,
+            userId: rawUser.userId || rawUser.id,
+            name: rawUser.name || (rawCompany.name ? rawCompany.name + ' Admin' : 'Company Admin'),
+            email: rawUser.email || rawCompany.email,
+            avatar: rawUser.avatar || null,
+            rolesMask: computedRolesMask,
+            globalRolesMask: rawUser.globalRoles || 2,
             status: 'active',
-            permissions: response.data.user.permissions || null,
-            allWorkspaces: response.data.user.allWorkspaces || []
+            permissions: rawUser.permissions || null,
+            allWorkspaces: rawUser.allWorkspaces || []
           });
 
-          setCompany(response.data.user.company || response.data.company);
+          setCompany(rawCompany);
         } else {
           setIsAuthenticated(false);
           setUser(null);
@@ -221,23 +225,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       setAccessToken(token);
     }
-    if (loginPayload.user && loginPayload.company) {
-      setUser({
-        id: loginPayload.user.memberId || loginPayload.user.id,
-        userId: loginPayload.user.userId || loginPayload.user.id,
-        name: loginPayload.user.name || loginPayload.user.fullName || loginPayload.user.email?.split('@')[0] || loginPayload.company.name.split(' ')[0] + ' Team',
-        email: loginPayload.user.email || loginPayload.company.email,
-        avatar: loginPayload.user.avatar || null,
-        rolesMask: loginPayload.user.rolesMask || loginPayload.user.roles || loginPayload.user.companyRoles || 16,
-        globalRolesMask: loginPayload.user.globalRolesMask || loginPayload.user.globalRoles || 1,
-        status: loginPayload.user.status || 'active',
-        permissions: loginPayload.user.permissions || null,
-        allWorkspaces: loginPayload.user.allWorkspaces || []
-      });
-      setCompany(loginPayload.company);
-    } else {
-      setUser(loginPayload);
-    }
+    const rawUser = loginPayload.user || loginPayload;
+    const rawCompany = loginPayload.company || rawUser.company || null;
+    const computedRolesMask = rawUser.rolesMask || rawUser.companyRoles || rawUser.roles || (rawUser.role === 'owner' || rawUser.role === 'admin' ? 2 : 2);
+
+    setUser({
+      id: rawUser.memberId || rawUser.id,
+      userId: rawUser.userId || rawUser.id,
+      name: rawUser.name || rawUser.fullName || (rawCompany?.name ? rawCompany.name + ' Admin' : 'Company Admin'),
+      email: rawUser.email || rawCompany?.email || '',
+      avatar: rawUser.avatar || null,
+      rolesMask: computedRolesMask,
+      globalRolesMask: rawUser.globalRolesMask || rawUser.globalRoles || 2,
+      status: rawUser.status || 'active',
+      permissions: rawUser.permissions || null,
+      allWorkspaces: rawUser.allWorkspaces || []
+    });
+    setCompany(rawCompany);
     setIsAuthenticated(true);
   };
 
