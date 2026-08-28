@@ -25,8 +25,18 @@ import { toggleSaveJob, getSavedJobIds } from '@/app/lib/jobApi';
 
 export default function JobDetailsPage() {
   const { showToast } = useGlassToast();
-  const { id } = useParams();
+  const params = useParams();
   const router = useRouter();
+
+  const [jobId, setJobId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/jobs/')[1]?.split('/')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+    return rawId && rawId !== 'default' ? rawId : '';
+  });
+
   const [job, setJob] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasApplied, setHasApplied] = useState(false);
@@ -34,32 +44,49 @@ export default function JobDetailsPage() {
   const [showApplyModal, setShowApplyModal] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      fetchJobDetails();
-      checkApplicationStatus();
-      checkSavedStatus();
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/jobs/')[1]?.split('/')[0];
+      if (match && match !== 'default') {
+        setJobId(decodeURIComponent(match));
+        return;
+      }
     }
-  }, [id]);
+    const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+    if (rawId && rawId !== 'default') {
+      setJobId(rawId);
+    }
+  }, [params?.id]);
 
-  const fetchJobDetails = async () => {
+  useEffect(() => {
+    if (jobId && jobId !== 'default') {
+      fetchJobDetails(jobId);
+      checkApplicationStatus(jobId);
+      checkSavedStatus(jobId);
+    }
+  }, [jobId]);
+
+  const fetchJobDetails = async (targetId: string) => {
     try {
       setIsLoading(true);
-      const response = await api.get(`/public/${id}`);
+      const response = await api.get(`/public/${targetId}`);
       if (response.data.success) {
         setJob(response.data.data);
+      } else {
+        setJob(null);
       }
     } catch (error) {
       console.error('Error loading job specifications:', error);
+      setJob(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const checkApplicationStatus = async () => {
+  const checkApplicationStatus = async (targetId: string) => {
     try {
       const response = await api.get('/jobseeker/applications');
       if (response.data.success) {
-        const applied = response.data.data.some((app: any) => app.jobPostingId === id);
+        const applied = response.data.data.some((app: any) => app.jobPostingId === targetId || app.jobId === targetId);
         setHasApplied(applied);
       }
     } catch (error) {
@@ -67,11 +94,11 @@ export default function JobDetailsPage() {
     }
   };
 
-  const checkSavedStatus = async () => {
+  const checkSavedStatus = async (targetId: string) => {
     try {
       const res = await getSavedJobIds();
       if (res?.success && Array.isArray(res.savedJobIds)) {
-        setIsSaved(res.savedJobIds.includes(id as string));
+        setIsSaved(res.savedJobIds.includes(targetId));
       }
     } catch (error) {
       console.error('Error tracking saved status:', error);
