@@ -14,6 +14,7 @@ interface CloudflareMeetingRoomProps {
   role: 'company' | 'candidate';
   userName?: string;
   onDisconnected?: () => void;
+  onAdmittedStatusChange?: (isAdmitted: boolean) => void;
 }
 
 interface RemoteParticipant {
@@ -29,6 +30,7 @@ export default function CloudflareMeetingRoom({
   role,
   userName = role === 'company' ? 'Interviewer' : 'Candidate',
   onDisconnected,
+  onAdmittedStatusChange,
 }: CloudflareMeetingRoomProps) {
   const router = useRouter();
 
@@ -39,7 +41,7 @@ export default function CloudflareMeetingRoom({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   // Admission & Waiting State
-  const [isAdmitted, setIsAdmitted] = useState(false);
+  const [isAdmitted, setIsAdmitted] = useState(role === 'company');
   const [isHostPresent, setIsHostPresent] = useState(false);
   const [isDeclined, setIsDeclined] = useState(false);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
@@ -77,12 +79,6 @@ export default function CloudflareMeetingRoom({
         });
         localStreamRef.current = null;
       }
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          track.stop();
-          track.enabled = false;
-        });
-      }
       if (screenTrackRef.current) {
         screenTrackRef.current.stop();
         screenTrackRef.current.enabled = false;
@@ -97,7 +93,14 @@ export default function CloudflareMeetingRoom({
     } catch (e) {
       console.error('Error releasing media hardware:', e);
     }
-  }, [localStream]);
+  }, []);
+
+  // Notify parent component about admission status
+  useEffect(() => {
+    if (onAdmittedStatusChange) {
+      onAdmittedStatusChange(role === 'company' ? true : isAdmitted);
+    }
+  }, [isAdmitted, role, onAdmittedStatusChange]);
 
   // Acquire local stream on mount for pre-call check & streaming
   useEffect(() => {
@@ -114,8 +117,14 @@ export default function CloudflareMeetingRoom({
         }
         localStreamRef.current = stream;
         setLocalStream(stream);
-        if (previewVideoRef.current) previewVideoRef.current.srcObject = stream;
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+        if (previewVideoRef.current) {
+          previewVideoRef.current.srcObject = stream;
+          previewVideoRef.current.play().catch(() => {});
+        }
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
+        }
       })
       .catch((err) => {
         console.warn('Camera/Mic permission warning:', err);
@@ -126,6 +135,25 @@ export default function CloudflareMeetingRoom({
       releaseAllMediaHardware();
     };
   }, [releaseAllMediaHardware]);
+
+  // Keep preview stream attached whenever DOM node updates or camera unmutes
+  useEffect(() => {
+    const stream = localStreamRef.current || localStream;
+    if (stream) {
+      if (!isAdmitted && previewVideoRef.current && !isVideoMuted) {
+        if (previewVideoRef.current.srcObject !== stream) {
+          previewVideoRef.current.srcObject = stream;
+        }
+        previewVideoRef.current.play().catch(() => {});
+      }
+      if (isAdmitted && localVideoRef.current && !isVideoMuted) {
+        if (localVideoRef.current.srcObject !== stream) {
+          localVideoRef.current.srcObject = stream;
+        }
+        localVideoRef.current.play().catch(() => {});
+      }
+    }
+  }, [isAdmitted, localStream, isVideoMuted]);
 
   // ─── STEP 1: REQUEST ADMISSION & SETUP WEBRTC SESSION ────────
   const requestEntry = useCallback(async () => {
@@ -383,8 +411,9 @@ export default function CloudflareMeetingRoom({
 
   // ─── MEDIA CONTROLS ──────────────────────────────────────────
   const toggleAudio = () => {
-    if (!localStream) return;
-    const audioTrack = localStream.getAudioTracks()[0];
+    const stream = localStreamRef.current || localStream;
+    if (!stream) return;
+    const audioTrack = stream.getAudioTracks()[0];
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled;
       setIsAudioMuted(!audioTrack.enabled);
@@ -392,11 +421,23 @@ export default function CloudflareMeetingRoom({
   };
 
   const toggleVideo = () => {
-    if (!localStream) return;
-    const videoTrack = localStream.getVideoTracks()[0];
+    const stream = localStreamRef.current || localStream;
+    if (!stream) return;
+    const videoTrack = stream.getVideoTracks()[0];
     if (videoTrack) {
       videoTrack.enabled = !videoTrack.enabled;
-      setIsVideoMuted(!videoTrack.enabled);
+      const willBeMuted = !videoTrack.enabled;
+      setIsVideoMuted(willBeMuted);
+      if (!willBeMuted) {
+        if (!isAdmitted && previewVideoRef.current) {
+          previewVideoRef.current.srcObject = stream;
+          previewVideoRef.current.play().catch(() => {});
+        }
+        if (isAdmitted && localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.play().catch(() => {});
+        }
+      }
     }
   };
 

@@ -49,6 +49,7 @@ function MeetPageContent() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('video_only');
   const [screenShareActive, setScreenShareActive] = useState(false);
+  const [isAdmitted, setIsAdmitted] = useState(roleType === 'company');
 
   // Security Monitoring States
   const [securityViolations, setSecurityViolations] = useState<string[]>([]);
@@ -815,21 +816,26 @@ function MeetPageContent() {
         {/* Tab switcher */}
         <div className="flex items-center gap-0.5 bg-white/5 rounded-xl p-1" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
           {([
-            { id: 'video_only', icon: Video, label: 'Video' },
-            { id: 'code_editor', icon: Code2, label: 'Code' },
-            { id: 'whiteboard', icon: Layers, label: 'Board' },
-          ] as const).map(({ id, icon: Icon, label }) => (
+            { id: 'video_only', icon: Video, label: 'Video', locked: false },
+            { id: 'code_editor', icon: Code2, label: 'Code', locked: !isAdmitted },
+            { id: 'whiteboard', icon: Layers, label: 'Board', locked: !isAdmitted },
+          ] as const).map(({ id, icon: Icon, label, locked }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id)}
+              disabled={locked}
+              onClick={() => !locked && setActiveTab(id)}
+              title={locked ? 'Available once admitted by interviewer' : undefined}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all ${
-                activeTab === id
+                locked
+                  ? 'opacity-30 cursor-not-allowed text-white/30'
+                  : activeTab === id
                   ? 'bg-white text-black shadow-sm'
-                  : 'text-white/40 hover:text-white/70'
+                  : 'text-white/40 hover:text-white/70 cursor-pointer'
               }`}
             >
               <Icon size={12} />
-              {label}
+              <span>{label}</span>
+              {locked && <span className="text-[9px] text-zinc-500 ml-0.5">🔒</span>}
             </button>
           ))}
         </div>
@@ -837,11 +843,15 @@ function MeetPageContent() {
         {/* Controls */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setScreenShareActive((p) => !p)}
+            onClick={() => isAdmitted && setScreenShareActive((p) => !p)}
+            disabled={!isAdmitted}
+            title={!isAdmitted ? 'Screen sharing available after admission' : undefined}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-medium transition-all ${
-              screenShareActive
-                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
-                : 'bg-white/5 text-white/50 border border-white/8 hover:text-white/80'
+              !isAdmitted
+                ? 'opacity-30 cursor-not-allowed bg-white/5 text-white/30 border border-white/5'
+                : screenShareActive
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 cursor-pointer'
+                : 'bg-white/5 text-white/50 border border-white/8 hover:text-white/80 cursor-pointer'
             }`}
           >
             <Tv size={12} />
@@ -1041,6 +1051,7 @@ function MeetPageContent() {
             role={roleType === 'company' ? 'company' : 'candidate'}
             userName={roleType === 'company' ? 'Interviewer' : 'Candidate'}
             onDisconnected={handleDisconnected}
+            onAdmittedStatusChange={setIsAdmitted}
           />
         </div>
       </main>
