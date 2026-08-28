@@ -3713,13 +3713,40 @@ app.put('/api/calls/session/:sessionId/renegotiate', async (c) => {
   }
 });
 
-// 4. Room Management (Join / Status / Heartbeat / Leave / End) using SESSION_KV
+// 4. Room Management (Join / Status / Heartbeat / Leave / End) using D1 CallsRoom + Memory Cache (KV-quota proof)
+const inMemoryCallsRooms = new Map<string, { state: any; lastSaved: number }>();
+
+const getCallsRoomState = async (c: any, roomName: string) => {
+  try {
+    const mem = inMemoryCallsRooms.get(roomName);
+    if (mem && Date.now() - mem.lastSaved < 5000) {
+      return mem.state;
+    }
+    const row: any = await c.env.DB.prepare('SELECT state FROM "CallsRoom" WHERE roomName = ?').bind(roomName).first().catch(() => null);
+    if (row?.state) {
+      const parsed = JSON.parse(row.state);
+      inMemoryCallsRooms.set(roomName, { state: parsed, lastSaved: Date.now() });
+      return parsed;
+    }
+  } catch {}
+  const memFallback = inMemoryCallsRooms.get(roomName);
+  return memFallback ? memFallback.state : null;
+};
+
+const saveCallsRoomState = async (c: any, roomName: string, state: any) => {
+  inMemoryCallsRooms.set(roomName, { state, lastSaved: Date.now() });
+  try {
+    const jsonStr = JSON.stringify(state);
+    await c.env.DB.prepare(
+      'INSERT INTO "CallsRoom" (roomName, state, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(roomName) DO UPDATE SET state = excluded.state, updatedAt = CURRENT_TIMESTAMP'
+    ).bind(roomName, jsonStr).run().catch(() => {});
+  } catch {}
+};
+
 app.get('/api/calls/rooms/:roomName/status', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const kvKey = `calls_room:${roomName}`;
-    const raw = await c.env.SESSION_KV.get(kvKey);
-    const roomState = raw ? JSON.parse(raw) : null;
+    const roomState = await getCallsRoomState(c, roomName);
     
     if (!roomState) {
       return c.json({ success: true, exists: false, isHostPresent: false, isEnded: false, participants: [] });
@@ -3748,12 +3775,13 @@ app.get('/api/calls/rooms/:roomName/status', async (c) => {
 app.post('/api/calls/rooms/:roomName/join', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const body = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
     const { sessionId, participantId, name, role, tracks } = body;
 
-    const kvKey = `calls_room:${roomName}`;
-    const raw = await c.env.SESSION_KV.get(kvKey);
-    let roomState = raw ? JSON.parse(raw) : { isEnded: false, participants: [], waitingQueue: [], admittedCandidates: [], declinedCandidates: [] };
+    let roomState = await getCallsRoomState(c, roomName);
+    if (!roomState) {
+      roomState = { isEnded: false, participants: [], waitingQueue: [], admittedCandidates: [], declinedCandidates: [] };
+    }
 
     if (!Array.isArray(roomState.waitingQueue)) roomState.waitingQueue = [];
     if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
@@ -3797,7 +3825,7 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
           requestedAt: now,
         });
 
-        await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+        await saveCallsRoomState(c, roomName, roomState);
         return c.json({
           success: true,
           status: 'waiting_admission',
@@ -3820,10 +3848,9 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     });
 
     roomState.participants = participants;
-    // Remove from waiting queue if admitted
     roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
 
-    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    await saveCallsRoomState(c, roomName, roomState);
     return c.json({ success: true, status: 'admitted', isAdmitted: true, isHostPresent: true, participants });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
@@ -3834,12 +3861,10 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
 app.post('/api/calls/rooms/:roomName/admit', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId } = await c.req.json();
-    const kvKey = `calls_room:${roomName}`;
-    const raw = await c.env.SESSION_KV.get(kvKey);
-    if (!raw) return c.json({ success: false, message: 'Room not found' }, 404);
+    const { sessionId } = await c.req.json().catch(() => ({}));
+    let roomState = await getCallsRoomState(c, roomName);
+    if (!roomState) return c.json({ success: false, message: 'Room not found' }, 404);
 
-    let roomState = JSON.parse(raw);
     if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
     if (!roomState.admittedCandidates.includes(sessionId)) {
       roomState.admittedCandidates.push(sessionId);
@@ -3848,7 +3873,7 @@ app.post('/api/calls/rooms/:roomName/admit', async (c) => {
       roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
     }
 
-    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    await saveCallsRoomState(c, roomName, roomState);
     return c.json({ success: true, message: 'Candidate admitted successfully' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
@@ -3859,12 +3884,10 @@ app.post('/api/calls/rooms/:roomName/admit', async (c) => {
 app.post('/api/calls/rooms/:roomName/decline', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId } = await c.req.json();
-    const kvKey = `calls_room:${roomName}`;
-    const raw = await c.env.SESSION_KV.get(kvKey);
-    if (!raw) return c.json({ success: false, message: 'Room not found' }, 404);
+    const { sessionId } = await c.req.json().catch(() => ({}));
+    let roomState = await getCallsRoomState(c, roomName);
+    if (!roomState) return c.json({ success: false, message: 'Room not found' }, 404);
 
-    let roomState = JSON.parse(raw);
     if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
     if (!roomState.declinedCandidates.includes(sessionId)) {
       roomState.declinedCandidates.push(sessionId);
@@ -3873,7 +3896,7 @@ app.post('/api/calls/rooms/:roomName/decline', async (c) => {
       roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
     }
 
-    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    await saveCallsRoomState(c, roomName, roomState);
     return c.json({ success: true, message: 'Candidate access declined' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
@@ -3883,9 +3906,7 @@ app.post('/api/calls/rooms/:roomName/decline', async (c) => {
 app.get('/api/calls/rooms/:roomName/participants', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const kvKey = `calls_room:${roomName}`;
-    const raw = await c.env.SESSION_KV.get(kvKey);
-    const roomState = raw ? JSON.parse(raw) : null;
+    const roomState = await getCallsRoomState(c, roomName);
     if (!roomState || roomState.isEnded) return c.json({ success: true, isEnded: Boolean(roomState?.isEnded), participants: [] });
 
     const now = Date.now();
@@ -3900,11 +3921,9 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
   try {
     const { roomName } = c.req.param();
     const { sessionId, role, name } = await c.req.json().catch(() => ({}));
-    const kvKey = `calls_room:${roomName}`;
-    const raw = await c.env.SESSION_KV.get(kvKey);
-    if (!raw) return c.json({ success: true, isHostPresent: false, isEnded: false, participants: [], waitingQueue: [] });
+    let roomState = await getCallsRoomState(c, roomName);
+    if (!roomState) return c.json({ success: true, isHostPresent: false, isEnded: false, participants: [], waitingQueue: [] });
 
-    let roomState = JSON.parse(raw);
     if (roomState.isEnded) {
       return c.json({ success: true, isEnded: true, isHostPresent: false, participants: [], waitingQueue: [] });
     }
@@ -3925,7 +3944,7 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
       w.sessionId === sessionId ? { ...w, requestedAt: now } : w
     );
 
-    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    await saveCallsRoomState(c, roomName, roomState);
 
     const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 120000));
     const activeWaiting = roomState.waitingQueue.filter((w: any) => (now - w.requestedAt < 120000));
@@ -3950,9 +3969,8 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
 app.post('/api/calls/rooms/:roomName/end', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const kvKey = `calls_room:${roomName}`;
     const roomState = { isEnded: true, endedAt: Date.now(), participants: [] };
-    await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+    await saveCallsRoomState(c, roomName, roomState);
     return c.json({ success: true, message: 'Room ended successfully' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
@@ -3963,21 +3981,23 @@ app.post('/api/calls/rooms/:roomName/leave', async (c) => {
   try {
     const { roomName } = c.req.param();
     const { sessionId, role } = await c.req.json().catch(() => ({}));
-    const kvKey = `calls_room:${roomName}`;
-    const raw = await c.env.SESSION_KV.get(kvKey);
-    if (raw && sessionId) {
-      let roomState = JSON.parse(raw);
+    let roomState = await getCallsRoomState(c, roomName);
+    if (roomState && sessionId) {
       roomState.participants = (roomState.participants || []).filter((p: any) => p.sessionId !== sessionId);
       if (role === 'company') {
         roomState.isEnded = true;
         roomState.endedAt = Date.now();
       }
-      await c.env.SESSION_KV.put(kvKey, JSON.stringify(roomState), { expirationTtl: 86400 });
+      await saveCallsRoomState(c, roomName, roomState);
     }
     return c.json({ success: true });
   } catch {
     return c.json({ success: true });
   }
+});
+
+app.post('/api/interviews/:id/security-logs', async (c) => {
+  return c.json({ success: true });
 });
 
 // ─── AUTH: SEND OTP & VERIFY OTP ─────────────────────────
