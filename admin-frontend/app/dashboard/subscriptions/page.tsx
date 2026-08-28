@@ -145,9 +145,10 @@ export default function SubscriptionsPage() {
   };
 
   const openCreateModalForRequest = (req: FeatureRequest) => {
+    const compName = req.company?.name || (req as any).companyName || 'Company';
     setEditingPlan(null);
-    setName(`${req.company.name} Custom Tier`);
-    setDescription(`Tailored custom package for ${req.company.name}${req.budgetRange ? ` (${req.budgetRange})` : ''}`);
+    setName(`${compName} Custom Tier`);
+    setDescription(`Tailored custom package for ${compName}${req.budgetRange ? ` (${req.budgetRange})` : ''}`);
     setPrice('');
     setMaxJobPostings(15);
     setMaxTeamMembers(10);
@@ -155,7 +156,7 @@ export default function SubscriptionsPage() {
     setIsPublic(false);
     const initialFeatures: Record<string, boolean> = {};
     ALL_FEATURES.forEach((f) => {
-      initialFeatures[f.key] = !!req.requestedFeatures[f.key];
+      initialFeatures[f.key] = !!req.requestedFeatures?.[f.key];
     });
     setFeatures(initialFeatures);
     setModalOpen(true);
@@ -413,7 +414,9 @@ export default function SubscriptionsPage() {
               >
                 <div className="space-y-2">
                   <div className="flex items-center gap-3">
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">{req.company.name}</h3>
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                      {req.company?.name || (req as any).companyName || 'Company'}
+                    </h3>
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                       {req.status}
                     </span>

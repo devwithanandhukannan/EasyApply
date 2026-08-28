@@ -846,9 +846,16 @@ app.get('/api/admin/ats/jobs', async (c) => {
 
 app.get('/api/admin/feature-requests', async (c) => {
   try {
-    const reqs = await c.env.DB.prepare('SELECT r.*, c.name as companyName, c.email as companyEmail FROM "CompanyFeatureRequest" r LEFT JOIN "Company" c ON r.companyId = c.id ORDER BY r.createdAt DESC LIMIT 100').all();
+    const reqs = await c.env.DB.prepare('SELECT r.*, c.name as companyName, c.email as companyEmail, c.industry as companyIndustry, c.size as companySize FROM "CompanyFeatureRequest" r LEFT JOIN "Company" c ON r.companyId = c.id ORDER BY r.createdAt DESC LIMIT 100').all();
     const results = (reqs.results || []).map((r: any) => ({
       ...r,
+      company: {
+        id: r.companyId,
+        name: r.companyName || 'Company',
+        email: r.companyEmail || '',
+        industry: r.companyIndustry || '',
+        size: r.companySize || '',
+      },
       requestedFeatures: typeof r.requestedFeatures === 'string' ? JSON.parse(r.requestedFeatures || '{}') : (r.requestedFeatures || {}),
     }));
     return c.json({ success: true, requests: results });
