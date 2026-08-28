@@ -5708,16 +5708,23 @@ app.post('/api/jobseeker/interviews/:id/reschedule', async (c) => {
     if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
 
     const body = await c.req.json().catch(() => ({}));
-    const proposedDate = body.proposedDate || body.date;
-    const proposedTime = body.proposedTime || body.time;
-    const reason = body.reason || body.candidateNote || body.note || '';
-
-    if (!proposedDate || !proposedTime) {
+    let finalDateTime: Date;
+    if (body.proposedTime && typeof body.proposedTime === 'string' && (body.proposedTime.includes('T') || body.proposedTime.includes('Z'))) {
+      finalDateTime = new Date(body.proposedTime);
+    } else if (body.proposedDate && body.proposedTime) {
+      const timeStr = body.proposedTime.length === 5 ? `${body.proposedTime}:00` : body.proposedTime;
+      finalDateTime = new Date(`${body.proposedDate}T${timeStr}`);
+    } else if (body.proposedTime) {
+      finalDateTime = new Date(body.proposedTime);
+    } else {
       return c.json({ success: false, message: 'Proposed date and time are required.' }, 400);
     }
 
-    const timeStr = proposedTime.length === 5 ? `${proposedTime}:00` : proposedTime;
-    const combinedDateTime = new Date(`${proposedDate}T${timeStr}`);
+    if (isNaN(finalDateTime.getTime())) {
+      return c.json({ success: false, message: 'Invalid date/time format.' }, 400);
+    }
+
+    const reason = body.reason || body.candidateNote || body.note || '';
     const reqId = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -5728,7 +5735,7 @@ app.post('/api/jobseeker/interviews/:id/reschedule', async (c) => {
 
     await c.env.DB.prepare(
       'INSERT INTO "RescheduleRequest" (id, interviewId, requestedByUserId, requestedByRole, proposedTime, candidateNote, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(reqId, id, decoded.userId, 1, combinedDateTime.toISOString(), reason, 'pending', now, now).run();
+    ).bind(reqId, id, decoded.userId, 1, finalDateTime.toISOString(), reason, 'pending', now, now).run();
 
     await c.env.DB.prepare(
       'UPDATE "Interview" SET status = ?, updatedAt = ? WHERE id = ?'
