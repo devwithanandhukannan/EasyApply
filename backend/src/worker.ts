@@ -5677,17 +5677,79 @@ app.get('/api/jobseeker/spot-jobs/toggle-status', async (c) => c.json({ success:
 app.get('/api/jobseeker/interviews', async (c) => {
   try {
     const decoded = await getAuthUser(c);
-    if (!decoded) return c.json({ success: true, data: [] });
+    if (!decoded) return c.json({ success: true, data: [], interviews: [] });
     const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
-    if (!profile) return c.json({ success: true, data: [] });
+    if (!profile) return c.json({ success: true, data: [], interviews: [] });
 
     const interviews = await c.env.DB.prepare(
       'SELECT i.*, j.title as jobTitle, c.name as companyName, c.logoUrl as companyLogoUrl FROM "Interview" i JOIN "Application" a ON i.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "Company" c ON j.companyId = c.id WHERE a.jobSeekerProfileId = ? ORDER BY i.scheduledTime DESC'
     ).bind(profile.id).all();
 
-    return c.json({ success: true, data: interviews.results || [] });
+    const results = await Promise.all((interviews.results || []).map(async (inv: any) => {
+      const reschedules = await c.env.DB.prepare(
+        'SELECT * FROM "RescheduleRequest" WHERE interviewId = ? ORDER BY createdAt DESC'
+      ).bind(inv.id).all().catch(() => ({ results: [] }));
+      return {
+        ...inv,
+        rescheduleRequests: reschedules.results || [],
+      };
+    }));
+
+    return c.json({ success: true, data: results, interviews: results });
   } catch {
-    return c.json({ success: true, data: [] });
+    return c.json({ success: true, data: [], interviews: [] });
+  }
+});
+
+app.post('/api/jobseeker/interviews/:id/reschedule', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => ({}));
+    const proposedDate = body.proposedDate || body.date;
+    const proposedTime = body.proposedTime || body.time;
+    const reason = body.reason || body.candidateNote || body.note || '';
+
+    if (!proposedDate || !proposedTime) {
+      return c.json({ success: false, message: 'Proposed date and time are required.' }, 400);
+    }
+
+    const timeStr = proposedTime.length === 5 ? `${proposedTime}:00` : proposedTime;
+    const combinedDateTime = new Date(`${proposedDate}T${timeStr}`);
+    const reqId = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const interview: any = await c.env.DB.prepare('SELECT * FROM "Interview" WHERE id = ?').bind(id).first();
+    if (!interview) {
+      return c.json({ success: false, message: 'Interview not found' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      'INSERT INTO "RescheduleRequest" (id, interviewId, requestedByUserId, requestedByRole, proposedTime, candidateNote, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(reqId, id, decoded.userId, 1, combinedDateTime.toISOString(), reason, 'pending', now, now).run();
+
+    await c.env.DB.prepare(
+      'UPDATE "Interview" SET status = ?, updatedAt = ? WHERE id = ?'
+    ).bind('reschedule_requested', now, id).run();
+
+    return c.json({ success: true, message: 'Reschedule request submitted successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/jobseeker/interviews/:id/confirm', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
+    const now = new Date().toISOString();
+    await c.env.DB.prepare('UPDATE "Interview" SET status = ?, updatedAt = ? WHERE id = ?').bind('confirmed', now, id).run();
+    return c.json({ success: true, message: 'Interview confirmed' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
   }
 });
 
