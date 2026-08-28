@@ -158,11 +158,13 @@ export default function KanbanBoardPage() {
   };
 
   const filteredApps = applications.filter(app => {
-    const jobMatch = selectedJobId === 'all' || (app.jobPosting?.id === selectedJobId);
-    const profile: any = app.candidate || app.jobSeekerProfile || {};
+    const jobMatch = selectedJobId === 'all' || (app.jobPosting?.id === selectedJobId) || ((app as any).jobPostingId === selectedJobId);
+    const profile: any = app.candidate || app.jobSeekerProfile || { fullName: (app as any).fullName, email: (app as any).email };
+    const fullName = profile.fullName || (app as any).fullName || '';
+    const email = profile.email || (app as any).email || '';
     const nameMatch = !searchQuery ? true : (
-      profile.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      profile.email?.toLowerCase().includes(searchQuery.toLowerCase())
+      fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.toLowerCase().includes(searchQuery.toLowerCase())
     );
     return jobMatch && nameMatch;
   });

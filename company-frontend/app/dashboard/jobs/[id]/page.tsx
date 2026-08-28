@@ -176,22 +176,32 @@ export default function JobDetailsPage() {
 
   // Filter applicants
   const displayedApplications = applications.filter((app: any) => {
-    const matchesAts = (app.resume?.atsScore ?? 0) >= minAtsScore;
+    const normalizedAppStatus = (app.status || 'applied').toLowerCase().trim().replace(/ /g, '_');
+    const matchesStatus = statusFilter === 'all' || normalizedAppStatus === statusFilter.toLowerCase();
+    const ats = app.resume?.atsScore ?? app.atsScore ?? 0;
+    const matchesAts = ats >= minAtsScore;
     const profile = app.candidate || app.jobSeekerProfile || {};
+    const fullName = profile.fullName || app.fullName || '';
+    const email = profile.email || app.email || '';
     const matchesSearch = !searchQuery ? true : (
-      profile.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      profile.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      profile.skills?.some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
+      fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (profile.skills || []).some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()))
     );
-    return matchesAts && matchesSearch;
+    return matchesStatus && matchesAts && matchesSearch;
   });
 
   const getKanbanColumnsData = () => {
     const board: Record<string, any[]> = {
       applied: [], screened: [], technical_round: [], hr_round: [], offer_sent: [], hired: [], rejected: []
     };
-    displayedApplications.forEach(app => {
-      if (board[app.status]) board[app.status].push(app);
+    applications.forEach(app => {
+      const normalizedStatus = (app.status || 'applied').toLowerCase().trim().replace(/ /g, '_');
+      if (board[normalizedStatus]) {
+        board[normalizedStatus].push(app);
+      } else {
+        board.applied.push(app);
+      }
     });
     return board;
   };

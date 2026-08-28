@@ -2053,13 +2053,34 @@ app.get('/api/company/jobs/:id/applications', async (c) => {
     }
     const decoded = await getAuthUser(c);
     if (!decoded || !decoded.companyId) return c.json({ success: true, data: [], applications: [] });
-    const apps = await c.env.DB.prepare(
-      'SELECT a.*, p.fullName, p.email, p.phone, p.location as candidateLocation, p.profilePhotoUrl, r.name as resumeName, r.filePath as resumeUrl, r.atsScore FROM "Application" a JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id LEFT JOIN "Resume" r ON a.resumeId = r.id WHERE a.jobPostingId = ? ORDER BY a.appliedAt DESC'
-    ).bind(id).all();
+
+    const statusFilter = c.req.query('status');
+    let sql = `
+      SELECT a.*, j.title as jobPostingTitle,
+             p.fullName, p.email, p.phone, p.location as candidateLocation, p.profilePhotoUrl,
+             r.name as resumeName, r.filePath as resumeUrl, r.atsScore
+      FROM "Application" a
+      JOIN "JobPosting" j ON a.jobPostingId = j.id
+      JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id
+      LEFT JOIN "Resume" r ON a.resumeId = r.id
+      WHERE a.jobPostingId = ?
+    `;
+    const sqlParams: any[] = [id];
+    if (statusFilter && statusFilter !== 'all') {
+      sql += ' AND LOWER(a.status) = LOWER(?)';
+      sqlParams.push(statusFilter);
+    }
+    sql += ' ORDER BY a.appliedAt DESC';
+
+    const apps = await c.env.DB.prepare(sql).bind(...sqlParams).all();
     const rawList = apps.results || [];
     const list = rawList.map((a: any) => ({
       ...a,
       applicationId: a.id,
+      jobPosting: {
+        id: a.jobPostingId,
+        title: a.jobPostingTitle || 'Job Role',
+      },
       jobSeekerProfile: {
         id: a.jobSeekerProfileId,
         fullName: a.fullName || 'Candidate',
@@ -2367,18 +2388,23 @@ app.post('/api/company/selection/bulk/status', async (c) => {
   }
 });
 
-app.post('/api/kanban/move-card', async (c) => {
+const handleMoveCard = async (c: any) => {
   try {
-    const { applicationId, pipelineIndex, status } = await c.req.json().catch(() => ({}));
+    const body = await c.req.json().catch(() => ({}));
+    const applicationId = body.applicationId || body.id;
+    const targetStatus = body.status || body.destinationStatus;
+    const pipelineIndex = Number(body.pipelineIndex) || 0;
     const now = new Date().toISOString();
     await c.env.DB.prepare(
       'UPDATE "Application" SET pipelineIndex = ?, status = COALESCE(?, status), updatedAt = ?, lastActivityAt = ? WHERE id = ?'
-    ).bind(Number(pipelineIndex) || 0, status || null, now, now, applicationId).run();
+    ).bind(pipelineIndex, targetStatus || null, now, now, applicationId).run();
     return c.json({ success: true, message: 'Card moved' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
-});
+};
+app.post('/api/kanban/move-card', handleMoveCard);
+app.patch('/api/kanban/move-card', handleMoveCard);
 
 app.get('/api/company/interviews/list', async (c) => {
   try {
