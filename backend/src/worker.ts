@@ -868,11 +868,56 @@ app.put('/api/admin/feature-requests/:id/status', async (c) => {
   try {
     const { id } = c.req.param();
     const { status, adminNotes } = await c.req.json().catch(() => ({}));
+    const targetStatus = (status || 'REVIEWED').toUpperCase();
     const now = new Date().toISOString();
+
+    const featureReq: any = await c.env.DB.prepare(
+      'SELECT * FROM "CompanyFeatureRequest" WHERE id = ?'
+    ).bind(id).first();
+
+    if (featureReq && (targetStatus === 'FULFILLED' || targetStatus === 'APPROVED')) {
+      const parsedReq = typeof featureReq.requestedFeatures === 'string'
+        ? JSON.parse(featureReq.requestedFeatures || '{}')
+        : (featureReq.requestedFeatures || {});
+
+      const mergedFeatures = {
+        jobPostings: true,
+        atsScoring: true,
+        aiResumeScan: true,
+        aiResumeBuilder: true,
+        kanban: true,
+        offerLetters: true,
+        interviewScheduling: true,
+        walkinInterview: Boolean(parsedReq.walkinInterview),
+        seekerDiscovery: Boolean(parsedReq.seekerDiscovery),
+        crmTalentPool: Boolean(parsedReq.crmTalentPool),
+        spotJobs: Boolean(parsedReq.spotJobs),
+        teamWorkspace: Boolean(parsedReq.teamWorkspace ?? true),
+        ...parsedReq,
+      };
+
+      const featuresJson = JSON.stringify(mergedFeatures);
+      const existingSub: any = await c.env.DB.prepare(
+        'SELECT id FROM "CompanySubscription" WHERE companyId = ?'
+      ).bind(featureReq.companyId).first();
+
+      if (existingSub) {
+        await c.env.DB.prepare(
+          'UPDATE "CompanySubscription" SET features = ?, isActive = 1, updatedAt = ? WHERE companyId = ?'
+        ).bind(featuresJson, now, featureReq.companyId).run();
+      } else {
+        const subId = crypto.randomUUID();
+        await c.env.DB.prepare(
+          'INSERT INTO "CompanySubscription" (id, companyId, planId, features, isActive, startsAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).bind(subId, featureReq.companyId, 'plan-pro', featuresJson, 1, now, now, now).run();
+      }
+    }
+
     await c.env.DB.prepare(
       'UPDATE "CompanyFeatureRequest" SET status = ?, adminNotes = COALESCE(?, adminNotes), updatedAt = ? WHERE id = ?'
-    ).bind(status || 'REVIEWED', adminNotes || null, now, id).run();
-    return c.json({ success: true, message: 'Feature request status updated' });
+    ).bind(targetStatus, adminNotes || null, now, id).run();
+
+    return c.json({ success: true, message: 'Feature request updated and company features activated successfully' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }

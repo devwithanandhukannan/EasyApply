@@ -47,7 +47,7 @@ interface FeatureRequest {
   requestedFeatures: Record<string, boolean>;
   message: string | null;
   budgetRange: string | null;
-  status: 'PENDING' | 'REVIEWED' | 'FULFILLED' | 'REJECTED';
+  status: 'PENDING' | 'REVIEWED' | 'FULFILLED' | 'REJECTED' | 'APPROVED';
   adminNotes: string | null;
   createdAt: string;
   company: {
@@ -407,47 +407,97 @@ export default function SubscriptionsPage() {
               No custom package feature requests from companies yet.
             </div>
           ) : (
-            featureRequests.map((req) => (
-              <div
-                key={req.id}
-                className="glass-card rounded-3xl p-6 bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-xs"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-base font-bold text-zinc-900 dark:text-white">
-                      {req.company?.name || (req as any).companyName || 'Company'}
-                    </h3>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                      {req.status}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    {req.message || 'No additional notes provided.'}
-                  </p>
-                  {req.budgetRange && (
-                    <div className="text-xs font-semibold text-[#0071e3]">
-                      Budget: {req.budgetRange}
-                    </div>
-                  )}
-                </div>
+            featureRequests.map((req) => {
+              const isFulfilled = req.status === 'FULFILLED' || req.status === 'APPROVED';
+              const requestedKeys = Object.keys(req.requestedFeatures || {}).filter(
+                (k) => req.requestedFeatures[k]
+              );
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => openCreateModalForRequest(req)}
-                    className="btn-primary text-xs flex items-center gap-1.5"
-                  >
-                    <Plus size={13} />
-                    <span>Create Custom Tier</span>
-                  </button>
-                  <button
-                    onClick={() => handleUpdateRequestStatus(req.id, 'FULFILLED')}
-                    className="btn-secondary text-xs"
-                  >
-                    Mark Fulfilled
-                  </button>
+              return (
+                <div
+                  key={req.id}
+                  className="glass-card rounded-3xl p-6 bg-white dark:bg-[#121422] border border-black/[0.06] dark:border-white/[0.08] flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-xs"
+                >
+                  <div className="space-y-3 max-w-2xl">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-base font-bold text-zinc-900 dark:text-white">
+                        {req.company?.name || (req as any).companyName || 'Company'}
+                      </h3>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                          isFulfilled
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                        }`}
+                      >
+                        {isFulfilled ? 'Active / Fulfilled' : req.status}
+                      </span>
+                    </div>
+
+                    {/* Requested Services / Features Chips */}
+                    {requestedKeys.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {requestedKeys.map((key) => {
+                          const feat = ALL_FEATURES.find((f) => f.key === key);
+                          return (
+                            <span
+                              key={key}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-blue-500/10 text-blue-600 dark:text-[#38bdf8] border border-blue-500/20"
+                            >
+                              <Sparkles size={11} className="text-blue-500" />
+                              <span>{feat?.label || key}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {req.message && (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/[0.03] p-2.5 rounded-xl border border-black/[0.04] dark:border-white/[0.04]">
+                        <span className="font-semibold text-zinc-700 dark:text-zinc-300">Notes: </span>
+                        {req.message}
+                      </p>
+                    )}
+
+                    {req.budgetRange && (
+                      <div className="text-xs font-semibold text-[#0071e3] dark:text-[#38bdf8]">
+                        Expected Budget: {req.budgetRange}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => openCreateModalForRequest(req)}
+                      className="btn-secondary text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus size={13} />
+                      <span>Custom Tier</span>
+                    </button>
+                    <button
+                      onClick={() => handleUpdateRequestStatus(req.id, isFulfilled ? 'PENDING' : 'FULFILLED')}
+                      className={`text-xs px-3.5 py-2 rounded-xl font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isFulfilled
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                          : 'bg-[#0071e3] text-white hover:bg-[#0077ed] shadow-md shadow-blue-500/20'
+                      }`}
+                    >
+                      {isFulfilled ? (
+                        <>
+                          <Check size={13} strokeWidth={2.5} />
+                          <span>Features Activated</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={13} />
+                          <span>Approve &amp; Activate Features</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
