@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff,
-  ScreenShare, StopCircle, Users, DoorOpen, ShieldCheck,
-  Clock, CheckCircle, AlertCircle, Sparkles
+  ScreenShare, StopCircle, Users, CheckCircle,
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 
@@ -15,15 +14,21 @@ interface CloudflareMeetingRoomProps {
   userName?: string;
   onDisconnected?: () => void;
   onAdmittedStatusChange?: (isAdmitted: boolean) => void;
+  onLocalStream?: (stream: MediaStream) => void;
 }
 
 interface RemoteParticipant {
   sessionId: string;
-  participantId: string;
   name: string;
   role: string;
-  stream?: MediaStream;
 }
+
+const STUN: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.l.google.com:19302' },
+  ],
+};
 
 export default function CloudflareMeetingRoom({
   roomName,
@@ -31,745 +36,378 @@ export default function CloudflareMeetingRoom({
   userName = role === 'company' ? 'Interviewer' : 'Candidate',
   onDisconnected,
   onAdmittedStatusChange,
+  onLocalStream,
 }: CloudflareMeetingRoomProps) {
   const router = useRouter();
 
-  // Media & Devices State
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-
-  // Admission & Waiting State
-  const [isAdmitted, setIsAdmitted] = useState(role === 'company');
-  const [isHostPresent, setIsHostPresent] = useState(false);
-  const [isDeclined, setIsDeclined] = useState(false);
   const [isSessionEnded, setIsSessionEnded] = useState(false);
-
-  // Connection & Room State
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<string>('Requesting admission to room...');
   const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [connectedCount, setConnectedCount] = useState(1);
 
-  // Refs for WebRTC & Hardware Cleanup
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const publishPcRef = useRef<RTCPeerConnection | null>(null);
-  const hasPublishedRef = useRef(false);           // Bug 1 fix: separate guard from RTCPeerConnection
+  const hasPublishedRef = useRef(false);
   const subPcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const heartbeatTimerRef = useRef<any>(null);
-  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const sessionIdRef = useRef<string | null>(null); // Bug 2 fix: stable ref for async closures
   const isCleaningUpRef = useRef(false);
 
-  const STUN_SERVERS: RTCConfiguration = {
-    iceServers: [
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      { urls: 'stun:stun.l.google.com:19302' },
-    ],
-  };
+  // Always report as admitted (no lobby)
+  useEffect(() => {
+    onAdmittedStatusChange?.(true);
+  }, [onAdmittedStatusChange]);
 
-  const releaseAllMediaHardware = useCallback(() => {
-    try {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => {
-          track.stop();
-          track.enabled = false;
-        });
-        localStreamRef.current = null;
-      }
-      if (screenTrackRef.current) {
-        screenTrackRef.current.stop();
-        screenTrackRef.current.enabled = false;
-        screenTrackRef.current = null;
-      }
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-      }
-      if (previewVideoRef.current) {
-        previewVideoRef.current.srcObject = null;
-      }
-    } catch (e) {
-      console.error('Error releasing media hardware:', e);
-    }
+  // ── 1. ACQUIRE CAMERA + MIC ─────────────────────────────────────
+  const releaseAllMedia = useCallback(() => {
+    localStreamRef.current?.getTracks().forEach((t) => { t.stop(); t.enabled = false; });
+    localStreamRef.current = null;
+    screenTrackRef.current?.stop();
+    screenTrackRef.current = null;
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
   }, []);
 
-  // Notify parent component about admission status
-  useEffect(() => {
-    if (onAdmittedStatusChange) {
-      onAdmittedStatusChange(role === 'company' ? true : isAdmitted);
-    }
-  }, [isAdmitted, role, onAdmittedStatusChange]);
-
-  // Acquire local stream on mount for pre-call check & streaming
   useEffect(() => {
     let active = true;
-    navigator.mediaDevices
-      .getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-      })
-      .then((stream) => {
-        if (!active) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        localStreamRef.current = stream;
-        setLocalStream(stream);
-        if (previewVideoRef.current) {
-          previewVideoRef.current.srcObject = stream;
-          previewVideoRef.current.play().catch(() => {});
-        }
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          localVideoRef.current.play().catch(() => {});
-        }
-      })
-      .catch((err) => {
-        console.warn('Camera/Mic permission warning:', err);
-      });
-
-    return () => {
-      active = false;
-      releaseAllMediaHardware();
-    };
-  }, [releaseAllMediaHardware]);
-
-  // Keep preview stream attached whenever DOM node updates or camera unmutes
-  useEffect(() => {
-    const stream = localStreamRef.current || localStream;
-    if (stream) {
-      if (!isAdmitted && previewVideoRef.current && !isVideoMuted) {
-        if (previewVideoRef.current.srcObject !== stream) {
-          previewVideoRef.current.srcObject = stream;
-        }
-        previewVideoRef.current.play().catch(() => {});
-      }
-      if (isAdmitted && localVideoRef.current && !isVideoMuted) {
-        if (localVideoRef.current.srcObject !== stream) {
-          localVideoRef.current.srcObject = stream;
-        }
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+    }).then((stream) => {
+      if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      onLocalStream?.(stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
         localVideoRef.current.play().catch(() => {});
       }
-    }
-  }, [isAdmitted, localStream, isVideoMuted]);
+    }).catch((err) => console.warn('Camera/mic error:', err));
+    return () => { active = false; releaseAllMedia(); };
+  }, [releaseAllMedia, onLocalStream]);
 
-  // ─── STEP 1: REQUEST ADMISSION & SETUP WEBRTC SESSION ────────
-  const requestEntry = useCallback(async () => {
-    try {
-      setConnectionStatus('Setting up secure session...');
-      // Bug 2 fix: use ref to get stable current sessionId
-      let curSessionId = sessionIdRef.current;
-      if (!curSessionId) {
-        const sessionRes = await api.post('/calls/session/new');
-        if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
-          throw new Error(sessionRes.data?.message || 'Failed to create Calls session');
-        }
-        curSessionId = sessionRes.data.sessionId;
-        sessionIdRef.current = curSessionId;
-        setSessionId(curSessionId);
-      }
-
-      // Request entry to room
-      const joinRes = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
-        sessionId: curSessionId,
-        name: userName,
-        role: 'candidate',
-        tracks: ['audio', 'video'],
-      });
-
-      setIsHostPresent(Boolean(joinRes.data?.isHostPresent));
-      setIsAdmitted(Boolean(joinRes.data?.isAdmitted));
-      setConnecting(false);
-    } catch (err: any) {
-      console.error('❌ Request entry error:', err);
-      setConnectionStatus('Connecting to room...');
-    }
-  }, [roomName, userName]);
-
-  // Initial Entry Request with Periodic Retry
+  // Keep local video attached after camera re-enables
   useEffect(() => {
-    requestEntry();
-    const retryInterval = setInterval(() => {
-      if (!sessionIdRef.current || connecting) {
-        requestEntry();
-      }
-    }, 3000);
-    return () => clearInterval(retryInterval);
-  }, [requestEntry, connecting]);
+    const stream = localStreamRef.current || localStream;
+    if (stream && localVideoRef.current && !isVideoMuted) {
+      if (localVideoRef.current.srcObject !== stream) localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, isVideoMuted]);
 
-  // ─── STEP 2: PUBLISH MEDIA TRACKS (ONCE ADMITTED) ─────────────
-  // Bug 1 fix: use hasPublishedRef (not publishPcRef) as the idempotency guard.
-  // This allows a retry when the first call found localStream=null.
-  const publishMediaTracks = useCallback(async (currentSessionId: string) => {
+  // ── 2. PUBLISH MY TRACKS ────────────────────────────────────────
+  const publishTracks = useCallback(async (sid: string) => {
     if (hasPublishedRef.current || isCleaningUpRef.current) return;
     const stream = localStreamRef.current || localStream;
-    if (!stream) {
-      // Stream not ready yet — caller (heartbeat) will retry on next tick
-      return;
-    }
-    hasPublishedRef.current = true; // Mark AFTER stream confirmed available
+    if (!stream) return; // retry next heartbeat tick
+    hasPublishedRef.current = true;
 
     try {
-      const pubPc = new RTCPeerConnection(STUN_SERVERS);
-      publishPcRef.current = pubPc;
+      const pc = new RTCPeerConnection(STUN);
+      publishPcRef.current = pc;
 
       const tracksToPublish: any[] = [];
       stream.getTracks().forEach((track) => {
-        const sender = pubPc.addTrack(track, stream);
-        const transceiver = pubPc.getTransceivers().find((t) => t.sender === sender);
-        const mid = transceiver ? transceiver.mid || String(tracksToPublish.length) : String(tracksToPublish.length);
-        tracksToPublish.push({
-          location: 'local',
-          mid: mid,
-          trackName: track.kind,
-        });
+        const sender = pc.addTrack(track, stream);
+        const mid = pc.getTransceivers().find((t) => t.sender === sender)?.mid || String(tracksToPublish.length);
+        tracksToPublish.push({ location: 'local', mid, trackName: track.kind });
       });
 
-      const offer = await pubPc.createOffer();
-      await pubPc.setLocalDescription(offer);
-
-      await new Promise<void>((resolve) => {
-        if (pubPc.iceGatheringState === 'complete') resolve();
-        else {
-          const checkState = () => {
-            if (pubPc.iceGatheringState === 'complete') {
-              pubPc.removeEventListener('icegatheringstatechange', checkState);
-              resolve();
-            }
-          };
-          pubPc.addEventListener('icegatheringstatechange', checkState);
-          setTimeout(resolve, 800);
-        }
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await new Promise<void>((res) => {
+        if (pc.iceGatheringState === 'complete') return res();
+        const cb = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', cb); res(); } };
+        pc.addEventListener('icegatheringstatechange', cb);
+        setTimeout(res, 800);
       });
 
-      const publishRes = await api.post(`/calls/session/${currentSessionId}/tracks/new`, {
-        sessionDescription: {
-          type: pubPc.localDescription?.type || 'offer',
-          sdp: pubPc.localDescription?.sdp,
-        },
+      const r = await api.post(`/calls/session/${sid}/tracks/new`, {
+        sessionDescription: { type: pc.localDescription?.type, sdp: pc.localDescription?.sdp },
         tracks: tracksToPublish,
       });
-
-      if (publishRes.data?.sessionDescription) {
-        await pubPc.setRemoteDescription(new RTCSessionDescription(publishRes.data.sessionDescription));
-      }
+      if (r.data?.sessionDescription) await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
     } catch (err) {
-      console.error('❌ Failed to publish candidate tracks:', err);
-      // Bug 1 fix: reset guard on failure so next heartbeat tick can retry
+      console.error('Publish error:', err);
       hasPublishedRef.current = false;
       publishPcRef.current?.close();
       publishPcRef.current = null;
     }
   }, [localStream]);
 
-  // ─── STEP 3: SUBSCRIBE TO HOST AUDIO/VIDEO ───────────────────
-  // Bug 3 fix: retry subscription after 2s on failure
-  const subscribeToParticipant = useCallback(async (remoteSessionId: string, currentSessionId: string) => {
-    if (subPcsRef.current[remoteSessionId] || isCleaningUpRef.current) return;
-    if (!currentSessionId) {
-      console.warn('subscribeToParticipant: currentSessionId is null, skipping');
-      return;
-    }
-
+  // ── 3. SUBSCRIBE TO A REMOTE PARTICIPANT ───────────────────────
+  const subscribeTo = useCallback(async (remoteSid: string, mySid: string) => {
+    if (subPcsRef.current[remoteSid] || isCleaningUpRef.current) return;
     try {
-      const subPc = new RTCPeerConnection(STUN_SERVERS);
-      subPcsRef.current[remoteSessionId] = subPc;
+      const pc = new RTCPeerConnection(STUN);
+      subPcsRef.current[remoteSid] = pc;
 
       const remoteStream = new MediaStream();
-      subPc.ontrack = (event) => {
-        event.streams[0]?.getTracks().forEach((track) => remoteStream.addTrack(track));
-        if (!event.streams[0]) remoteStream.addTrack(event.track);
-
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [remoteSessionId]: remoteStream,
-        }));
+      pc.ontrack = (e) => {
+        (e.streams[0] ? e.streams[0].getTracks() : [e.track]).forEach((t) => remoteStream.addTrack(t));
+        setRemoteStreams((prev) => ({ ...prev, [remoteSid]: remoteStream }));
       };
 
-      const audioTransceiver = subPc.addTransceiver('audio', { direction: 'recvonly' });
-      const videoTransceiver = subPc.addTransceiver('video', { direction: 'recvonly' });
-
-      const offer = await subPc.createOffer();
-      await subPc.setLocalDescription(offer);
-
-      await new Promise<void>((resolve) => {
-        if (subPc.iceGatheringState === 'complete') resolve();
-        else {
-          const checkState = () => {
-            if (subPc.iceGatheringState === 'complete') {
-              subPc.removeEventListener('icegatheringstatechange', checkState);
-              resolve();
-            }
-          };
-          subPc.addEventListener('icegatheringstatechange', checkState);
-          setTimeout(resolve, 800);
-        }
+      const audio = pc.addTransceiver('audio', { direction: 'recvonly' });
+      const video = pc.addTransceiver('video', { direction: 'recvonly' });
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await new Promise<void>((res) => {
+        if (pc.iceGatheringState === 'complete') return res();
+        const cb = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', cb); res(); } };
+        pc.addEventListener('icegatheringstatechange', cb);
+        setTimeout(res, 800);
       });
 
-      const subRes = await api.post(`/calls/session/${currentSessionId}/tracks/new`, {
-        sessionDescription: {
-          type: subPc.localDescription?.type || 'offer',
-          sdp: subPc.localDescription?.sdp,
-        },
+      const r = await api.post(`/calls/session/${mySid}/tracks/new`, {
+        sessionDescription: { type: pc.localDescription?.type, sdp: pc.localDescription?.sdp },
         tracks: [
-          { location: 'remote', sessionId: remoteSessionId, trackName: 'audio', mid: audioTransceiver.mid || '0' },
-          { location: 'remote', sessionId: remoteSessionId, trackName: 'video', mid: videoTransceiver.mid || '1' },
+          { location: 'remote', sessionId: remoteSid, trackName: 'audio', mid: audio.mid || '0' },
+          { location: 'remote', sessionId: remoteSid, trackName: 'video', mid: video.mid || '1' },
         ],
       });
-
-      if (subRes.data?.sessionDescription) {
-        await subPc.setRemoteDescription(new RTCSessionDescription(subRes.data.sessionDescription));
-      }
+      if (r.data?.sessionDescription) await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
     } catch (err) {
-      console.error(`❌ Failed to subscribe to host:`, err);
-      if (subPcsRef.current[remoteSessionId]) {
-        subPcsRef.current[remoteSessionId].close();
-        delete subPcsRef.current[remoteSessionId];
-      }
-      // Bug 3 fix: retry after 2s so next heartbeat finds us unsubscribed and retries
+      console.error('Subscribe error:', err);
+      subPcsRef.current[remoteSid]?.close();
+      delete subPcsRef.current[remoteSid];
+      // Retry after 2s
       if (!isCleaningUpRef.current) {
-        setTimeout(() => {
-          const sid = sessionIdRef.current;
-          if (sid && !isCleaningUpRef.current) {
-            subscribeToParticipant(remoteSessionId, sid);
-          }
-        }, 2000);
+        setTimeout(() => { const s = sessionIdRef.current; if (s) subscribeTo(remoteSid, s); }, 2000);
       }
     }
   }, []);
 
-  // ─── STEP 4: HEARTBEAT (POLLS ADMISSION STATUS & HOST STREAM) ─
-  // Bug 2 fix: use sessionIdRef to always read fresh sessionId in async callbacks
+  // ── 4. JOIN + HEARTBEAT LOOP ────────────────────────────────────
   useEffect(() => {
-    if (!sessionId) return;
+    let alive = true;
+    let timer: any;
 
-    const pollStatus = async () => {
-      if (isCleaningUpRef.current) return;
-      const currentSid = sessionIdRef.current;
-      if (!currentSid) return;
-
+    const init = async () => {
       try {
-        const res = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/heartbeat`, {
-          sessionId: currentSid,
-          role: 'candidate',
-          name: userName,
+        // Create Cloudflare session
+        const sessionRes = await api.post('/calls/session/new');
+        if (!sessionRes.data?.sessionId) throw new Error('No sessionId');
+        const sid = sessionRes.data.sessionId;
+        sessionIdRef.current = sid;
+
+        // Join room
+        await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
+          sessionId: sid, name: userName, role, tracks: ['audio', 'video'],
         });
 
-        if (res.data?.isEnded) {
-          setIsSessionEnded(true);
-          releaseAllMediaHardware();
-          return;
-        }
+        // Publish our tracks immediately
+        publishTracks(sid);
 
-        if (res.data?.isDeclined) {
-          setIsDeclined(true);
-          releaseAllMediaHardware();
-          return;
-        }
+        // Heartbeat every 2s
+        const beat = async () => {
+          if (!alive || isCleaningUpRef.current) return;
+          const curSid = sessionIdRef.current;
+          if (!curSid) return;
+          try {
+            const r = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/heartbeat`, {
+              sessionId: curSid, role, name: userName,
+            });
+            if (!alive) return;
+            if (r.data?.isEnded) { setIsSessionEnded(true); releaseAllMedia(); return; }
 
-        setIsHostPresent(Boolean(res.data?.isHostPresent));
+            // Also retry publish if not yet done
+            publishTracks(curSid);
 
-        // When Host is present / candidate is admitted:
-        if (res.data?.isAdmitted) {
-          setIsAdmitted(true);
-          // Bug 1 fix: always call publishMediaTracks — it will retry until localStream is ready
-          publishMediaTracks(currentSid);
-
-          if (Array.isArray(res.data?.participants)) {
-            const others: RemoteParticipant[] = res.data.participants.filter(
-              (p: any) => p.sessionId !== currentSid
-            );
+            const others: RemoteParticipant[] = (r.data?.participants || []).filter((p: any) => p.sessionId !== curSid);
             setRemoteParticipants(others);
+            setConnectedCount(others.length + 1);
 
-            // Bug 2 fix: pass currentSid from ref (not stale state closure)
-            others.forEach((p) => {
-              if (!subPcsRef.current[p.sessionId]) {
-                subscribeToParticipant(p.sessionId, currentSid);
+            // Subscribe to new participants
+            others.forEach((p) => { if (!subPcsRef.current[p.sessionId]) subscribeTo(p.sessionId, curSid); });
+
+            // Clean up gone participants
+            const activeIds = new Set(others.map((p) => p.sessionId));
+            Object.keys(subPcsRef.current).forEach((id) => {
+              if (!activeIds.has(id)) {
+                subPcsRef.current[id]?.close();
+                delete subPcsRef.current[id];
+                setRemoteStreams((prev) => { const n = { ...prev }; delete n[id]; return n; });
               }
             });
+          } catch {}
+        };
 
-            const otherIds = new Set(others.map((p) => p.sessionId));
-            Object.keys(subPcsRef.current).forEach((sid) => {
-              if (!otherIds.has(sid)) {
-                subPcsRef.current[sid]?.close();
-                delete subPcsRef.current[sid];
-                setRemoteStreams((prev) => {
-                  const next = { ...prev };
-                  delete next[sid];
-                  return next;
-                });
-              }
-            });
-          }
-        }
+        beat();
+        timer = setInterval(beat, 2000);
+        heartbeatTimerRef.current = timer;
       } catch (err) {
-        console.error('Candidate heartbeat error:', err);
+        console.error('Init error:', err);
       }
     };
 
-    pollStatus();
-    heartbeatTimerRef.current = setInterval(pollStatus, 2000);
-
+    init();
     return () => {
-      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      alive = false;
+      clearInterval(timer);
     };
-  }, [sessionId, roomName, userName, publishMediaTracks, subscribeToParticipant, releaseAllMediaHardware]);
+  }, [roomName, userName, role, publishTracks, subscribeTo, releaseAllMedia]);
 
-  // Clean up on component unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       isCleaningUpRef.current = true;
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-
-      releaseAllMediaHardware();
-
-      if (publishPcRef.current) publishPcRef.current.close();
+      releaseAllMedia();
+      publishPcRef.current?.close();
       Object.values(subPcsRef.current).forEach((pc) => pc.close());
-
-      if (sessionId) {
-        api.post(`/calls/rooms/${encodeURIComponent(roomName)}/leave`, { sessionId, role: 'candidate' }).catch(() => {});
-      }
+      const sid = sessionIdRef.current;
+      if (sid) api.post(`/calls/rooms/${encodeURIComponent(roomName)}/leave`, { sessionId: sid, role }).catch(() => {});
     };
-  }, [roomName, sessionId, releaseAllMediaHardware]);
+  }, [roomName, role, releaseAllMedia]);
 
-  // ─── MEDIA CONTROLS ──────────────────────────────────────────
+  // ── MEDIA CONTROLS ──────────────────────────────────────────────
   const toggleAudio = () => {
-    const stream = localStreamRef.current || localStream;
-    if (!stream) return;
-    const audioTrack = stream.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsAudioMuted(!audioTrack.enabled);
-    }
+    const track = (localStreamRef.current || localStream)?.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setIsAudioMuted(!track.enabled);
   };
 
   const toggleVideo = () => {
     const stream = localStreamRef.current || localStream;
-    if (!stream) return;
-    const videoTrack = stream.getVideoTracks()[0];
-    if (videoTrack) {
-      videoTrack.enabled = !videoTrack.enabled;
-      const willBeMuted = !videoTrack.enabled;
-      setIsVideoMuted(willBeMuted);
-      if (!willBeMuted) {
-        if (!isAdmitted && previewVideoRef.current) {
-          previewVideoRef.current.srcObject = stream;
-          previewVideoRef.current.play().catch(() => {});
-        }
-        if (isAdmitted && localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          localVideoRef.current.play().catch(() => {});
-        }
-      }
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setIsVideoMuted(!track.enabled);
+    if (track.enabled && localVideoRef.current && stream) {
+      localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
     }
   };
 
   const toggleScreenShare = async () => {
-    if (!publishPcRef.current || !localStream) return;
-
+    const pc = publishPcRef.current;
+    const stream = localStreamRef.current || localStream;
+    if (!pc || !stream) return;
     if (isScreenSharing) {
-      if (screenTrackRef.current) {
-        screenTrackRef.current.stop();
-        screenTrackRef.current = null;
-      }
-      const cameraTrack = localStream.getVideoTracks()[0];
-      const videoSender = publishPcRef.current.getSenders().find((s) => s.track?.kind === 'video');
-      if (videoSender && cameraTrack) {
-        await videoSender.replaceTrack(cameraTrack);
-      }
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
+      screenTrackRef.current?.stop();
+      screenTrackRef.current = null;
+      const camTrack = stream.getVideoTracks()[0];
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender && camTrack) await sender.replaceTrack(camTrack);
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
       setIsScreenSharing(false);
     } else {
       try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        const screenTrack = screenStream.getVideoTracks()[0];
-        screenTrackRef.current = screenTrack;
-
-        const videoSender = publishPcRef.current.getSenders().find((s) => s.track?.kind === 'video');
-        if (videoSender) {
-          await videoSender.replaceTrack(screenTrack);
-        }
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = screenStream;
-        }
-
-        screenTrack.onended = () => {
-          toggleScreenShare();
-        };
-
+        const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const t = screen.getVideoTracks()[0];
+        screenTrackRef.current = t;
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(t);
+        if (localVideoRef.current) localVideoRef.current.srcObject = screen;
+        t.onended = () => toggleScreenShare();
         setIsScreenSharing(true);
-      } catch (err) {
-        console.error('Screen sharing error:', err);
-      }
+      } catch {}
     }
   };
 
-  const handleLeaveCall = () => {
-    releaseAllMediaHardware();
-    if (onDisconnected) {
-      onDisconnected();
-    } else {
-      router.replace('/dashboard/applications');
-    }
+  const handleLeave = () => {
+    releaseAllMedia();
+    onDisconnected ? onDisconnected() : router.replace('/dashboard/applications');
   };
 
-  // ─── SCREEN A: SESSION ENDED BY HOST ─────────────────────────
+  // ── SESSION ENDED SCREEN ────────────────────────────────────────
   if (isSessionEnded) {
     return (
-      <div className="h-full w-full bg-black flex flex-col items-center justify-center p-6 text-center select-none font-sans">
-        <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-5 shadow-xl">
+      <div className="h-full w-full bg-black flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-5">
           <CheckCircle className="w-8 h-8 text-emerald-400" />
         </div>
-        <h2 className="text-lg font-bold text-white mb-2">Interview Session Ended</h2>
+        <h2 className="text-lg font-bold text-white mb-2">Session Ended</h2>
         <p className="text-xs text-zinc-400 max-w-sm leading-relaxed mb-6">
-          The interviewer has concluded this session. Your camera and microphone have been safely turned off.
+          The interviewer has concluded this session.
         </p>
-        <button
-          onClick={handleLeaveCall}
-          className="px-6 py-3 rounded-2xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all shadow-lg cursor-pointer"
-        >
+        <button onClick={handleLeave} className="px-6 py-3 rounded-2xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all cursor-pointer">
           Return to Dashboard
         </button>
       </div>
     );
   }
 
-  // ─── SCREEN B: DECLINED ACCESS ───────────────────────────────
-  if (isDeclined) {
-    return (
-      <div className="h-full w-full bg-black flex flex-col items-center justify-center p-6 text-center select-none font-sans">
-        <div className="w-16 h-16 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-5 shadow-xl">
-          <AlertCircle className="w-8 h-8 text-red-400" />
-        </div>
-        <h2 className="text-lg font-bold text-white mb-2">Interview Access Deferred</h2>
-        <p className="text-xs text-zinc-400 max-w-sm leading-relaxed mb-6">
-          The host has postponed or declined this interview queue request.
-        </p>
-        <button
-          onClick={handleLeaveCall}
-          className="px-6 py-3 rounded-2xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition-all shadow-lg cursor-pointer"
-        >
-          Return to Dashboard
-        </button>
-      </div>
-    );
-  }
-
-  // ─── SCREEN C: WAITING FOR HOST ADMISSION (LOBBY GATE) ────────
-  if (!isAdmitted) {
-    return (
-      <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col items-center justify-center p-6 select-none font-sans relative overflow-hidden">
-        <div className="absolute w-96 h-96 bg-[#0071e3]/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="max-w-md w-full flex flex-col items-center text-center z-10 space-y-5">
-          {/* Status Badge */}
-          <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border text-xs font-semibold ${
-            isHostPresent
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-              : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${isHostPresent ? 'bg-emerald-400' : 'bg-amber-400'} animate-ping`} />
-            <span>{isHostPresent ? 'Interviewer Present • Awaiting Admission' : 'Waiting for Interviewer to Join'}</span>
-          </div>
-
-          <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">You're in the Waiting Lobby</h2>
-            <p className="text-xs text-[#86868b] mt-1.5 leading-relaxed">
-              {isHostPresent
-                ? 'The interviewer has been notified of your presence and will admit you into the room.'
-                : 'The interview host has not entered yet. You will be admitted as soon as the host connects.'}
-            </p>
-          </div>
-
-          {/* Camera Pre-Check Preview */}
-          <div className="w-full h-56 rounded-3xl overflow-hidden bg-zinc-900 border border-white/[0.08] relative shadow-2xl flex items-center justify-center">
-            <video
-              ref={previewVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : ''}`}
-            />
-            {isVideoMuted && (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-xl text-white">
-                  {userName.charAt(0)}
-                </div>
-                <p className="text-xs text-zinc-500">Camera preview off</p>
-              </div>
-            )}
-
-            <div className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-xs font-semibold text-white">
-              <span>{userName} (Candidate Preview)</span>
-            </div>
-          </div>
-
-          {/* Quick Pre-Check Controls */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={toggleAudio}
-              className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
-                isAudioMuted
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
-              }`}
-              title={isAudioMuted ? 'Unmute microphone' : 'Mute microphone'}
-            >
-              {isAudioMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
-
-            <button
-              onClick={toggleVideo}
-              className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
-                isVideoMuted
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
-              }`}
-              title={isVideoMuted ? 'Turn on camera' : 'Turn off camera'}
-            >
-              {isVideoMuted ? <VideoOff className="w-4 h-4" /> : <VideoIcon className="w-4 h-4" />}
-            </button>
-
-            <button
-              onClick={handleLeaveCall}
-              className="px-5 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold transition-all border border-white/[0.08] cursor-pointer"
-            >
-              Exit Lobby
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ─── SCREEN D: ADMITTED & ACTIVE LIVE INTERVIEW STREAM ────────────
+  // ── MAIN VIDEO UI ───────────────────────────────────────────────
   return (
-    <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased">
+    <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none antialiased">
       {/* Top Bar */}
       <div className="h-12 px-4 bg-black/60 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between z-20 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="text-xs font-bold text-white tracking-tight">{roomName}</span>
           <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            Admitted • Live
+            Live
           </span>
         </div>
-
         <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium">
           <Users className="w-3.5 h-3.5 text-[#0071e3]" />
-          <span>{remoteParticipants.length + 1} Connected</span>
+          <span>{connectedCount} Connected</span>
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="flex-1 p-3 grid grid-cols-1 gap-3 relative overflow-hidden bg-radial from-zinc-900/40 to-[#09090b]">
-        {/* Remote Host Video */}
-        {remoteParticipants.length > 0 && remoteParticipants[0] ? (
-          <div className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.08] flex items-center justify-center shadow-2xl">
-            {remoteStreams[remoteParticipants[0].sessionId] ? (
-              <video
-                autoPlay
-                playsInline
-                ref={(el) => {
-                  if (el && el.srcObject !== remoteStreams[remoteParticipants[0].sessionId]) {
-                    el.srcObject = remoteStreams[remoteParticipants[0].sessionId];
-                  }
-                }}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-xl text-white">
-                  {remoteParticipants[0].name.charAt(0)}
+      {/* Video Grid */}
+      <div className="flex-1 p-3 grid grid-cols-1 gap-3 relative overflow-hidden">
+        {remoteParticipants.length > 0 ? (
+          remoteParticipants.map((p) => (
+            <div key={p.sessionId} className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.08] flex items-center justify-center shadow-2xl">
+              {remoteStreams[p.sessionId] ? (
+                <video
+                  autoPlay playsInline
+                  ref={(el) => { if (el && el.srcObject !== remoteStreams[p.sessionId]) el.srcObject = remoteStreams[p.sessionId]; }}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-xl text-white">
+                    {p.name.charAt(0).toUpperCase()}
+                  </div>
+                  <p className="text-xs text-zinc-400">Connecting video stream...</p>
                 </div>
-                <p className="text-xs text-zinc-400">Connecting video stream...</p>
+              )}
+              <div className="absolute bottom-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-[11px] font-semibold text-white">
+                <span>{p.name}</span>
+                <span className="text-[9px] text-[#0071e3] font-bold uppercase">• {p.role === 'company' ? 'Host' : 'Candidate'}</span>
               </div>
-            )}
-
-            <div className="absolute bottom-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-[11px] font-semibold text-white">
-              <span>{remoteParticipants[0].name} (Interviewer)</span>
-              <span className="text-[9px] text-[#0071e3] font-bold uppercase">• Host</span>
             </div>
-          </div>
+          ))
         ) : (
           <div className="rounded-2xl border border-dashed border-white/[0.08] flex flex-col items-center justify-center text-center p-6 bg-zinc-900/30">
             <Users className="w-8 h-8 text-zinc-600 animate-pulse mb-2" />
-            <p className="text-xs text-zinc-400 font-medium">Connecting to Interviewer...</p>
+            <p className="text-xs text-zinc-400 font-medium">Waiting for others to join...</p>
           </div>
         )}
 
-        {/* Local Self View Overlay (PiP Style) */}
-        <div className="absolute bottom-4 right-4 w-40 h-28 rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.15] shadow-2xl z-30 group">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : ''}`}
-          />
+        {/* Self PiP */}
+        <div className="absolute bottom-4 right-4 w-40 h-28 rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.15] shadow-2xl z-30">
+          <video ref={localVideoRef} autoPlay playsInline muted className={`w-full h-full object-cover ${isVideoMuted ? 'hidden' : ''}`} />
           {isVideoMuted && (
-            <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-xs text-zinc-500 font-medium">
-              Camera Off
-            </div>
+            <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-xs text-zinc-500 font-medium">Camera Off</div>
           )}
-
-          <div className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-lg bg-black/70 backdrop-blur-md text-[9px] font-semibold text-white">
-            You
-          </div>
+          <div className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-lg bg-black/70 backdrop-blur-md text-[9px] font-semibold text-white">You</div>
         </div>
       </div>
 
       {/* Bottom Controls */}
       <div className="h-16 px-4 bg-black/80 backdrop-blur-xl border-t border-white/[0.08] flex items-center justify-center gap-2.5 z-20 shrink-0">
-        <button
-          onClick={toggleAudio}
-          className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
-            isAudioMuted
-              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-              : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
-          }`}
-          title={isAudioMuted ? 'Unmute microphone' : 'Mute microphone'}
-        >
+        <button onClick={toggleAudio} className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${isAudioMuted ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'}`}>
           {isAudioMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
         </button>
-
-        <button
-          onClick={toggleVideo}
-          className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
-            isVideoMuted
-              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-              : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
-          }`}
-          title={isVideoMuted ? 'Turn on camera' : 'Turn off camera'}
-        >
+        <button onClick={toggleVideo} className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${isVideoMuted ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'}`}>
           {isVideoMuted ? <VideoOff className="w-4 h-4" /> : <VideoIcon className="w-4 h-4" />}
         </button>
-
-        <button
-          onClick={toggleScreenShare}
-          className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${
-            isScreenSharing
-              ? 'bg-[#0071e3] text-white shadow-lg shadow-[#0071e3]/30'
-              : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'
-          }`}
-          title={isScreenSharing ? 'Stop screen share' : 'Share screen'}
-        >
+        <button onClick={toggleScreenShare} className={`p-3 rounded-2xl font-semibold transition-all cursor-pointer ${isScreenSharing ? 'bg-[#0071e3] text-white' : 'bg-white/10 hover:bg-white/15 text-white border border-white/[0.08]'}`}>
           {isScreenSharing ? <StopCircle className="w-4 h-4" /> : <ScreenShare className="w-4 h-4" />}
         </button>
-
-        <button
-          onClick={handleLeaveCall}
-          className="px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-lg shadow-red-600/30 flex items-center gap-1.5 cursor-pointer ml-2"
-        >
-          <PhoneOff className="w-3.5 h-3.5" />
-          <span>Leave</span>
+        <button onClick={handleLeave} className="px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ml-2">
+          <PhoneOff className="w-3.5 h-3.5" /><span>Leave</span>
         </button>
       </div>
     </div>

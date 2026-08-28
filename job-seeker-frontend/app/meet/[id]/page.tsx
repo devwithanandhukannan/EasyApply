@@ -56,9 +56,11 @@ function MeetPageContent() {
   const [audioCoachingWarning, setAudioCoachingWarning] = useState(false);
   const [isSecurityMinimized, setIsSecurityMinimized] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const audioStreamRef = useRef<MediaStream | null>(null);
+  // Shared audio stream from CloudflareMeetingRoom (avoids double getUserMedia)
+  const sharedAudioStreamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioMonitorStartedRef = useRef(false);
 
   // Code editor
   const [editorLanguage, setEditorLanguage] = useState('javascript');
@@ -332,102 +334,69 @@ function MeetPageContent() {
     };
   }, [roleType, logViolation]);
 
-  // 6. Audio Level Monitoring (Sustained Voice / Coaching Analysis)
-  useEffect(() => {
+  // 6. Audio Level Monitoring using the stream already opened by CloudflareMeetingRoom
+  // Called when CloudflareMeetingRoom acquires the camera/mic stream
+  const startAudioMonitoring = useCallback((stream: MediaStream) => {
     if (roleType !== 'jobseeker') return;
+    if (audioMonitorStartedRef.current) return;
+    audioMonitorStartedRef.current = true;
 
     let mounted = true;
     let sustainedNoiseCounter = 0;
 
-    const initAudioMonitoring = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        
-        if (!mounted) {
-          stream.getTracks().forEach(track => track.stop());
-          return;
-        }
+    try {
+      sharedAudioStreamRef.current = stream;
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const context = new AudioContextClass();
+      audioContextRef.current = context;
 
-        audioStreamRef.current = stream;
-        
-        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-        const context = new AudioContextClass();
-        audioContextRef.current = context;
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.8;
+      source.connect(analyser);
+      analyserRef.current = analyser;
 
-        const source = context.createMediaStreamSource(stream);
-        const analyser = context.createAnalyser();
-        analyser.fftSize = 512;
-        analyser.smoothingTimeConstant = 0.8;
-        source.connect(analyser);
-        analyserRef.current = analyser;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Float32Array(bufferLength);
 
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Float32Array(bufferLength);
-
-        // Monitor audio levels every 250ms
-        audioIntervalRef.current = setInterval(() => {
-          if (!mounted || !analyserRef.current) return;
-
-          analyser.getFloatTimeDomainData(dataArray);
-          
-          // Calculate RMS (Root Mean Square) Volume
-          let sumSquares = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            sumSquares += dataArray[i] * dataArray[i];
-          }
-          const rms = Math.sqrt(sumSquares / bufferLength);
-
-          // Threshold: 0.04 represents active conversational audio
-          // Adjust this based on testing - may need calibration
-          if (rms > 0.04) {
-            sustainedNoiseCounter++;
-            // 8 consecutive hits = ~2 seconds of sustained audio
-            if (sustainedNoiseCounter >= 8) {
-              if (mounted) {
-                setAudioCoachingWarning(true);
-                if (sustainedNoiseCounter === 8) { // Log only once per streak
-                  logViolation('Sustained background audio detected (possible coaching)');
-                }
-              }
-            }
-          } else {
-            // Decay counter gradually
-            if (sustainedNoiseCounter > 0) {
-              sustainedNoiseCounter = Math.max(0, sustainedNoiseCounter - 1);
-            }
-            if (sustainedNoiseCounter === 0 && mounted) {
-              setAudioCoachingWarning(false);
+      audioIntervalRef.current = setInterval(() => {
+        if (!mounted || !analyserRef.current) return;
+        analyser.getFloatTimeDomainData(dataArray);
+        let sumSquares = 0;
+        for (let i = 0; i < bufferLength; i++) sumSquares += dataArray[i] * dataArray[i];
+        const rms = Math.sqrt(sumSquares / bufferLength);
+        if (rms > 0.04) {
+          sustainedNoiseCounter++;
+          if (sustainedNoiseCounter >= 8) {
+            setAudioCoachingWarning(true);
+            if (sustainedNoiseCounter === 8) {
+              logViolation('Sustained background audio detected (possible coaching)');
             }
           }
-        }, 250);
-
-      } catch (err) {
-        console.error('Audio monitoring error:', err);
-        if (mounted) {
-          logViolation('Microphone access denied - audio monitoring disabled');
+        } else {
+          sustainedNoiseCounter = Math.max(0, sustainedNoiseCounter - 1);
+          if (sustainedNoiseCounter === 0) setAudioCoachingWarning(false);
         }
-      }
-    };
-
-    initAudioMonitoring();
+      }, 250);
+    } catch (err) {
+      console.error('Audio monitoring error:', err);
+    }
 
     return () => {
       mounted = false;
-      if (audioIntervalRef.current) {
-        clearInterval(audioIntervalRef.current);
-        audioIntervalRef.current = null;
-      }
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
-      }
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(track => track.stop());
-        audioStreamRef.current = null;
-      }
-      analyserRef.current = null;
     };
   }, [roleType, logViolation]);
+
+  // Cleanup audio monitor on unmount
+  useEffect(() => {
+    return () => {
+      if (audioIntervalRef.current) clearInterval(audioIntervalRef.current);
+      if (audioContextRef.current) audioContextRef.current.close();
+      analyserRef.current = null;
+      audioMonitorStartedRef.current = false;
+    };
+  }, []);
 
   const [roomName, setRoomName] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -1052,6 +1021,7 @@ function MeetPageContent() {
             userName={roleType === 'company' ? 'Interviewer' : 'Candidate'}
             onDisconnected={handleDisconnected}
             onAdmittedStatusChange={setIsAdmitted}
+            onLocalStream={startAudioMonitoring}
           />
         </div>
       </main>
