@@ -3794,8 +3794,9 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
       roomState.isEnded = false;
     }
 
-    let participants = roomState.participants.filter(
-      (p: any) => p.sessionId !== sessionId && p.participantId !== participantId && (now - p.updatedAt < 120000)
+    // Prune stale participants (>15s) and replace any prior session of same role
+    let participants = (roomState.participants || []).filter(
+      (p: any) => p.sessionId !== sessionId && p.role !== role && (now - p.updatedAt < 15000)
     );
 
     const hasHost = participants.some((p: any) => p.role === 'company') || role === 'company';
@@ -3805,8 +3806,8 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
       const isAdmitted = Array.isArray(roomState.admittedCandidates) && roomState.admittedCandidates.includes(sessionId);
 
       if (!isAdmitted) {
-        // Add to waiting queue for host review
-        roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId && (now - w.requestedAt < 120000));
+        // Add to waiting queue for host review (clean up stale queue entries)
+        roomState.waitingQueue = (roomState.waitingQueue || []).filter((w: any) => w.sessionId !== sessionId && (now - w.requestedAt < 15000));
         roomState.waitingQueue.push({
           sessionId,
           participantId: participantId || crypto.randomUUID(),
@@ -3830,7 +3831,7 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     participants.push({
       sessionId,
       participantId: participantId || crypto.randomUUID(),
-      name: name || 'Participant',
+      name: name || (role === 'company' ? 'Interviewer' : 'Candidate'),
       role: role || 'candidate',
       tracks: tracks || ['audio', 'video'],
       joinedAt: now,
@@ -3838,7 +3839,7 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     });
 
     roomState.participants = participants;
-    roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+    roomState.waitingQueue = (roomState.waitingQueue || []).filter((w: any) => w.sessionId !== sessionId);
 
     await saveCallsRoomState(c, roomName, roomState);
     return c.json({ success: true, status: 'admitted', isAdmitted: true, isHostPresent: true, participants });
@@ -3930,25 +3931,43 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
     if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
     if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
 
-    // Keep active participants updated
-    roomState.participants = roomState.participants.map((p: any) =>
-      p.sessionId === sessionId ? { ...p, updatedAt: now } : p
+    // Clean up stale participants (>15s since last heartbeat)
+    roomState.participants = (roomState.participants || []).filter((p: any) =>
+      p.sessionId === sessionId || (now - p.updatedAt < 15000)
     );
 
-    // If admitted candidate sends heartbeat, add to active participants if not present
+    // Keep active participants updated
+    const existingIdx = roomState.participants.findIndex((p: any) => p.sessionId === sessionId);
+    if (existingIdx >= 0) {
+      roomState.participants[existingIdx].updatedAt = now;
+      if (name) roomState.participants[existingIdx].name = name;
+    } else if (role === 'company') {
+      // Remove any prior host session
+      roomState.participants = roomState.participants.filter((p: any) => p.role !== 'company');
+      roomState.participants.push({
+        sessionId,
+        participantId: sessionId,
+        name: name || 'Interviewer',
+        role: 'company',
+        tracks: ['audio', 'video'],
+        joinedAt: now,
+        updatedAt: now,
+      });
+    }
+
+    // If admitted candidate sends heartbeat, replace any prior candidate session
     if (role === 'candidate' && roomState.admittedCandidates.includes(sessionId)) {
-      if (!roomState.participants.some((p: any) => p.sessionId === sessionId)) {
-        roomState.participants.push({
-          sessionId,
-          participantId: sessionId,
-          name: name || 'Candidate',
-          role: 'candidate',
-          tracks: ['audio', 'video'],
-          joinedAt: now,
-          updatedAt: now,
-        });
-      }
-      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+      roomState.participants = roomState.participants.filter((p: any) => p.role !== 'candidate');
+      roomState.participants.push({
+        sessionId,
+        participantId: sessionId,
+        name: name || 'Candidate',
+        role: 'candidate',
+        tracks: ['audio', 'video'],
+        joinedAt: now,
+        updatedAt: now,
+      });
+      roomState.waitingQueue = (roomState.waitingQueue || []).filter((w: any) => w.sessionId !== sessionId);
     }
 
     // If unadmitted candidate, ensure not in active participants and ensure registered in waitingQueue
@@ -3973,8 +3992,8 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
 
     await saveCallsRoomState(c, roomName, roomState);
 
-    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 120000) && (p.role === 'company' || roomState.admittedCandidates.includes(p.sessionId)));
-    const activeWaiting = roomState.waitingQueue.filter((w: any) => (now - w.requestedAt < 120000));
+    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 15000) && (p.role === 'company' || roomState.admittedCandidates.includes(p.sessionId)));
+    const activeWaiting = (roomState.waitingQueue || []).filter((w: any) => (now - w.requestedAt < 15000));
     const isHostPresent = activeParticipants.some((p: any) => p.role === 'company');
     const isAdmitted = roomState.admittedCandidates.includes(sessionId);
     const isDeclined = roomState.declinedCandidates.includes(sessionId);
