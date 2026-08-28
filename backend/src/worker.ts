@@ -846,10 +846,97 @@ app.get('/api/admin/ats/jobs', async (c) => {
 
 app.get('/api/admin/feature-requests', async (c) => {
   try {
-    const reqs = await c.env.DB.prepare('SELECT r.*, c.name as companyName FROM "CompanyFeatureRequest" r LEFT JOIN "Company" c ON r.companyId = c.id ORDER BY r.createdAt DESC LIMIT 100').all();
-    return c.json({ success: true, requests: reqs.results || [] });
+    const reqs = await c.env.DB.prepare('SELECT r.*, c.name as companyName, c.email as companyEmail FROM "CompanyFeatureRequest" r LEFT JOIN "Company" c ON r.companyId = c.id ORDER BY r.createdAt DESC LIMIT 100').all();
+    const results = (reqs.results || []).map((r: any) => ({
+      ...r,
+      requestedFeatures: typeof r.requestedFeatures === 'string' ? JSON.parse(r.requestedFeatures || '{}') : (r.requestedFeatures || {}),
+    }));
+    return c.json({ success: true, requests: results });
   } catch {
     return c.json({ success: true, requests: [] });
+  }
+});
+
+app.put('/api/admin/feature-requests/:id/status', async (c) => {
+  try {
+    const { id } = c.req.param();
+    const { status, adminNotes } = await c.req.json().catch(() => ({}));
+    const now = new Date().toISOString();
+    await c.env.DB.prepare(
+      'UPDATE "CompanyFeatureRequest" SET status = ?, adminNotes = COALESCE(?, adminNotes), updatedAt = ? WHERE id = ?'
+    ).bind(status || 'REVIEWED', adminNotes || null, now, id).run();
+    return c.json({ success: true, message: 'Feature request status updated' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// ─── COMPANY FEATURE REQUESTS ─────────────────────────────
+app.post('/api/company/feature-requests', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) {
+      return c.json({ success: false, message: 'Company authentication required' }, 401);
+    }
+
+    const { requestedFeatures, message, budgetRange } = await c.req.json().catch(() => ({}));
+    if (!requestedFeatures || typeof requestedFeatures !== 'object') {
+      return c.json({ success: false, message: 'requestedFeatures is required' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(
+      'INSERT INTO "CompanyFeatureRequest" (id, companyId, requestedFeatures, message, budgetRange, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).bind(
+      id,
+      decoded.companyId,
+      JSON.stringify(requestedFeatures),
+      message ? String(message).trim() : null,
+      budgetRange ? String(budgetRange).trim() : null,
+      'PENDING',
+      now,
+      now
+    ).run();
+
+    return c.json({
+      success: true,
+      message: 'Your custom business feature request has been submitted to DearResume administrators.',
+      request: {
+        id,
+        companyId: decoded.companyId,
+        requestedFeatures,
+        message,
+        budgetRange,
+        status: 'PENDING',
+        createdAt: now,
+      },
+    }, 201);
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Server error' }, 500);
+  }
+});
+
+app.get('/api/company/feature-requests', async (c) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) {
+      return c.json({ success: false, message: 'Company authentication required' }, 401);
+    }
+
+    const requests = await c.env.DB.prepare(
+      'SELECT * FROM "CompanyFeatureRequest" WHERE companyId = ? ORDER BY createdAt DESC'
+    ).bind(decoded.companyId).all();
+
+    const results = (requests.results || []).map((r: any) => ({
+      ...r,
+      requestedFeatures: typeof r.requestedFeatures === 'string' ? JSON.parse(r.requestedFeatures || '{}') : (r.requestedFeatures || {}),
+    }));
+
+    return c.json({ success: true, requests: results });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
 });
 
