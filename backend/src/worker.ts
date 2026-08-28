@@ -3713,34 +3713,28 @@ app.put('/api/calls/session/:sessionId/renegotiate', async (c) => {
   }
 });
 
-// 4. Room Management (Join / Status / Heartbeat / Leave / End) using D1 CallsRoom + Memory Cache (KV-quota proof)
-const inMemoryCallsRooms = new Map<string, { state: any; lastSaved: number }>();
-
+// 4. Room Management (Join / Status / Heartbeat / Leave / End) using Cloudflare D1
 const getCallsRoomState = async (c: any, roomName: string) => {
   try {
-    const mem = inMemoryCallsRooms.get(roomName);
-    if (mem && Date.now() - mem.lastSaved < 5000) {
-      return mem.state;
-    }
-    const row: any = await c.env.DB.prepare('SELECT state FROM "CallsRoom" WHERE roomName = ?').bind(roomName).first().catch(() => null);
+    const row: any = await c.env.DB.prepare('SELECT state FROM "CallsRoom" WHERE roomName = ?').bind(roomName).first();
     if (row?.state) {
-      const parsed = JSON.parse(row.state);
-      inMemoryCallsRooms.set(roomName, { state: parsed, lastSaved: Date.now() });
-      return parsed;
+      return JSON.parse(row.state);
     }
-  } catch {}
-  const memFallback = inMemoryCallsRooms.get(roomName);
-  return memFallback ? memFallback.state : null;
+  } catch (e) {
+    console.error('getCallsRoomState error:', e);
+  }
+  return null;
 };
 
 const saveCallsRoomState = async (c: any, roomName: string, state: any) => {
-  inMemoryCallsRooms.set(roomName, { state, lastSaved: Date.now() });
   try {
     const jsonStr = JSON.stringify(state);
     await c.env.DB.prepare(
       'INSERT INTO "CallsRoom" (roomName, state, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(roomName) DO UPDATE SET state = excluded.state, updatedAt = CURRENT_TIMESTAMP'
-    ).bind(roomName, jsonStr).run().catch(() => {});
-  } catch {}
+    ).bind(roomName, jsonStr).run();
+  } catch (e) {
+    console.error('saveCallsRoomState error:', e);
+  }
 };
 
 app.get('/api/calls/rooms/:roomName/status', async (c) => {
