@@ -431,11 +431,11 @@ export default function CloudflareMeetingRoom({
     <div className="h-screen w-screen bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased relative">
       {/* ─── FLOATING ADMISSION NOTIFICATION BANNER ──────────────────── */}
       {waitingQueue.length > 0 && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg px-4 animate-in slide-in-from-top-4 duration-300">
-          <div className="bg-zinc-900/95 border border-[#0071e3]/40 rounded-2xl p-4 shadow-2xl backdrop-blur-xl space-y-3">
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[999] w-full max-w-lg px-4 animate-in slide-in-from-top-4 duration-300 pointer-events-auto">
+          <div className="bg-zinc-900/98 border-2 border-emerald-500/50 rounded-2xl p-4 shadow-2xl shadow-emerald-950/50 backdrop-blur-2xl space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#0071e3]/10 border border-[#0071e3]/20 flex items-center justify-center text-[#0071e3]">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                   <Bell className="w-4 h-4 animate-bounce" />
                 </div>
                 <div>
@@ -443,7 +443,7 @@ export default function CloudflareMeetingRoom({
                   <p className="text-[10px] text-zinc-400">Waiting for your permission to join</p>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-[#0071e3]/20 text-[#42a5f5] text-[10px] font-bold">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold">
                 {waitingQueue.length} Waiting
               </span>
             </div>
@@ -452,27 +452,30 @@ export default function CloudflareMeetingRoom({
               {waitingQueue.map((cand) => (
                 <div
                   key={cand.sessionId}
-                  className="flex items-center justify-between p-2.5 rounded-xl bg-black/40 border border-white/[0.06]"
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-black/60 border border-white/[0.08]"
                 >
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center text-xs font-bold text-white">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 border border-white/[0.15] flex items-center justify-center text-xs font-bold text-white shadow">
                       {cand.name.charAt(0)}
                     </div>
-                    <span className="text-xs font-semibold text-white">{cand.name}</span>
+                    <div>
+                      <span className="text-xs font-bold text-white block">{cand.name}</span>
+                      <span className="text-[9px] text-emerald-400">Ready in lobby</span>
+                    </div>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleAdmitCandidate(cand.sessionId)}
                       disabled={admittingMap[cand.sessionId]}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
                     >
                       <UserCheck className="w-3.5 h-3.5" />
-                      <span>{admittingMap[cand.sessionId] ? 'Admitting...' : 'Admit'}</span>
+                      <span>{admittingMap[cand.sessionId] ? 'Admitting...' : 'Admit Candidate'}</span>
                     </button>
                     <button
                       onClick={() => handleDeclineCandidate(cand.sessionId)}
-                      className="p-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs transition-colors cursor-pointer"
+                      className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs transition-colors cursor-pointer"
                       title="Decline entry"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -504,10 +507,14 @@ export default function CloudflareMeetingRoom({
 
         <div className="flex items-center gap-2">
           {waitingQueue.length > 0 && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400 animate-pulse">
-              <Users className="w-3.5 h-3.5" />
-              <span>{waitingQueue.length} In Lobby</span>
-            </div>
+            <button
+              onClick={() => handleAdmitCandidate(waitingQueue[0].sessionId)}
+              disabled={admittingMap[waitingQueue[0].sessionId]}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/30 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>{admittingMap[waitingQueue[0].sessionId] ? 'Admitting...' : `Admit ${waitingQueue[0].name || 'Candidate'}`}</span>
+            </button>
           )}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs font-semibold text-zinc-300">
             <Users className="w-3.5 h-3.5 text-[#0071e3]" />
