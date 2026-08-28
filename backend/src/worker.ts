@@ -3794,6 +3794,25 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
       roomState.isEnded = false;
     }
 
+    // Resolve real candidate full name if not supplied or generic
+    let resolvedName = name;
+    if (!resolvedName || resolvedName === 'Candidate' || resolvedName === 'Interviewer' || resolvedName === 'Participant') {
+      try {
+        const interviewRow: any = await c.env.DB.prepare(`
+          SELECT jsp.fullName FROM "Interview" i
+          JOIN "Application" a ON a.id = i.applicationId
+          JOIN "JobSeekerProfile" jsp ON jsp.id = a.jobSeekerProfileId
+          WHERE i.id = ?
+        `).bind(roomName).first();
+        if (interviewRow?.fullName) {
+          resolvedName = role === 'candidate' ? interviewRow.fullName : 'Interviewer';
+        }
+      } catch {}
+    }
+    if (!resolvedName) {
+      resolvedName = role === 'company' ? 'Interviewer' : 'Candidate';
+    }
+
     // Prune stale participants (>15s) and replace any prior session of same role
     let participants = (roomState.participants || []).filter(
       (p: any) => p.sessionId !== sessionId && p.role !== role && (now - p.updatedAt < 15000)
@@ -3803,15 +3822,39 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
 
     // ── CANDIDATE ADMISSION CHECK ──
     if (role === 'candidate') {
-      const isAdmitted = Array.isArray(roomState.admittedCandidates) && roomState.admittedCandidates.includes(sessionId);
+      if (hasHost) {
+        // HOST IS PRESENT: Auto-admit immediately!
+        if (!roomState.admittedCandidates.includes(sessionId)) {
+          roomState.admittedCandidates.push(sessionId);
+        }
+        participants.push({
+          sessionId,
+          participantId: participantId || crypto.randomUUID(),
+          name: resolvedName,
+          role: 'candidate',
+          tracks: tracks || ['audio', 'video'],
+          joinedAt: now,
+          updatedAt: now,
+        });
 
-      if (!isAdmitted) {
-        // Add to waiting queue for host review (clean up stale queue entries)
+        roomState.participants = participants;
+        roomState.waitingQueue = (roomState.waitingQueue || []).filter((w: any) => w.sessionId !== sessionId);
+
+        await saveCallsRoomState(c, roomName, roomState);
+        return c.json({
+          success: true,
+          status: 'admitted',
+          isAdmitted: true,
+          isHostPresent: true,
+          participants,
+        });
+      } else {
+        // HOST IS NOT IN ROOM YET: Wait in lobby until host arrives
         roomState.waitingQueue = (roomState.waitingQueue || []).filter((w: any) => w.sessionId !== sessionId && (now - w.requestedAt < 15000));
         roomState.waitingQueue.push({
           sessionId,
           participantId: participantId || crypto.randomUUID(),
-          name: name && name !== 'Participant' ? name : 'Candidate',
+          name: resolvedName,
           role: 'candidate',
           requestedAt: now,
         });
@@ -3819,27 +3862,45 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
         await saveCallsRoomState(c, roomName, roomState);
         return c.json({
           success: true,
-          status: 'waiting_admission',
+          status: 'waiting_host',
           isAdmitted: false,
-          isHostPresent: hasHost,
-          message: hasHost ? 'Waiting for the interviewer to admit you.' : 'Waiting for the interviewer to start the session.',
+          isHostPresent: false,
+          message: 'Waiting for the interviewer to join. You will be connected automatically when the host enters.',
         });
       }
     }
 
-    // Admitted or Host — add to active stream participants
+    // Host joins
     participants.push({
       sessionId,
       participantId: participantId || crypto.randomUUID(),
-      name: name || (role === 'company' ? 'Interviewer' : 'Candidate'),
-      role: role || 'candidate',
+      name: resolvedName,
+      role: 'company',
       tracks: tracks || ['audio', 'video'],
       joinedAt: now,
       updatedAt: now,
     });
 
+    // When host joins, auto-admit any waiting candidates
+    (roomState.waitingQueue || []).forEach((w: any) => {
+      if (!roomState.admittedCandidates.includes(w.sessionId)) {
+        roomState.admittedCandidates.push(w.sessionId);
+      }
+      if (!participants.some((p: any) => p.sessionId === w.sessionId)) {
+        participants.push({
+          sessionId: w.sessionId,
+          participantId: w.participantId || w.sessionId,
+          name: w.name || 'Candidate',
+          role: 'candidate',
+          tracks: ['audio', 'video'],
+          joinedAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+
     roomState.participants = participants;
-    roomState.waitingQueue = (roomState.waitingQueue || []).filter((w: any) => w.sessionId !== sessionId);
+    roomState.waitingQueue = [];
 
     await saveCallsRoomState(c, roomName, roomState);
     return c.json({ success: true, status: 'admitted', isAdmitted: true, isHostPresent: true, participants });
@@ -3946,23 +4007,37 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
     if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
     if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
 
-    // Clean up stale participants (>15s since last heartbeat)
-    roomState.participants = (roomState.participants || []).filter((p: any) =>
-      p.sessionId === sessionId || (now - p.updatedAt < 15000)
-    );
+    // Resolve real candidate full name if not supplied or generic
+    let resolvedName = name;
+    if (!resolvedName || resolvedName === 'Candidate' || resolvedName === 'Interviewer' || resolvedName === 'Participant') {
+      try {
+        const interviewRow: any = await c.env.DB.prepare(`
+          SELECT jsp.fullName FROM "Interview" i
+          JOIN "Application" a ON a.id = i.applicationId
+          JOIN "JobSeekerProfile" jsp ON jsp.id = a.jobSeekerProfileId
+          WHERE i.id = ?
+        `).bind(roomName).first();
+        if (interviewRow?.fullName) {
+          resolvedName = role === 'candidate' ? interviewRow.fullName : 'Interviewer';
+        }
+      } catch {}
+    }
+    if (!resolvedName) {
+      resolvedName = role === 'company' ? 'Interviewer' : 'Candidate';
+    }
 
     // Keep active participants updated
     const existingIdx = roomState.participants.findIndex((p: any) => p.sessionId === sessionId);
     if (existingIdx >= 0) {
       roomState.participants[existingIdx].updatedAt = now;
-      if (name) roomState.participants[existingIdx].name = name;
+      if (resolvedName) roomState.participants[existingIdx].name = resolvedName;
     } else if (role === 'company') {
       // Remove any prior host session
       roomState.participants = roomState.participants.filter((p: any) => p.role !== 'company');
       roomState.participants.push({
         sessionId,
         participantId: sessionId,
-        name: name || 'Interviewer',
+        name: resolvedName,
         role: 'company',
         tracks: ['audio', 'video'],
         joinedAt: now,
@@ -3970,13 +4045,22 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
       });
     }
 
-    // If admitted candidate sends heartbeat, replace any prior candidate session
-    if (role === 'candidate' && roomState.admittedCandidates.includes(sessionId)) {
+    const isHostPresent = roomState.participants.some((p: any) => p.role === 'company') || role === 'company';
+
+    // Auto-admit candidates if host is present:
+    if (isHostPresent) {
+      if (!roomState.admittedCandidates.includes(sessionId) && role === 'candidate') {
+        roomState.admittedCandidates.push(sessionId);
+      }
+    }
+
+    // If candidate sends heartbeat and host is present, place directly in participants
+    if (role === 'candidate' && isHostPresent) {
       roomState.participants = roomState.participants.filter((p: any) => p.role !== 'candidate');
       roomState.participants.push({
         sessionId,
         participantId: sessionId,
-        name: name || 'Candidate',
+        name: resolvedName,
         role: 'candidate',
         tracks: ['audio', 'video'],
         joinedAt: now,
@@ -3985,20 +4069,18 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
       roomState.waitingQueue = (roomState.waitingQueue || []).filter((w: any) => w.sessionId !== sessionId);
     }
 
-    // If unadmitted candidate, ensure not in active participants and ensure registered in waitingQueue
-    if (role === 'candidate' && !roomState.admittedCandidates.includes(sessionId)) {
+    // If unadmitted candidate (host not in room yet), keep in waitingQueue
+    if (role === 'candidate' && !isHostPresent) {
       roomState.participants = roomState.participants.filter((p: any) => p.sessionId !== sessionId);
       const existingQueueIdx = roomState.waitingQueue.findIndex((w: any) => w.sessionId === sessionId);
       if (existingQueueIdx >= 0) {
         roomState.waitingQueue[existingQueueIdx].requestedAt = now;
-        if (name && name !== 'Candidate') {
-          roomState.waitingQueue[existingQueueIdx].name = name;
-        }
+        roomState.waitingQueue[existingQueueIdx].name = resolvedName;
       } else {
         roomState.waitingQueue.push({
           sessionId,
           participantId: sessionId,
-          name: name || 'Candidate',
+          name: resolvedName,
           role: 'candidate',
           requestedAt: now,
         });
@@ -4007,10 +4089,9 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
 
     await saveCallsRoomState(c, roomName, roomState);
 
-    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 15000) && (p.role === 'company' || roomState.admittedCandidates.includes(p.sessionId)));
+    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 15000));
     const activeWaiting = (roomState.waitingQueue || []).filter((w: any) => (now - w.requestedAt < 15000));
-    const isHostPresent = activeParticipants.some((p: any) => p.role === 'company');
-    const isAdmitted = roomState.admittedCandidates.includes(sessionId);
+    const isAdmitted = isHostPresent || roomState.admittedCandidates.includes(sessionId);
     const isDeclined = roomState.declinedCandidates.includes(sessionId);
 
     return c.json({

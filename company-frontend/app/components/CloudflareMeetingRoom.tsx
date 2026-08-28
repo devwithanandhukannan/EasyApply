@@ -440,65 +440,6 @@ export default function CloudflareMeetingRoom({
 
   return (
     <div className="h-screen w-screen bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased relative">
-      {/* ─── FLOATING ADMISSION NOTIFICATION BANNER ──────────────────── */}
-      {waitingQueue.length > 0 && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[999] w-full max-w-lg px-4 animate-in slide-in-from-top-4 duration-300 pointer-events-auto">
-          <div className="bg-zinc-900/98 border-2 border-emerald-500/50 rounded-2xl p-4 shadow-2xl shadow-emerald-950/50 backdrop-blur-2xl space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Bell className="w-4 h-4 animate-bounce" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white">Candidate Requesting Entry</h4>
-                  <p className="text-[10px] text-zinc-400">Waiting for your permission to join</p>
-                </div>
-              </div>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold">
-                {waitingQueue.length} Waiting
-              </span>
-            </div>
-
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {waitingQueue.map((cand) => (
-                <div
-                  key={cand.sessionId}
-                  className="flex items-center justify-between p-2.5 rounded-xl bg-black/60 border border-white/[0.08]"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 border border-white/[0.15] flex items-center justify-center text-xs font-bold text-white shadow">
-                      {cand.name.charAt(0)}
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-white block">{cand.name}</span>
-                      <span className="text-[9px] text-emerald-400">Ready in lobby</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleAdmitCandidate(cand.sessionId)}
-                      disabled={admittingMap[cand.sessionId]}
-                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
-                    >
-                      <UserCheck className="w-3.5 h-3.5" />
-                      <span>{admittingMap[cand.sessionId] ? 'Admitting...' : 'Admit Candidate'}</span>
-                    </button>
-                    <button
-                      onClick={() => handleDeclineCandidate(cand.sessionId)}
-                      className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white text-xs transition-colors cursor-pointer"
-                      title="Decline entry"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ─── TOP HEADER ──────────────────────────────────────────────── */}
       <div className="h-14 px-6 bg-black/60 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between z-20">
         <div className="flex items-center gap-3">
@@ -517,16 +458,6 @@ export default function CloudflareMeetingRoom({
         </div>
 
         <div className="flex items-center gap-2">
-          {waitingQueue.length > 0 && (
-            <button
-              onClick={() => handleAdmitCandidate(waitingQueue[0].sessionId)}
-              disabled={admittingMap[waitingQueue[0].sessionId]}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/30 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>{admittingMap[waitingQueue[0].sessionId] ? 'Admitting...' : `Admit ${waitingQueue[0].name || 'Candidate'}`}</span>
-            </button>
-          )}
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/[0.08] text-xs font-semibold text-zinc-300">
             <Users className="w-3.5 h-3.5 text-[#0071e3]" />
             <span>{remoteParticipants.length + 1} In Room</span>
@@ -569,27 +500,15 @@ export default function CloudflareMeetingRoom({
         {/* Remote Candidate Tile */}
         {remoteParticipants.length === 0 ? (
           <div className="rounded-3xl border-2 border-dashed border-white/[0.08] flex flex-col items-center justify-center text-center p-8 bg-zinc-900/20">
-            <div className={`w-16 h-16 rounded-3xl ${waitingQueue.length > 0 ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400' : 'bg-white/[0.03] border border-white/[0.06] text-zinc-600'} flex items-center justify-center mb-4`}>
+            <div className="w-16 h-16 rounded-3xl bg-white/[0.03] border border-white/[0.06] text-zinc-500 flex items-center justify-center mb-4">
               <Users className="w-8 h-8 animate-pulse" />
             </div>
             <h3 className="text-sm font-bold text-white mb-1">
-              {waitingQueue.length > 0 ? `${waitingQueue[0].name || 'Candidate'} is in the Waiting Lobby` : 'Waiting for candidate to join...'}
+              Waiting for candidate to join...
             </h3>
-            <p className="text-xs text-zinc-400 max-w-sm mb-4">
-              {waitingQueue.length > 0
-                ? 'Candidate is ready. Click Admit below to permit entry and begin the live interview.'
-                : 'Candidates will appear in the lobby for your admission before video connects.'}
+            <p className="text-xs text-zinc-400 max-w-sm">
+              The candidate will automatically connect into this room with live video upon entering.
             </p>
-            {waitingQueue.length > 0 && (
-              <button
-                onClick={() => handleAdmitCandidate(waitingQueue[0].sessionId)}
-                disabled={admittingMap[waitingQueue[0].sessionId]}
-                className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition-all cursor-pointer hover:scale-105 active:scale-95 disabled:opacity-50"
-              >
-                <UserCheck className="w-4 h-4" />
-                <span>{admittingMap[waitingQueue[0].sessionId] ? 'Admitting...' : `Admit ${waitingQueue[0].name || 'Candidate'}`}</span>
-              </button>
-            )}
           </div>
         ) : (
           remoteParticipants.map((p) => {
