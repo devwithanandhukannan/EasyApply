@@ -3800,8 +3800,11 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     // Reset ended state if host rejoins
     if (role === 'company') roomState.isEnded = false;
 
-    // Remove any prior entry for this session, then add fresh
-    roomState.participants = roomState.participants.filter((p: any) => p.sessionId !== sessionId);
+    // Prune stale participants (>10s) AND remove any existing session of the same role (prevents refresh duplicates)
+    roomState.participants = roomState.participants.filter(
+      (p: any) => p.sessionId !== sessionId && p.role !== role && (now - p.updatedAt < 10000)
+    );
+
     roomState.participants.push({
       sessionId,
       participantId: participantId || sessionId,
@@ -3814,16 +3817,11 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
 
     await saveCallsRoomState(c, roomName, roomState);
 
-    const activeParticipants = roomState.participants.filter(
-      (p: any) => (now - p.updatedAt < 15000) || (now - p.joinedAt < 60000)
-    );
-
-    return c.json({ success: true, participants: activeParticipants });
+    return c.json({ success: true, participants: roomState.participants });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
 });
-
 
 // Host Admits a Candidate
 app.post('/api/calls/rooms/:roomName/admit', async (c) => {
@@ -3935,13 +3933,20 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
     }
     if (!resolvedName) resolvedName = role === 'company' ? 'Interviewer' : 'Candidate';
 
-    // Update or re-add this participant
-    const existingIdx = roomState.participants.findIndex((p: any) => p.sessionId === sessionId);
+    // Filter stale participants (>10s) except current session
+    let active = roomState.participants.filter(
+      (p: any) => p.sessionId === sessionId || (now - p.updatedAt < 10000)
+    );
+
+    // Enforce 1 session per role: replace older session of same role with current
+    active = active.filter((p: any) => p.sessionId === sessionId || p.role !== role);
+
+    const existingIdx = active.findIndex((p: any) => p.sessionId === sessionId);
     if (existingIdx >= 0) {
-      roomState.participants[existingIdx].updatedAt = now;
-      if (resolvedName) roomState.participants[existingIdx].name = resolvedName;
+      active[existingIdx].updatedAt = now;
+      if (resolvedName) active[existingIdx].name = resolvedName;
     } else {
-      roomState.participants.push({
+      active.push({
         sessionId,
         participantId: sessionId,
         name: resolvedName,
@@ -3952,13 +3957,10 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
       });
     }
 
+    roomState.participants = active;
     await saveCallsRoomState(c, roomName, roomState);
 
-    const activeParticipants = roomState.participants.filter(
-      (p: any) => (now - p.updatedAt < 15000) || (now - p.joinedAt < 60000)
-    );
-
-    return c.json({ success: true, isEnded: false, participants: activeParticipants });
+    return c.json({ success: true, isEnded: false, participants: active });
   } catch {
     return c.json({ success: true, isEnded: false, participants: [] });
   }
@@ -3978,10 +3980,12 @@ app.post('/api/calls/rooms/:roomName/end', async (c) => {
 app.post('/api/calls/rooms/:roomName/leave', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId } = await c.req.json().catch(() => ({}));
+    const { sessionId, role } = await c.req.json().catch(() => ({}));
     let roomState = await getCallsRoomState(c, roomName);
-    if (roomState && sessionId) {
-      roomState.participants = (roomState.participants || []).filter((p: any) => p.sessionId !== sessionId);
+    if (roomState) {
+      roomState.participants = (roomState.participants || []).filter(
+        (p: any) => (sessionId ? p.sessionId !== sessionId : true) && (role ? p.role !== role : true)
+      );
       await saveCallsRoomState(c, roomName, roomState);
     }
     return c.json({ success: true });

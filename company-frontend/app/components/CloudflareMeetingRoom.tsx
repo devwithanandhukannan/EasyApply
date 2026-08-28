@@ -4,8 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff,
-  ScreenShare, StopCircle, Users, DoorOpen, ShieldCheck,
-  UserCheck, UserX, Bell, Check, X
+  ScreenShare, StopCircle, Users, CheckCircle, DoorOpen
 } from 'lucide-react';
 import api from '@/app/lib/axios';
 
@@ -18,18 +17,16 @@ interface CloudflareMeetingRoomProps {
 
 interface RemoteParticipant {
   sessionId: string;
-  participantId: string;
   name: string;
   role: string;
-  stream?: MediaStream;
 }
 
-interface WaitingCandidate {
-  sessionId: string;
-  name: string;
-  role: string;
-  requestedAt: number;
-}
+const STUN: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:stun.l.google.com:19302' },
+  ],
+};
 
 export default function CloudflareMeetingRoom({
   roomName,
@@ -39,398 +36,290 @@ export default function CloudflareMeetingRoom({
 }: CloudflareMeetingRoomProps) {
   const router = useRouter();
 
-  // Media & Devices State
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isVideoMuted, setIsVideoMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-
-  // Connection, Room & Waiting Queue State
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState<string>('Initializing Cloudflare WebRTC...');
   const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
-  const [waitingQueue, setWaitingQueue] = useState<WaitingCandidate[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
-  const [admittingMap, setAdmittingMap] = useState<Record<string, boolean>>({});
 
-  // Refs for WebRTC & Hardware Cleanup
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const publishPcRef = useRef<RTCPeerConnection | null>(null);
+  const hasPublishedRef = useRef(false);
   const subPcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const heartbeatTimerRef = useRef<any>(null);
-  const screenTrackRef = useRef<MediaStreamTrack | null>(null);
-  const localStreamRef = useRef<MediaStream | null>(null);
   const isCleaningUpRef = useRef(false);
 
-  const STUN_SERVERS: RTCConfiguration = {
-    iceServers: [
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      { urls: 'stun:stun.l.google.com:19302' },
-    ],
-  };
+  // ── 1. ACQUIRE CAMERA + MIC ─────────────────────────────────────
+  const releaseAllMedia = useCallback(() => {
+    localStreamRef.current?.getTracks().forEach((t) => { t.stop(); t.enabled = false; });
+    localStreamRef.current = null;
+    screenTrackRef.current?.stop();
+    screenTrackRef.current = null;
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+  }, []);
 
-  const releaseAllMediaHardware = () => {
-    try {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => {
-          track.stop();
-          track.enabled = false;
-        });
-        localStreamRef.current = null;
-      }
-      if (localStream) {
-        localStream.getTracks().forEach((track) => {
-          track.stop();
-          track.enabled = false;
-        });
-      }
-      if (screenTrackRef.current) {
-        screenTrackRef.current.stop();
-        screenTrackRef.current.enabled = false;
-        screenTrackRef.current = null;
-      }
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = null;
-      }
-    } catch (e) {
-      console.error('Error releasing media hardware:', e);
-    }
-  };
-
-  // ─── STEP 1: INITIALIZE LOCAL MEDIA & CLOUDFLARE SESSION ─────
-  const initializeSession = useCallback(async () => {
-    try {
-      setConnectionStatus('Acquiring camera & microphone...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-      });
-
+  useEffect(() => {
+    let active = true;
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+    }).then((stream) => {
+      if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
       localStreamRef.current = stream;
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
       }
+    }).catch((err) => console.warn('Camera/mic error:', err));
+    return () => { active = false; releaseAllMedia(); };
+  }, [releaseAllMedia]);
 
-      setConnectionStatus('Connecting to Cloudflare WebRTC Edge...');
-      const sessionRes = await api.post('/calls/session/new');
-      if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
-        throw new Error(sessionRes.data?.message || 'Failed to obtain Calls session ID');
-      }
+  // Keep local video attached after camera re-enables
+  useEffect(() => {
+    const stream = localStreamRef.current || localStream;
+    if (stream && localVideoRef.current && !isVideoMuted) {
+      if (localVideoRef.current.srcObject !== stream) localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, isVideoMuted]);
 
-      const newSessionId = sessionRes.data.sessionId;
-      setSessionId(newSessionId);
+  // ── 2. PUBLISH MY TRACKS ────────────────────────────────────────
+  const publishTracks = useCallback(async (sid: string) => {
+    if (hasPublishedRef.current || isCleaningUpRef.current) return;
+    const stream = localStreamRef.current || localStream;
+    if (!stream) return;
+    hasPublishedRef.current = true;
 
-      const pubPc = new RTCPeerConnection(STUN_SERVERS);
-      publishPcRef.current = pubPc;
+    try {
+      const pc = new RTCPeerConnection(STUN);
+      publishPcRef.current = pc;
 
-      const tracksToPublish: any[] = [];
       stream.getTracks().forEach((track) => {
-        const sender = pubPc.addTrack(track, stream);
-        const transceiver = pubPc.getTransceivers().find(t => t.sender === sender);
-        const mid = transceiver ? transceiver.mid || String(tracksToPublish.length) : String(tracksToPublish.length);
-        tracksToPublish.push({
-          location: 'local',
-          mid: mid,
-          trackName: track.kind,
-        });
+        pc.addTrack(track, stream);
       });
 
-      const offer = await pubPc.createOffer();
-      await pubPc.setLocalDescription(offer);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-      await new Promise<void>((resolve) => {
-        if (pubPc.iceGatheringState === 'complete') resolve();
-        else {
-          const checkState = () => {
-            if (pubPc.iceGatheringState === 'complete') {
-              pubPc.removeEventListener('icegatheringstatechange', checkState);
-              resolve();
-            }
-          };
-          pubPc.addEventListener('icegatheringstatechange', checkState);
-          setTimeout(resolve, 800);
-        }
+      await new Promise<void>((res) => {
+        if (pc.iceGatheringState === 'complete') return res();
+        const cb = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', cb); res(); } };
+        pc.addEventListener('icegatheringstatechange', cb);
+        setTimeout(res, 800);
       });
 
-      const publishRes = await api.post(`/calls/session/${newSessionId}/tracks/new`, {
-        sessionDescription: {
-          type: pubPc.localDescription?.type || 'offer',
-          sdp: pubPc.localDescription?.sdp,
-        },
+      const tracksToPublish = pc.getTransceivers().map((t, idx) => ({
+        location: 'local',
+        mid: t.mid || String(idx),
+        trackName: t.sender.track?.kind || (idx === 0 ? 'audio' : 'video'),
+      }));
+
+      const r = await api.post(`/calls/session/${sid}/tracks/new`, {
+        sessionDescription: { type: pc.localDescription?.type || 'offer', sdp: pc.localDescription?.sdp },
         tracks: tracksToPublish,
       });
 
-      if (!publishRes.data?.success || !publishRes.data?.sessionDescription) {
-        throw new Error(publishRes.data?.message || 'Failed to publish media tracks to Cloudflare');
+      if (r.data?.sessionDescription) {
+        await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
       }
-
-      await pubPc.setRemoteDescription(new RTCSessionDescription(publishRes.data.sessionDescription));
-
-      // Register in Room as Host
-      await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
-        sessionId: newSessionId,
-        name: userName,
-        role: role,
-        tracks: ['audio', 'video'],
-      });
-
-      setConnecting(false);
-      setConnectionStatus('Host Ready • Waiting for Candidate');
-    } catch (err: any) {
-      console.error('❌ Cloudflare Calls Init Error:', err);
-      setConnectionStatus(`Connection Error: ${err.message || 'Check camera permissions'}`);
-      setConnecting(false);
+    } catch (err) {
+      console.error('Host publish error:', err);
+      hasPublishedRef.current = false;
+      publishPcRef.current?.close();
+      publishPcRef.current = null;
     }
-  }, [roomName, role, userName]);
+  }, [localStream]);
 
-  // ─── STEP 2: SUBSCRIBE TO REMOTE PARTICIPANT ─────────────────
-  const subscribeToParticipant = useCallback(async (remoteSessionId: string, currentSessionId: string) => {
-    if (subPcsRef.current[remoteSessionId] || isCleaningUpRef.current) return;
-
+  // ── 3. SUBSCRIBE TO A REMOTE PARTICIPANT ───────────────────────
+  const subscribeTo = useCallback(async (remoteSid: string, mySid: string) => {
+    if (subPcsRef.current[remoteSid] || isCleaningUpRef.current) return;
     try {
-      const subPc = new RTCPeerConnection(STUN_SERVERS);
-      subPcsRef.current[remoteSessionId] = subPc;
+      const pc = new RTCPeerConnection(STUN);
+      subPcsRef.current[remoteSid] = pc;
 
-      const remoteStream = new MediaStream();
-      subPc.ontrack = (event) => {
-        event.streams[0]?.getTracks().forEach((track) => remoteStream.addTrack(track));
-        if (!event.streams[0]) remoteStream.addTrack(event.track);
-
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [remoteSessionId]: remoteStream,
-        }));
+      pc.ontrack = (e) => {
+        const stream = e.streams[0] || new MediaStream([e.track]);
+        setRemoteStreams((prev) => ({ ...prev, [remoteSid]: stream }));
       };
 
-      const audioTransceiver = subPc.addTransceiver('audio', { direction: 'recvonly' });
-      const videoTransceiver = subPc.addTransceiver('video', { direction: 'recvonly' });
+      const audio = pc.addTransceiver('audio', { direction: 'recvonly' });
+      const video = pc.addTransceiver('video', { direction: 'recvonly' });
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-      const offer = await subPc.createOffer();
-      await subPc.setLocalDescription(offer);
-
-      await new Promise<void>((resolve) => {
-        if (subPc.iceGatheringState === 'complete') resolve();
-        else {
-          const checkState = () => {
-            if (subPc.iceGatheringState === 'complete') {
-              subPc.removeEventListener('icegatheringstatechange', checkState);
-              resolve();
-            }
-          };
-          subPc.addEventListener('icegatheringstatechange', checkState);
-          setTimeout(resolve, 800);
-        }
+      await new Promise<void>((res) => {
+        if (pc.iceGatheringState === 'complete') return res();
+        const cb = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', cb); res(); } };
+        pc.addEventListener('icegatheringstatechange', cb);
+        setTimeout(res, 800);
       });
 
-      const subRes = await api.post(`/calls/session/${currentSessionId}/tracks/new`, {
-        sessionDescription: {
-          type: subPc.localDescription?.type || 'offer',
-          sdp: subPc.localDescription?.sdp,
-        },
+      const r = await api.post(`/calls/session/${mySid}/tracks/new`, {
+        sessionDescription: { type: pc.localDescription?.type || 'offer', sdp: pc.localDescription?.sdp },
         tracks: [
-          { location: 'remote', sessionId: remoteSessionId, trackName: 'audio', mid: audioTransceiver.mid || '0' },
-          { location: 'remote', sessionId: remoteSessionId, trackName: 'video', mid: videoTransceiver.mid || '1' },
+          { location: 'remote', sessionId: remoteSid, trackName: 'audio', mid: audio.mid || '0' },
+          { location: 'remote', sessionId: remoteSid, trackName: 'video', mid: video.mid || '1' },
         ],
       });
 
-      if (subRes.data?.sessionDescription) {
-        await subPc.setRemoteDescription(new RTCSessionDescription(subRes.data.sessionDescription));
+      if (r.data?.sessionDescription) {
+        await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
       }
     } catch (err) {
-      console.error(`❌ Failed to subscribe to ${remoteSessionId}:`, err);
-      if (subPcsRef.current[remoteSessionId]) {
-        subPcsRef.current[remoteSessionId].close();
-        delete subPcsRef.current[remoteSessionId];
+      console.error('Host subscribe error:', err);
+      subPcsRef.current[remoteSid]?.close();
+      delete subPcsRef.current[remoteSid];
+      if (!isCleaningUpRef.current) {
+        setTimeout(() => { const s = sessionIdRef.current; if (s) subscribeTo(remoteSid, s); }, 2000);
       }
     }
   }, []);
 
-  // ─── STEP 3: POLL ROOM PARTICIPANTS & WAITING QUEUE ──────────
+  // ── 4. JOIN + HEARTBEAT LOOP ────────────────────────────────────
   useEffect(() => {
-    if (!sessionId) return;
+    let alive = true;
+    let timer: any;
 
-    const pollParticipants = async () => {
-      if (isCleaningUpRef.current) return;
+    const init = async () => {
       try {
-        const res = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/heartbeat`, {
-          sessionId,
-          role,
+        const sessionRes = await api.post('/calls/session/new');
+        if (!sessionRes.data?.sessionId) throw new Error('No sessionId');
+        const sid = sessionRes.data.sessionId;
+        sessionIdRef.current = sid;
+
+        await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
+          sessionId: sid, name: userName, role: 'company', tracks: ['audio', 'video'],
         });
 
-        if (res.data?.success) {
-          // Update active participants
-          if (Array.isArray(res.data?.participants)) {
-            const others: RemoteParticipant[] = res.data.participants.filter(
-              (p: any) => p.sessionId !== sessionId
-            );
+        publishTracks(sid);
+
+        const beat = async () => {
+          if (!alive || isCleaningUpRef.current) return;
+          const curSid = sessionIdRef.current;
+          if (!curSid) return;
+          try {
+            const r = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/heartbeat`, {
+              sessionId: curSid, role: 'company', name: userName,
+            });
+            if (!alive) return;
+
+            publishTracks(curSid);
+
+            const others: RemoteParticipant[] = (r.data?.participants || []).filter((p: any) => p.sessionId !== curSid);
             setRemoteParticipants(others);
 
             others.forEach((p) => {
-              if (!subPcsRef.current[p.sessionId]) {
-                subscribeToParticipant(p.sessionId, sessionId);
-              }
+              if (!subPcsRef.current[p.sessionId]) subscribeTo(p.sessionId, curSid);
             });
 
-            const otherIds = new Set(others.map((p) => p.sessionId));
-            Object.keys(subPcsRef.current).forEach((sid) => {
-              if (!otherIds.has(sid)) {
-                subPcsRef.current[sid]?.close();
-                delete subPcsRef.current[sid];
-                setRemoteStreams((prev) => {
-                  const next = { ...prev };
-                  delete next[sid];
-                  return next;
-                });
+            const activeIds = new Set(others.map((p) => p.sessionId));
+            Object.keys(subPcsRef.current).forEach((id) => {
+              if (!activeIds.has(id)) {
+                subPcsRef.current[id]?.close();
+                delete subPcsRef.current[id];
+                setRemoteStreams((prev) => { const n = { ...prev }; delete n[id]; return n; });
               }
             });
-          }
+          } catch {}
+        };
 
-          // Update waiting queue for host admission
-          if (Array.isArray(res.data?.waitingQueue)) {
-            setWaitingQueue(res.data.waitingQueue);
-          }
-        }
+        beat();
+        timer = setInterval(beat, 2000);
+        heartbeatTimerRef.current = timer;
       } catch (err) {
-        console.error('Participant poll error:', err);
+        console.error('Host init error:', err);
       }
     };
 
-    pollParticipants();
-    heartbeatTimerRef.current = setInterval(pollParticipants, 2500);
+    init();
+
+    const handleBeforeUnload = () => {
+      const sid = sessionIdRef.current;
+      if (sid) {
+        navigator.sendBeacon(
+          `${process.env.NEXT_PUBLIC_API_URL || ''}/api/calls/rooms/${encodeURIComponent(roomName)}/leave`,
+          JSON.stringify({ sessionId: sid, role: 'company' })
+        );
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [sessionId, roomName, role, subscribeToParticipant]);
+  }, [roomName, userName, publishTracks, subscribeTo, releaseAllMedia]);
 
-  // Mount and Clean up
+  // Cleanup on unmount
   useEffect(() => {
-    initializeSession();
-
     return () => {
       isCleaningUpRef.current = true;
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
-
-      releaseAllMediaHardware();
-
-      if (publishPcRef.current) {
-        publishPcRef.current.close();
-      }
+      releaseAllMedia();
+      publishPcRef.current?.close();
       Object.values(subPcsRef.current).forEach((pc) => pc.close());
-
-      if (sessionId) {
-        api.post(`/calls/rooms/${encodeURIComponent(roomName)}/leave`, { sessionId, role }).catch(() => {});
-      }
+      const sid = sessionIdRef.current;
+      if (sid) api.post(`/calls/rooms/${encodeURIComponent(roomName)}/leave`, { sessionId: sid, role: 'company' }).catch(() => {});
     };
-  }, [initializeSession]);
+  }, [roomName, releaseAllMedia]);
 
-  // ─── HOST ACTIONS: ADMIT / DECLINE CANDIDATE ─────────────────
-  const handleAdmitCandidate = async (candidateSessionId: string) => {
-    try {
-      setAdmittingMap((prev) => ({ ...prev, [candidateSessionId]: true }));
-      const res = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/admit`, {
-        sessionId: candidateSessionId,
-      });
-
-      if (res.data?.success && Array.isArray(res.data?.participants)) {
-        const others = res.data.participants.filter((p: any) => p.sessionId !== sessionId);
-        setRemoteParticipants(others);
-        others.forEach((p: any) => {
-          if (!subPcsRef.current[p.sessionId] && sessionId) {
-            subscribeToParticipant(p.sessionId, sessionId);
-          }
-        });
-      }
-
-      setWaitingQueue((prev) => prev.filter((w) => w.sessionId !== candidateSessionId));
-    } catch (e) {
-      console.error('Failed to admit candidate:', e);
-    } finally {
-      setAdmittingMap((prev) => ({ ...prev, [candidateSessionId]: false }));
-    }
-  };
-
-  const handleDeclineCandidate = async (candidateSessionId: string) => {
-    try {
-      await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/decline`, {
-        sessionId: candidateSessionId,
-      });
-      setWaitingQueue((prev) => prev.filter((w) => w.sessionId !== candidateSessionId));
-    } catch (e) {
-      console.error('Failed to decline candidate:', e);
-    }
-  };
-
-  // ─── MEDIA CONTROLS ──────────────────────────────────────────
+  // ── MEDIA CONTROLS ──────────────────────────────────────────────
   const toggleAudio = () => {
-    if (!localStream) return;
-    const audioTrack = localStream.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      setIsAudioMuted(!audioTrack.enabled);
-    }
+    const track = (localStreamRef.current || localStream)?.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setIsAudioMuted(!track.enabled);
   };
 
   const toggleVideo = () => {
-    if (!localStream) return;
-    const videoTrack = localStream.getVideoTracks()[0];
-    if (videoTrack) {
-      videoTrack.enabled = !videoTrack.enabled;
-      setIsVideoMuted(!videoTrack.enabled);
+    const stream = localStreamRef.current || localStream;
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setIsVideoMuted(!track.enabled);
+    if (track.enabled && localVideoRef.current && stream) {
+      localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
     }
   };
 
   const toggleScreenShare = async () => {
-    if (!publishPcRef.current || !localStream) return;
-
+    const pc = publishPcRef.current;
+    const stream = localStreamRef.current || localStream;
+    if (!pc || !stream) return;
     if (isScreenSharing) {
-      if (screenTrackRef.current) {
-        screenTrackRef.current.stop();
-        screenTrackRef.current = null;
-      }
-      const cameraTrack = localStream.getVideoTracks()[0];
-      const videoSender = publishPcRef.current.getSenders().find((s) => s.track?.kind === 'video');
-      if (videoSender && cameraTrack) {
-        await videoSender.replaceTrack(cameraTrack);
-      }
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream;
-      }
+      screenTrackRef.current?.stop();
+      screenTrackRef.current = null;
+      const camTrack = stream.getVideoTracks()[0];
+      const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender && camTrack) await sender.replaceTrack(camTrack);
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
       setIsScreenSharing(false);
     } else {
       try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        const screenTrack = screenStream.getVideoTracks()[0];
-        screenTrackRef.current = screenTrack;
-
-        const videoSender = publishPcRef.current.getSenders().find((s) => s.track?.kind === 'video');
-        if (videoSender) {
-          await videoSender.replaceTrack(screenTrack);
-        }
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = screenStream;
-        }
-
-        screenTrack.onended = () => {
-          toggleScreenShare();
-        };
-
+        const screen = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const t = screen.getVideoTracks()[0];
+        screenTrackRef.current = t;
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(t);
+        if (localVideoRef.current) localVideoRef.current.srcObject = screen;
+        t.onended = () => toggleScreenShare();
         setIsScreenSharing(true);
-      } catch (err) {
-        console.error('Screen sharing canceled or failed:', err);
-      }
+      } catch {}
     }
   };
 
   const handleEndInterview = async () => {
-    releaseAllMediaHardware();
+    releaseAllMedia();
     try {
       await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/end`);
     } catch {}
-
     if (onDisconnected) {
       onDisconnected();
     } else {
@@ -438,10 +327,11 @@ export default function CloudflareMeetingRoom({
     }
   };
 
+  // ── MAIN VIDEO UI ───────────────────────────────────────────────
   return (
     <div className="h-screen w-screen bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none font-sans antialiased relative">
       {/* ─── TOP HEADER ──────────────────────────────────────────────── */}
-      <div className="h-14 px-6 bg-black/60 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between z-20">
+      <div className="h-14 px-6 bg-black/60 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between z-20 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#0071e3] to-[#42a5f5] flex items-center justify-center shadow-md shadow-[#0071e3]/20">
             <DoorOpen className="w-4 h-4 text-white" />
@@ -453,7 +343,9 @@ export default function CloudflareMeetingRoom({
                 Host Active • Cloudflare SFU
               </span>
             </h2>
-            <p className="text-[10px] text-[#86868b]">{connectionStatus}</p>
+            <p className="text-[10px] text-[#86868b]">
+              {remoteParticipants.length > 0 ? 'Connected with Candidate' : 'Host Ready • Waiting for Candidate'}
+            </p>
           </div>
         </div>
 
@@ -525,6 +417,7 @@ export default function CloudflareMeetingRoom({
                     ref={(el) => {
                       if (el && el.srcObject !== stream) {
                         el.srcObject = stream;
+                        el.play().catch(() => {});
                       }
                     }}
                     className="w-full h-full object-cover"
@@ -549,7 +442,7 @@ export default function CloudflareMeetingRoom({
       </div>
 
       {/* ─── BOTTOM CONTROLS DOCK ────────────────────────────────────── */}
-      <div className="h-20 px-6 bg-black/80 backdrop-blur-xl border-t border-white/[0.08] flex items-center justify-center gap-3 z-20">
+      <div className="h-20 px-6 bg-black/80 backdrop-blur-xl border-t border-white/[0.08] flex items-center justify-center gap-3 z-20 shrink-0">
         <button
           onClick={toggleAudio}
           className={`p-3.5 rounded-2xl font-semibold transition-all cursor-pointer flex items-center gap-2 text-xs ${

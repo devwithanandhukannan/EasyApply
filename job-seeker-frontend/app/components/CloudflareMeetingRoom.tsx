@@ -47,7 +47,6 @@ export default function CloudflareMeetingRoom({
   const [isSessionEnded, setIsSessionEnded] = useState(false);
   const [remoteParticipants, setRemoteParticipants] = useState<RemoteParticipant[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
-  const [connectedCount, setConnectedCount] = useState(1);
 
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -59,7 +58,6 @@ export default function CloudflareMeetingRoom({
   const heartbeatTimerRef = useRef<any>(null);
   const isCleaningUpRef = useRef(false);
 
-  // Always report as admitted (no lobby)
   useEffect(() => {
     onAdmittedStatusChange?.(true);
   }, [onAdmittedStatusChange]);
@@ -104,22 +102,20 @@ export default function CloudflareMeetingRoom({
   const publishTracks = useCallback(async (sid: string) => {
     if (hasPublishedRef.current || isCleaningUpRef.current) return;
     const stream = localStreamRef.current || localStream;
-    if (!stream) return; // retry next heartbeat tick
+    if (!stream) return;
     hasPublishedRef.current = true;
 
     try {
       const pc = new RTCPeerConnection(STUN);
       publishPcRef.current = pc;
 
-      const tracksToPublish: any[] = [];
       stream.getTracks().forEach((track) => {
-        const sender = pc.addTrack(track, stream);
-        const mid = pc.getTransceivers().find((t) => t.sender === sender)?.mid || String(tracksToPublish.length);
-        tracksToPublish.push({ location: 'local', mid, trackName: track.kind });
+        pc.addTrack(track, stream);
       });
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+
       await new Promise<void>((res) => {
         if (pc.iceGatheringState === 'complete') return res();
         const cb = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', cb); res(); } };
@@ -127,11 +123,20 @@ export default function CloudflareMeetingRoom({
         setTimeout(res, 800);
       });
 
+      const tracksToPublish = pc.getTransceivers().map((t, idx) => ({
+        location: 'local',
+        mid: t.mid || String(idx),
+        trackName: t.sender.track?.kind || (idx === 0 ? 'audio' : 'video'),
+      }));
+
       const r = await api.post(`/calls/session/${sid}/tracks/new`, {
-        sessionDescription: { type: pc.localDescription?.type, sdp: pc.localDescription?.sdp },
+        sessionDescription: { type: pc.localDescription?.type || 'offer', sdp: pc.localDescription?.sdp },
         tracks: tracksToPublish,
       });
-      if (r.data?.sessionDescription) await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+
+      if (r.data?.sessionDescription) {
+        await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+      }
     } catch (err) {
       console.error('Publish error:', err);
       hasPublishedRef.current = false;
@@ -147,16 +152,16 @@ export default function CloudflareMeetingRoom({
       const pc = new RTCPeerConnection(STUN);
       subPcsRef.current[remoteSid] = pc;
 
-      const remoteStream = new MediaStream();
       pc.ontrack = (e) => {
-        (e.streams[0] ? e.streams[0].getTracks() : [e.track]).forEach((t) => remoteStream.addTrack(t));
-        setRemoteStreams((prev) => ({ ...prev, [remoteSid]: remoteStream }));
+        const stream = e.streams[0] || new MediaStream([e.track]);
+        setRemoteStreams((prev) => ({ ...prev, [remoteSid]: stream }));
       };
 
       const audio = pc.addTransceiver('audio', { direction: 'recvonly' });
       const video = pc.addTransceiver('video', { direction: 'recvonly' });
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+
       await new Promise<void>((res) => {
         if (pc.iceGatheringState === 'complete') return res();
         const cb = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', cb); res(); } };
@@ -165,18 +170,20 @@ export default function CloudflareMeetingRoom({
       });
 
       const r = await api.post(`/calls/session/${mySid}/tracks/new`, {
-        sessionDescription: { type: pc.localDescription?.type, sdp: pc.localDescription?.sdp },
+        sessionDescription: { type: pc.localDescription?.type || 'offer', sdp: pc.localDescription?.sdp },
         tracks: [
           { location: 'remote', sessionId: remoteSid, trackName: 'audio', mid: audio.mid || '0' },
           { location: 'remote', sessionId: remoteSid, trackName: 'video', mid: video.mid || '1' },
         ],
       });
-      if (r.data?.sessionDescription) await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+
+      if (r.data?.sessionDescription) {
+        await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+      }
     } catch (err) {
       console.error('Subscribe error:', err);
       subPcsRef.current[remoteSid]?.close();
       delete subPcsRef.current[remoteSid];
-      // Retry after 2s
       if (!isCleaningUpRef.current) {
         setTimeout(() => { const s = sessionIdRef.current; if (s) subscribeTo(remoteSid, s); }, 2000);
       }
@@ -190,21 +197,17 @@ export default function CloudflareMeetingRoom({
 
     const init = async () => {
       try {
-        // Create Cloudflare session
         const sessionRes = await api.post('/calls/session/new');
         if (!sessionRes.data?.sessionId) throw new Error('No sessionId');
         const sid = sessionRes.data.sessionId;
         sessionIdRef.current = sid;
 
-        // Join room
         await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
           sessionId: sid, name: userName, role, tracks: ['audio', 'video'],
         });
 
-        // Publish our tracks immediately
         publishTracks(sid);
 
-        // Heartbeat every 2s
         const beat = async () => {
           if (!alive || isCleaningUpRef.current) return;
           const curSid = sessionIdRef.current;
@@ -216,17 +219,15 @@ export default function CloudflareMeetingRoom({
             if (!alive) return;
             if (r.data?.isEnded) { setIsSessionEnded(true); releaseAllMedia(); return; }
 
-            // Also retry publish if not yet done
             publishTracks(curSid);
 
             const others: RemoteParticipant[] = (r.data?.participants || []).filter((p: any) => p.sessionId !== curSid);
             setRemoteParticipants(others);
-            setConnectedCount(others.length + 1);
 
-            // Subscribe to new participants
-            others.forEach((p) => { if (!subPcsRef.current[p.sessionId]) subscribeTo(p.sessionId, curSid); });
+            others.forEach((p) => {
+              if (!subPcsRef.current[p.sessionId]) subscribeTo(p.sessionId, curSid);
+            });
 
-            // Clean up gone participants
             const activeIds = new Set(others.map((p) => p.sessionId));
             Object.keys(subPcsRef.current).forEach((id) => {
               if (!activeIds.has(id)) {
@@ -247,9 +248,22 @@ export default function CloudflareMeetingRoom({
     };
 
     init();
+
+    const handleBeforeUnload = () => {
+      const sid = sessionIdRef.current;
+      if (sid) {
+        navigator.sendBeacon(
+          `${process.env.NEXT_PUBLIC_API_URL || ''}/api/calls/rooms/${encodeURIComponent(roomName)}/leave`,
+          JSON.stringify({ sessionId: sid, role })
+        );
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
       alive = false;
       clearInterval(timer);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [roomName, userName, role, publishTracks, subscribeTo, releaseAllMedia]);
 
@@ -349,35 +363,44 @@ export default function CloudflareMeetingRoom({
         </div>
         <div className="flex items-center gap-1.5 text-xs text-zinc-400 font-medium">
           <Users className="w-3.5 h-3.5 text-[#0071e3]" />
-          <span>{connectedCount} Connected</span>
+          <span>{remoteParticipants.length + 1} Connected</span>
         </div>
       </div>
 
       {/* Video Grid */}
       <div className="flex-1 p-3 grid grid-cols-1 gap-3 relative overflow-hidden">
         {remoteParticipants.length > 0 ? (
-          remoteParticipants.map((p) => (
-            <div key={p.sessionId} className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.08] flex items-center justify-center shadow-2xl">
-              {remoteStreams[p.sessionId] ? (
-                <video
-                  autoPlay playsInline
-                  ref={(el) => { if (el && el.srcObject !== remoteStreams[p.sessionId]) el.srcObject = remoteStreams[p.sessionId]; }}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-xl text-white">
-                    {p.name.charAt(0).toUpperCase()}
+          remoteParticipants.map((p) => {
+            const stream = remoteStreams[p.sessionId];
+            return (
+              <div key={p.sessionId} className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.08] flex items-center justify-center shadow-2xl">
+                {stream ? (
+                  <video
+                    autoPlay
+                    playsInline
+                    ref={(el) => {
+                      if (el && el.srcObject !== stream) {
+                        el.srcObject = stream;
+                        el.play().catch(() => {});
+                      }
+                    }}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-16 h-16 rounded-full bg-zinc-800 border border-white/[0.1] flex items-center justify-center font-bold text-xl text-white">
+                      {p.name.charAt(0).toUpperCase()}
+                    </div>
+                    <p className="text-xs text-zinc-400">Connecting video stream...</p>
                   </div>
-                  <p className="text-xs text-zinc-400">Connecting video stream...</p>
+                )}
+                <div className="absolute bottom-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-[11px] font-semibold text-white">
+                  <span>{p.name}</span>
+                  <span className="text-[9px] text-[#0071e3] font-bold uppercase">• {p.role === 'company' ? 'Host' : 'Candidate'}</span>
                 </div>
-              )}
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/[0.1] text-[11px] font-semibold text-white">
-                <span>{p.name}</span>
-                <span className="text-[9px] text-[#0071e3] font-bold uppercase">• {p.role === 'company' ? 'Host' : 'Candidate'}</span>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="rounded-2xl border border-dashed border-white/[0.08] flex flex-col items-center justify-center text-center p-6 bg-zinc-900/30">
             <Users className="w-8 h-8 text-zinc-600 animate-pulse mb-2" />
