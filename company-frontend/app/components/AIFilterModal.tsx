@@ -138,8 +138,9 @@ export default function AIFilterModal({ isOpen, onClose, jobId, jobTitle }: AIFi
 
     try {
       setIsBulkProcessing(true);
-      await api.patch('/company/selection/bulk/status', {
+      await api.post('/company/selection/bulk/status', {
         applicationIds: Array.from(ids),
+        status: targetStatus,
         targetStatus,
       });
     } catch (err) {

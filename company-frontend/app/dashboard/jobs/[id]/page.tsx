@@ -774,7 +774,7 @@ export default function JobDetailsPage() {
 
       {/* Modals Container */}
       <JobPostingModal isOpen={editOpen} onClose={() => setEditOpen(false)} onSuccess={() => { initPageData(); setEditOpen(false); }} editJob={job} />
-      <AIFilterModal isOpen={aiFilterOpen} onClose={() => setAiFilterOpen(false)} jobId={jobId} jobTitle={job?.title || ''} />
+      <AIFilterModal isOpen={aiFilterOpen} onClose={() => { setAiFilterOpen(false); fetchApplications(); }} jobId={jobId} jobTitle={job?.title || ''} />
       <ScheduleInterviewsModal isOpen={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)} jobId={jobId} selectedApplicationIds={selectedApplicationIds} onSuccess={handleBulkSchedulingSuccess} />
     </div>
   );

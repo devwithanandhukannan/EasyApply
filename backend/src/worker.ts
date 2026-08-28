@@ -2373,20 +2373,34 @@ app.post('/api/company/selection/bulk/star', async (c) => {
   }
 });
 
-app.post('/api/company/selection/bulk/status', async (c) => {
+const handleBulkStatusUpdate = async (c: any) => {
   try {
-    const { applicationIds, status } = await c.req.json().catch(() => ({}));
+    const body = await c.req.json().catch(() => ({}));
+    const applicationIds = body.applicationIds || body.ids || [];
+    const status = body.status || body.targetStatus || body.newStatus;
     const ids = Array.isArray(applicationIds) ? applicationIds : [];
+    if (!status || ids.length === 0) {
+      return c.json({ success: false, message: 'Missing status or applicationIds' }, 400);
+    }
     const now = new Date().toISOString();
     for (const appId of ids) {
       await c.env.DB.prepare('UPDATE "Application" SET status = ?, updatedAt = ?, lastActivityAt = ? WHERE id = ?')
         .bind(status, now, now, appId).run().catch(() => {});
+      
+      // Log in ApplicationHistory
+      const histId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "ApplicationHistory" (id, applicationId, stage, status, note, createdAt) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(histId, appId, status, 'updated', `Moved to ${status} stage via batch action`, now).run().catch(() => {});
     }
     return c.json({ success: true, message: 'Status updated' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
-});
+};
+app.post('/api/company/selection/bulk/status', handleBulkStatusUpdate);
+app.patch('/api/company/selection/bulk/status', handleBulkStatusUpdate);
+app.put('/api/company/selection/bulk/status', handleBulkStatusUpdate);
 
 const handleMoveCard = async (c: any) => {
   try {
