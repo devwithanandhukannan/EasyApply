@@ -57,10 +57,12 @@ export default function CloudflareMeetingRoom({
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const publishPcRef = useRef<RTCPeerConnection | null>(null);
+  const hasPublishedRef = useRef(false);           // Bug 1 fix: separate guard from RTCPeerConnection
   const subPcsRef = useRef<Record<string, RTCPeerConnection>>({});
   const heartbeatTimerRef = useRef<any>(null);
   const screenTrackRef = useRef<MediaStreamTrack | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const sessionIdRef = useRef<string | null>(null); // Bug 2 fix: stable ref for async closures
   const isCleaningUpRef = useRef(false);
 
   const STUN_SERVERS: RTCConfiguration = {
@@ -159,13 +161,15 @@ export default function CloudflareMeetingRoom({
   const requestEntry = useCallback(async () => {
     try {
       setConnectionStatus('Setting up secure session...');
-      let curSessionId = sessionId;
+      // Bug 2 fix: use ref to get stable current sessionId
+      let curSessionId = sessionIdRef.current;
       if (!curSessionId) {
         const sessionRes = await api.post('/calls/session/new');
         if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
           throw new Error(sessionRes.data?.message || 'Failed to create Calls session');
         }
         curSessionId = sessionRes.data.sessionId;
+        sessionIdRef.current = curSessionId;
         setSessionId(curSessionId);
       }
 
@@ -184,24 +188,30 @@ export default function CloudflareMeetingRoom({
       console.error('❌ Request entry error:', err);
       setConnectionStatus('Connecting to room...');
     }
-  }, [roomName, userName, sessionId]);
+  }, [roomName, userName]);
 
   // Initial Entry Request with Periodic Retry
   useEffect(() => {
     requestEntry();
     const retryInterval = setInterval(() => {
-      if (!sessionId || connecting) {
+      if (!sessionIdRef.current || connecting) {
         requestEntry();
       }
     }, 3000);
     return () => clearInterval(retryInterval);
-  }, [requestEntry, sessionId, connecting]);
+  }, [requestEntry, connecting]);
 
-  // ─── STEP 2: PUBLISH MEDIA TRACKS (ONCE ADMITTED BY HOST) ────
+  // ─── STEP 2: PUBLISH MEDIA TRACKS (ONCE ADMITTED) ─────────────
+  // Bug 1 fix: use hasPublishedRef (not publishPcRef) as the idempotency guard.
+  // This allows a retry when the first call found localStream=null.
   const publishMediaTracks = useCallback(async (currentSessionId: string) => {
-    if (publishPcRef.current || isCleaningUpRef.current) return;
+    if (hasPublishedRef.current || isCleaningUpRef.current) return;
     const stream = localStreamRef.current || localStream;
-    if (!stream) return;
+    if (!stream) {
+      // Stream not ready yet — caller (heartbeat) will retry on next tick
+      return;
+    }
+    hasPublishedRef.current = true; // Mark AFTER stream confirmed available
 
     try {
       const pubPc = new RTCPeerConnection(STUN_SERVERS);
@@ -249,12 +259,21 @@ export default function CloudflareMeetingRoom({
       }
     } catch (err) {
       console.error('❌ Failed to publish candidate tracks:', err);
+      // Bug 1 fix: reset guard on failure so next heartbeat tick can retry
+      hasPublishedRef.current = false;
+      publishPcRef.current?.close();
+      publishPcRef.current = null;
     }
   }, [localStream]);
 
   // ─── STEP 3: SUBSCRIBE TO HOST AUDIO/VIDEO ───────────────────
+  // Bug 3 fix: retry subscription after 2s on failure
   const subscribeToParticipant = useCallback(async (remoteSessionId: string, currentSessionId: string) => {
     if (subPcsRef.current[remoteSessionId] || isCleaningUpRef.current) return;
+    if (!currentSessionId) {
+      console.warn('subscribeToParticipant: currentSessionId is null, skipping');
+      return;
+    }
 
     try {
       const subPc = new RTCPeerConnection(STUN_SERVERS);
@@ -311,18 +330,31 @@ export default function CloudflareMeetingRoom({
         subPcsRef.current[remoteSessionId].close();
         delete subPcsRef.current[remoteSessionId];
       }
+      // Bug 3 fix: retry after 2s so next heartbeat finds us unsubscribed and retries
+      if (!isCleaningUpRef.current) {
+        setTimeout(() => {
+          const sid = sessionIdRef.current;
+          if (sid && !isCleaningUpRef.current) {
+            subscribeToParticipant(remoteSessionId, sid);
+          }
+        }, 2000);
+      }
     }
   }, []);
 
   // ─── STEP 4: HEARTBEAT (POLLS ADMISSION STATUS & HOST STREAM) ─
+  // Bug 2 fix: use sessionIdRef to always read fresh sessionId in async callbacks
   useEffect(() => {
     if (!sessionId) return;
 
     const pollStatus = async () => {
       if (isCleaningUpRef.current) return;
+      const currentSid = sessionIdRef.current;
+      if (!currentSid) return;
+
       try {
         const res = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/heartbeat`, {
-          sessionId,
+          sessionId: currentSid,
           role: 'candidate',
           name: userName,
         });
@@ -344,17 +376,19 @@ export default function CloudflareMeetingRoom({
         // When Host is present / candidate is admitted:
         if (res.data?.isAdmitted) {
           setIsAdmitted(true);
-          publishMediaTracks(sessionId);
+          // Bug 1 fix: always call publishMediaTracks — it will retry until localStream is ready
+          publishMediaTracks(currentSid);
 
           if (Array.isArray(res.data?.participants)) {
             const others: RemoteParticipant[] = res.data.participants.filter(
-              (p: any) => p.sessionId !== sessionId
+              (p: any) => p.sessionId !== currentSid
             );
             setRemoteParticipants(others);
 
+            // Bug 2 fix: pass currentSid from ref (not stale state closure)
             others.forEach((p) => {
               if (!subPcsRef.current[p.sessionId]) {
-                subscribeToParticipant(p.sessionId, sessionId);
+                subscribeToParticipant(p.sessionId, currentSid);
               }
             });
 

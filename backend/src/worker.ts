@@ -3813,9 +3813,10 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
       resolvedName = role === 'company' ? 'Interviewer' : 'Candidate';
     }
 
-    // Prune stale participants (>15s) and replace any prior session of same role
+    // Prune stale participants (>15s updatedAt, with 60s joinedAt grace for newly joined)
     let participants = (roomState.participants || []).filter(
-      (p: any) => p.sessionId !== sessionId && p.role !== role && (now - p.updatedAt < 15000)
+      (p: any) => p.sessionId !== sessionId && p.role !== role &&
+        ((now - p.updatedAt < 15000) || (now - p.joinedAt < 60000))
     );
 
     const hasHost = participants.some((p: any) => p.role === 'company') || role === 'company';
@@ -4089,7 +4090,11 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
 
     await saveCallsRoomState(c, roomName, roomState);
 
-    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 15000));
+    // Bug 4 fix: use joinedAt as 60s grace period so newly joined participants
+    // aren't pruned before their first heartbeat fires (~3-5s delay in React)
+    const activeParticipants = roomState.participants.filter(
+      (p: any) => (now - p.updatedAt < 15000) || (now - p.joinedAt < 60000)
+    );
     const activeWaiting = (roomState.waitingQueue || []).filter((w: any) => (now - w.requestedAt < 15000));
     const isAdmitted = isHostPresent || roomState.admittedCandidates.includes(sessionId);
     const isDeclined = roomState.declinedCandidates.includes(sessionId);
