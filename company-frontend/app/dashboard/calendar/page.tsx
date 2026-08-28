@@ -152,65 +152,19 @@ export default function CompanyCalendarPage() {
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
-        setCustomNotes(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        // Filter out legacy dummy mock notes
+        const userNotes = Array.isArray(parsed)
+          ? parsed.filter((n: CompanyNote) => !n.id?.startsWith('comp-note-'))
+          : [];
+        setCustomNotes(userNotes);
+        localStorage.setItem(storageKey, JSON.stringify(userNotes));
       } else {
-        const todayStr = formatDateKey(new Date());
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const tomorrowStr = formatDateKey(tomorrow);
-
-        const initialNotes: CompanyNote[] = [
-          {
-            id: 'comp-note-1',
-            title: 'Candidate Technical Debrief (L5 Frontend)',
-            date: todayStr,
-            startTime: '11:00',
-            durationMinutes: 45,
-            isAllDay: false,
-            category: 'interview_debrief',
-            candidateName: 'Alex Rivers',
-            roleTitle: 'Senior Frontend Engineer',
-            content: 'Align on system design scores, code readability, and LiveKit audio sync test feedback.',
-            color: 'purple',
-            isCompleted: false,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: 'comp-note-2',
-            title: 'Hiring Committee Decision & Offer Alignment',
-            date: todayStr,
-            startTime: '15:30',
-            durationMinutes: 60,
-            isAllDay: false,
-            category: 'offer_decision',
-            candidateName: 'Sarah Chen',
-            roleTitle: 'Staff Backend Architect',
-            content: 'Review salary benchmark, equity tier, and finalize offer package approval.',
-            color: 'green',
-            isCompleted: false,
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: 'comp-note-3',
-            title: 'Weekly Walk-In Fast-Track Sifting Sync',
-            date: tomorrowStr,
-            startTime: '10:00',
-            durationMinutes: 60,
-            isAllDay: false,
-            category: 'team_sync',
-            candidateName: 'HR & Engineering Leads',
-            roleTitle: 'Walk-In Pipeline',
-            content: 'Review queue velocity and assign interviewers for incoming walk-in candidates.',
-            color: 'blue',
-            isCompleted: false,
-            createdAt: new Date().toISOString(),
-          },
-        ];
-        setCustomNotes(initialNotes);
-        localStorage.setItem(storageKey, JSON.stringify(initialNotes));
+        setCustomNotes([]);
+        localStorage.setItem(storageKey, JSON.stringify([]));
       }
     } catch {
-      // ignore
+      setCustomNotes([]);
     }
   }, [storageKey]);
 
