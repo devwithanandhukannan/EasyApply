@@ -341,11 +341,9 @@ export default function CloudflareMeetingRoom({
 
         setIsHostPresent(Boolean(res.data?.isHostPresent));
 
-        // When Host admits candidate:
+        // When Host is present / candidate is admitted:
         if (res.data?.isAdmitted) {
-          if (!isAdmitted) {
-            setIsAdmitted(true);
-          }
+          setIsAdmitted(true);
           publishMediaTracks(sessionId);
 
           if (Array.isArray(res.data?.participants)) {
@@ -385,7 +383,7 @@ export default function CloudflareMeetingRoom({
     return () => {
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
     };
-  }, [sessionId, roomName, userName, isAdmitted, publishMediaTracks, subscribeToParticipant, releaseAllMediaHardware]);
+  }, [sessionId, roomName, userName, publishMediaTracks, subscribeToParticipant, releaseAllMediaHardware]);
 
   // Clean up on component unmount
   useEffect(() => {
