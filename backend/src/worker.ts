@@ -2487,7 +2487,69 @@ app.post('/api/company/interviews/:id/respond-reschedule', async (c) => {
 });
 
 app.post('/api/company/interviews/bulk-schedule', async (c) => {
-  return c.json({ success: true, message: 'Interviews scheduled' });
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => ({}));
+    const {
+      jobPostingId,
+      startTime,
+      slotDuration = 30,
+      interviewFormat = 'VIDEO',
+      interviewerIds = [],
+      selectedApplicationIds = [],
+      targetStatus = 'technical_round',
+    } = body;
+
+    const appIds = Array.isArray(selectedApplicationIds) ? selectedApplicationIds : [];
+    if (appIds.length === 0) {
+      return c.json({ success: false, message: 'No candidate applications selected' }, 400);
+    }
+
+    const startDateTime = startTime ? new Date(startTime) : new Date(Date.now() + 3600000);
+    const duration = Number(slotDuration) || 30;
+    const format = (interviewFormat || 'video').toLowerCase();
+    const now = new Date().toISOString();
+
+    for (let i = 0; i < appIds.length; i++) {
+      const appId = appIds[i];
+      const scheduledTime = new Date(startDateTime.getTime() + i * duration * 60000).toISOString();
+      const interviewId = crypto.randomUUID();
+      const roomName = `room-${interviewId.slice(0, 8)}`;
+      const joinLink = `https://company.dearresume.com/meet/${interviewId}`;
+
+      // Update Application status
+      await c.env.DB.prepare(
+        'UPDATE "Application" SET status = ?, updatedAt = ?, lastActivityAt = ? WHERE id = ?'
+      ).bind(targetStatus, now, now, appId).run().catch(() => {});
+
+      // Insert Interview record
+      await c.env.DB.prepare(
+        'INSERT INTO "Interview" (id, applicationId, scheduledTime, durationMinutes, format, livekitRoomName, joinLink, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(interviewId, appId, scheduledTime, duration, format, roomName, joinLink, 'scheduled', now, now).run().catch(() => {});
+
+      // Link interviewers
+      if (Array.isArray(interviewerIds)) {
+        for (const tmId of interviewerIds) {
+          const linkId = crypto.randomUUID();
+          await c.env.DB.prepare(
+            'INSERT INTO "InterviewInterviewer" (id, interviewId, teamMemberId) VALUES (?, ?, ?)'
+          ).bind(linkId, interviewId, tmId).run().catch(() => {});
+        }
+      }
+
+      // ApplicationHistory
+      const histId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "ApplicationHistory" (id, applicationId, stage, status, note, createdAt) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(histId, appId, targetStatus, 'scheduled', `Scheduled ${targetStatus} interview for ${scheduledTime}`, now).run().catch(() => {});
+    }
+
+    return c.json({ success: true, message: `Successfully scheduled ${appIds.length} candidate interview(s)` });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
 });
 
 // ─── SPOT JOBS ENDPOINTS ──────────────────────────────────

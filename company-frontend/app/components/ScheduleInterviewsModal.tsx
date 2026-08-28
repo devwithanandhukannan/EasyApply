@@ -51,21 +51,29 @@ export default function ScheduleInterviewsModal({
     }
 
     const today = new Date();
+    const nextHour = new Date(today.getTime() + 60 * 60 * 1000);
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
+    const hours = String(nextHour.getHours()).padStart(2, '0');
+    const minutes = '00';
+
     const formattedDate = `${yyyy}-${mm}-${dd}`;
     setMinDateString(formattedDate);
     setCustomDate(formattedDate);
+    setCustomTime(`${hours}:${minutes}`);
     setError('');
-    setSelectedInterviewerIds([]);
     setSearchQuery('');
 
     const fetchTeamData = async () => {
       try {
         setLoadingTeam(true);
         const res = await teamApi.list();
-        setTeamMembers(res.data?.team || []);
+        const team = res.data?.team || [];
+        setTeamMembers(team);
+        if (team.length > 0) {
+          setSelectedInterviewerIds([team[0].id]);
+        }
       } catch (err) {
         console.error('Failed to resolve panel team structure mapping:', err);
       } finally {
@@ -111,28 +119,28 @@ export default function ScheduleInterviewsModal({
     e.preventDefault();
     setError('');
 
-    if (selectedInterviewerIds.length === 0) {
-      setError('Please assign at least one workspace panel interviewer to continue.');
-      return;
+    let interviewersToAssign = selectedInterviewerIds;
+    if (interviewersToAssign.length === 0 && teamMembers.length > 0) {
+      interviewersToAssign = [teamMembers[0].id];
+      setSelectedInterviewerIds(interviewersToAssign);
     }
 
     setIsSubmitting(true);
 
     try {
-      const combinedDateTime = new Date(`${customDate}T${customTime}:00`);
+      let combinedDateTime = new Date(`${customDate}T${customTime}:00`);
 
-      if (combinedDateTime.getTime() < Date.now()) {
-        setError('Selected execution window cannot target a timeline point in the past.');
-        setIsSubmitting(false);
-        return;
+      if (isNaN(combinedDateTime.getTime()) || combinedDateTime.getTime() < Date.now() - 300000) {
+        // Automatically default to next 30 minutes if past time was selected
+        combinedDateTime = new Date(Date.now() + 30 * 60 * 1000);
       }
 
       const payload = {
         jobPostingId: jobId,
         startTime: combinedDateTime.toISOString(),
-        slotDuration: parseInt(slotDuration, 10),
+        slotDuration: parseInt(slotDuration, 10) || 30,
         interviewFormat: interviewFormat.toUpperCase(),
-        interviewerIds: selectedInterviewerIds,
+        interviewerIds: interviewersToAssign,
         selectedApplicationIds,
         targetStatus,
       };
