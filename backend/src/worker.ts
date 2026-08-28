@@ -3806,23 +3806,9 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
 
     const hasHost = participants.some((p: any) => p.role === 'company') || role === 'company';
 
-    // If host is active, room is never considered ended
-    if (hasHost) {
-      roomState.isEnded = false;
-    }
-
-    if (roomState.isEnded) {
-      return c.json({ success: false, isEnded: true, message: 'This interview has been ended by the host.' }, 403);
-    }
-
     // ── CANDIDATE ADMISSION CHECK ──
     if (role === 'candidate') {
-      const isAdmitted = roomState.admittedCandidates.includes(sessionId);
-      const isDeclined = roomState.declinedCandidates.includes(sessionId);
-
-      if (isDeclined) {
-        return c.json({ success: false, isDeclined: true, message: 'Interview access was declined.' }, 403);
-      }
+      const isAdmitted = Array.isArray(roomState.admittedCandidates) && roomState.admittedCandidates.includes(sessionId);
 
       if (!isAdmitted) {
         // Add to waiting queue for host review
@@ -3830,7 +3816,7 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
         roomState.waitingQueue.push({
           sessionId,
           participantId: participantId || crypto.randomUUID(),
-          name: name || 'Candidate',
+          name: name && name !== 'Participant' ? name : 'Candidate',
           role: 'candidate',
           requestedAt: now,
         });

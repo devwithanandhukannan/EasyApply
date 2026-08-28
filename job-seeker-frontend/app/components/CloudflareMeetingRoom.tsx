@@ -159,52 +159,43 @@ export default function CloudflareMeetingRoom({
   const requestEntry = useCallback(async () => {
     try {
       setConnectionStatus('Setting up secure session...');
-      const sessionRes = await api.post('/calls/session/new');
-      if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
-        throw new Error(sessionRes.data?.message || 'Failed to create Calls session');
+      let curSessionId = sessionId;
+      if (!curSessionId) {
+        const sessionRes = await api.post('/calls/session/new');
+        if (!sessionRes.data?.success || !sessionRes.data?.sessionId) {
+          throw new Error(sessionRes.data?.message || 'Failed to create Calls session');
+        }
+        curSessionId = sessionRes.data.sessionId;
+        setSessionId(curSessionId);
       }
-
-      const newSessionId = sessionRes.data.sessionId;
-      setSessionId(newSessionId);
 
       // Request entry to room
       const joinRes = await api.post(`/calls/rooms/${encodeURIComponent(roomName)}/join`, {
-        sessionId: newSessionId,
+        sessionId: curSessionId,
         name: userName,
         role: 'candidate',
         tracks: ['audio', 'video'],
       });
 
-      if (joinRes.data?.isEnded) {
-        setIsSessionEnded(true);
-        releaseAllMediaHardware();
-        return;
-      }
-
-      if (joinRes.data?.isDeclined) {
-        setIsDeclined(true);
-        releaseAllMediaHardware();
-        return;
-      }
-
       setIsHostPresent(Boolean(joinRes.data?.isHostPresent));
-
-      if (joinRes.data?.isAdmitted) {
-        setIsAdmitted(true);
-      } else {
-        setIsAdmitted(false);
-      }
+      setIsAdmitted(Boolean(joinRes.data?.isAdmitted));
       setConnecting(false);
     } catch (err: any) {
       console.error('❌ Request entry error:', err);
-      setConnectionStatus('Connection issue. Retrying...');
+      setConnectionStatus('Connecting to room...');
     }
-  }, [roomName, userName, releaseAllMediaHardware]);
+  }, [roomName, userName, sessionId]);
 
-  // Initial Entry Request
+  // Initial Entry Request with Periodic Retry
   useEffect(() => {
     requestEntry();
-  }, [requestEntry]);
+    const retryInterval = setInterval(() => {
+      if (!sessionId || connecting) {
+        requestEntry();
+      }
+    }, 3000);
+    return () => clearInterval(retryInterval);
+  }, [requestEntry, sessionId, connecting]);
 
   // ─── STEP 2: PUBLISH MEDIA TRACKS (ONCE ADMITTED BY HOST) ────
   const publishMediaTracks = useCallback(async (currentSessionId: string) => {
