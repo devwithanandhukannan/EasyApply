@@ -3939,6 +3939,27 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
       p.sessionId === sessionId ? { ...p, updatedAt: now } : p
     );
 
+    // If admitted candidate sends heartbeat, add to active participants if not present
+    if (role === 'candidate' && roomState.admittedCandidates.includes(sessionId)) {
+      if (!roomState.participants.some((p: any) => p.sessionId === sessionId)) {
+        roomState.participants.push({
+          sessionId,
+          participantId: sessionId,
+          name: name || 'Candidate',
+          role: 'candidate',
+          tracks: ['audio', 'video'],
+          joinedAt: now,
+          updatedAt: now,
+        });
+      }
+      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== sessionId);
+    }
+
+    // If unadmitted candidate, ensure not in active participants
+    if (role === 'candidate' && !roomState.admittedCandidates.includes(sessionId)) {
+      roomState.participants = roomState.participants.filter((p: any) => p.sessionId !== sessionId);
+    }
+
     // Keep waiting candidates updated
     roomState.waitingQueue = roomState.waitingQueue.map((w: any) =>
       w.sessionId === sessionId ? { ...w, requestedAt: now } : w
@@ -3946,7 +3967,7 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
 
     await saveCallsRoomState(c, roomName, roomState);
 
-    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 120000));
+    const activeParticipants = roomState.participants.filter((p: any) => (now - p.updatedAt < 120000) && (p.role === 'company' || roomState.admittedCandidates.includes(p.sessionId)));
     const activeWaiting = roomState.waitingQueue.filter((w: any) => (now - w.requestedAt < 120000));
     const isHostPresent = activeParticipants.some((p: any) => p.role === 'company');
     const isAdmitted = roomState.admittedCandidates.includes(sessionId);

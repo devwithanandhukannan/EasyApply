@@ -316,6 +316,10 @@ export default function CloudflareMeetingRoom({
       }
     } catch (err) {
       console.error(`❌ Failed to subscribe to host:`, err);
+      if (subPcsRef.current[remoteSessionId]) {
+        subPcsRef.current[remoteSessionId].close();
+        delete subPcsRef.current[remoteSessionId];
+      }
     }
   }, []);
 
