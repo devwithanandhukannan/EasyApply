@@ -62,7 +62,6 @@ export default function CloudflareMeetingRoom({
     onAdmittedStatusChange?.(true);
   }, [onAdmittedStatusChange]);
 
-  // ── 1. ACQUIRE CAMERA + MIC ─────────────────────────────────────
   const releaseAllMedia = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((t) => { t.stop(); t.enabled = false; });
     localStreamRef.current = null;
@@ -71,34 +70,7 @@ export default function CloudflareMeetingRoom({
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-    }).then((stream) => {
-      if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
-      localStreamRef.current = stream;
-      setLocalStream(stream);
-      onLocalStream?.(stream);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.play().catch(() => {});
-      }
-    }).catch((err) => console.warn('Camera/mic error:', err));
-    return () => { active = false; releaseAllMedia(); };
-  }, [releaseAllMedia, onLocalStream]);
-
-  // Keep local video attached after camera re-enables
-  useEffect(() => {
-    const stream = localStreamRef.current || localStream;
-    if (stream && localVideoRef.current && !isVideoMuted) {
-      if (localVideoRef.current.srcObject !== stream) localVideoRef.current.srcObject = stream;
-      localVideoRef.current.play().catch(() => {});
-    }
-  }, [localStream, isVideoMuted]);
-
-  // ── 2. PUBLISH MY TRACKS ────────────────────────────────────────
+  // ── 1. PUBLISH TRACKS FUNCTION ──────────────────────────────────
   const publishTracks = useCallback(async (sid: string) => {
     if (hasPublishedRef.current || isCleaningUpRef.current) return;
     const stream = localStreamRef.current || localStream;
@@ -106,6 +78,7 @@ export default function CloudflareMeetingRoom({
     hasPublishedRef.current = true;
 
     try {
+      console.log('[WebRTC] Publishing local media tracks to Cloudflare Calls...');
       const pc = new RTCPeerConnection(STUN);
       publishPcRef.current = pc;
 
@@ -134,27 +107,46 @@ export default function CloudflareMeetingRoom({
         tracks: tracksToPublish,
       });
 
-      if (r.data?.sessionDescription) {
-        await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+      if (!r.data?.sessionDescription) {
+        throw new Error(r.data?.message || 'Publish failed: missing sessionDescription');
       }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+      console.log('✅ [WebRTC] Published tracks successfully to Cloudflare.');
     } catch (err) {
-      console.error('Publish error:', err);
+      console.error('❌ [WebRTC] Publish error:', err);
       hasPublishedRef.current = false;
       publishPcRef.current?.close();
       publishPcRef.current = null;
     }
   }, [localStream]);
 
-  // ── 3. SUBSCRIBE TO A REMOTE PARTICIPANT ───────────────────────
+  // ── 2. SUBSCRIBE TO A REMOTE PARTICIPANT ───────────────────────
   const subscribeTo = useCallback(async (remoteSid: string, mySid: string) => {
     if (subPcsRef.current[remoteSid] || isCleaningUpRef.current) return;
     try {
+      console.log('[WebRTC] Subscribing to participant:', remoteSid);
       const pc = new RTCPeerConnection(STUN);
       subPcsRef.current[remoteSid] = pc;
 
+      const inboundStream = new MediaStream();
       pc.ontrack = (e) => {
-        const stream = e.streams[0] || new MediaStream([e.track]);
-        setRemoteStreams((prev) => ({ ...prev, [remoteSid]: stream }));
+        console.log('🎥 [WebRTC] Received track:', e.track.kind, 'from', remoteSid);
+        if (e.track) {
+          inboundStream.addTrack(e.track);
+          setRemoteStreams((prev) => ({
+            ...prev,
+            [remoteSid]: new MediaStream(inboundStream.getTracks()),
+          }));
+        }
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[WebRTC] ICE connection state with ${remoteSid}:`, pc.iceConnectionState);
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+          subPcsRef.current[remoteSid]?.close();
+          delete subPcsRef.current[remoteSid];
+        }
       };
 
       const audio = pc.addTransceiver('audio', { direction: 'recvonly' });
@@ -177,18 +169,58 @@ export default function CloudflareMeetingRoom({
         ],
       });
 
-      if (r.data?.sessionDescription) {
-        await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+      if (!r.data?.sessionDescription) {
+        throw new Error(r.data?.message || 'Subscribe failed: missing sessionDescription');
       }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(r.data.sessionDescription));
+      console.log('✅ [WebRTC] Subscribed to remote participant:', remoteSid);
     } catch (err) {
-      console.error('Subscribe error:', err);
+      console.error('❌ [WebRTC] Subscribe error for', remoteSid, err);
       subPcsRef.current[remoteSid]?.close();
       delete subPcsRef.current[remoteSid];
       if (!isCleaningUpRef.current) {
-        setTimeout(() => { const s = sessionIdRef.current; if (s) subscribeTo(remoteSid, s); }, 2000);
+        setTimeout(() => {
+          const s = sessionIdRef.current;
+          if (s && !isCleaningUpRef.current && !subPcsRef.current[remoteSid]) {
+            subscribeTo(remoteSid, s);
+          }
+        }, 1500);
       }
     }
   }, []);
+
+  // ── 3. ACQUIRE CAMERA + MIC ─────────────────────────────────────
+  useEffect(() => {
+    let active = true;
+    navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+    }).then((stream) => {
+      if (!active) { stream.getTracks().forEach((t) => t.stop()); return; }
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      onLocalStream?.(stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch(() => {});
+      }
+      if (sessionIdRef.current) {
+        publishTracks(sessionIdRef.current);
+      }
+    }).catch((err) => console.warn('Camera/mic error:', err));
+
+    return () => { active = false; releaseAllMedia(); };
+  }, [releaseAllMedia, onLocalStream, publishTracks]);
+
+  // Keep local video attached after camera re-enables
+  useEffect(() => {
+    const stream = localStreamRef.current || localStream;
+    if (stream && localVideoRef.current && !isVideoMuted) {
+      if (localVideoRef.current.srcObject !== stream) localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
+    }
+  }, [localStream, isVideoMuted]);
 
   // ── 4. JOIN + HEARTBEAT LOOP ────────────────────────────────────
   useEffect(() => {
@@ -206,7 +238,9 @@ export default function CloudflareMeetingRoom({
           sessionId: sid, name: userName, role, tracks: ['audio', 'video'],
         });
 
-        publishTracks(sid);
+        if (localStreamRef.current) {
+          publishTracks(sid);
+        }
 
         const beat = async () => {
           if (!alive || isCleaningUpRef.current) return;
@@ -225,7 +259,9 @@ export default function CloudflareMeetingRoom({
             setRemoteParticipants(others);
 
             others.forEach((p) => {
-              if (!subPcsRef.current[p.sessionId]) subscribeTo(p.sessionId, curSid);
+              if (!subPcsRef.current[p.sessionId]) {
+                subscribeTo(p.sessionId, curSid);
+              }
             });
 
             const activeIds = new Set(others.map((p) => p.sessionId));
@@ -331,7 +367,6 @@ export default function CloudflareMeetingRoom({
     onDisconnected ? onDisconnected() : router.replace('/dashboard/applications');
   };
 
-  // ── SESSION ENDED SCREEN ────────────────────────────────────────
   if (isSessionEnded) {
     return (
       <div className="h-full w-full bg-black flex flex-col items-center justify-center p-6 text-center select-none">
@@ -349,7 +384,6 @@ export default function CloudflareMeetingRoom({
     );
   }
 
-  // ── MAIN VIDEO UI ───────────────────────────────────────────────
   return (
     <div className="h-full w-full bg-[#09090b] text-[#f5f5f7] flex flex-col overflow-hidden select-none antialiased">
       {/* Top Bar */}
@@ -372,9 +406,10 @@ export default function CloudflareMeetingRoom({
         {remoteParticipants.length > 0 ? (
           remoteParticipants.map((p) => {
             const stream = remoteStreams[p.sessionId];
+            const hasTracks = stream && stream.getTracks().length > 0;
             return (
               <div key={p.sessionId} className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-white/[0.08] flex items-center justify-center shadow-2xl">
-                {stream ? (
+                {hasTracks ? (
                   <video
                     autoPlay
                     playsInline
