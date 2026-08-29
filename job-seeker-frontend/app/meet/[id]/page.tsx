@@ -42,7 +42,7 @@ function MeetPageContent() {
   const { id: interviewId } = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const roleType = searchParams.get('role') === 'candidate' ? 'jobseeker' : 'company';
+  const roleType = searchParams.get('role') === 'company' ? 'company' : 'jobseeker';
 
   const [credentials, setCredentials] = useState<{ token: string; serverUrl: string; iceServers?: any[] } | null>(null);
   const [error, setError] = useState<string | null>(null);

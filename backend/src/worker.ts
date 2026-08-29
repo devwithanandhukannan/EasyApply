@@ -4426,16 +4426,18 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const { sessionId, participantId, name, role, tracks } = body;
 
-    // Optional IDOR Check: If roomName is an interview UUID, verify it exists in DB
-    try {
-      const interviewRow: any = await c.env.DB.prepare(`
-        SELECT id FROM "Interview" WHERE id = ?
-      `).bind(roomName).first();
-      // If room is an interview ID but not found in DB, return 404
-      if (roomName.includes('-') && !interviewRow) {
-        return c.json({ success: false, message: 'Interview session not found' }, 404);
-      }
-    } catch {}
+    // Optional check: If roomName is a scheduled interview UUID (standard 36-char UUID), verify it exists in DB
+    const isStandardUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomName);
+    if (isStandardUuid && !roomName.startsWith('walkin-') && !roomName.startsWith('spot-')) {
+      try {
+        const interviewRow: any = await c.env.DB.prepare(`
+          SELECT id FROM "Interview" WHERE id = ?
+        `).bind(roomName).first();
+        if (!interviewRow) {
+          return c.json({ success: false, message: 'Interview session not found' }, 404);
+        }
+      } catch {}
+    }
 
     let roomState = await getCallsRoomState(c, roomName);
     if (!roomState) {
