@@ -102,7 +102,7 @@ export default function JobSeekerSpotWorkspace() {
       const targetStatus = targetState ? 'spot_available' : 'available';
 
       const response = await axiosInstance.put('/jobseeker/profile', {
-        profileData: JSON.stringify({ availabilityStatus: targetStatus })
+        availabilityStatus: targetStatus
       });
 
       if (response.data?.success) {

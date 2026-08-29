@@ -44,8 +44,17 @@ const availabilityLabels: Record<string, string> = {
 
 export default function TalentPoolDetailPage() {
   const { showToast } = useGlassToast();
-  const { id } = useParams<{ id: string }>();
+  const params = useParams();
   const router = useRouter();
+
+  const [poolId, setPoolId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/talent-pool/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const raw = Array.isArray(params?.id) ? params.id[0] : params?.id;
+    return (raw && raw !== 'default') ? raw : '';
+  });
 
   const [pool, setPool] = useState<Pool | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -54,26 +63,45 @@ export default function TalentPoolDetailPage() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
 
-  const fetchMembers = useCallback(async () => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/talent-pool/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') {
+        setPoolId(decodeURIComponent(match));
+        return;
+      }
+    }
+    if (params?.id && params.id !== 'default') {
+      setPoolId(Array.isArray(params.id) ? params.id[0] : params.id);
+    }
+  }, [params?.id]);
+
+  const fetchMembers = useCallback(async (targetId?: string) => {
+    const idToFetch = targetId || poolId;
+    if (!idToFetch || idToFetch === 'default') return;
     setLoading(true);
     try {
-      const res = await getTalentPoolMembers(id);
-      setPool(res.data.pool);
-      setMembers(res.data.data ?? []);
+      const res = await getTalentPoolMembers(idToFetch);
+      if (res.data?.pool) setPool(res.data.pool);
+      setMembers(res.data?.data ?? []);
     } catch {
       setError('Failed to load pool members.');
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [poolId]);
 
-  useEffect(() => { fetchMembers(); }, [fetchMembers]);
+  useEffect(() => {
+    if (poolId && poolId !== 'default') {
+      fetchMembers(poolId);
+    }
+  }, [poolId, fetchMembers]);
 
   const handleRemove = async (member: Member) => {
     if (!confirm(`Remove ${member.jobSeekerProfile.fullName} from this pool?`)) return;
     setRemovingId(member.id);
     try {
-      await removeTalentPoolMember(id, member.id);
+      await removeTalentPoolMember(poolId, member.id);
       setMembers(prev => prev.filter(m => m.id !== member.id));
     } catch {
       showToast('failed', 'Failed to remove member.', 'danger');

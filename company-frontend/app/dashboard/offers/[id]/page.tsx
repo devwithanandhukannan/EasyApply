@@ -70,6 +70,14 @@ export default function OfferDetailsPage() {
   const { showToast } = useGlassToast();
   const params = useParams();
   const router = useRouter();
+  const [offerId, setOfferId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/offers/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const raw = Array.isArray(params?.id) ? params.id[0] : params?.id;
+    return (raw && raw !== 'default') ? raw : '';
+  });
   const [offer, setOffer] = useState<OfferDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -82,16 +90,36 @@ export default function OfferDetailsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchOfferDetails();
-  }, [params.id]);
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/offers/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') {
+        setOfferId(decodeURIComponent(match));
+        return;
+      }
+    }
+    if (params?.id && params.id !== 'default') {
+      setOfferId(Array.isArray(params.id) ? params.id[0] : params.id);
+    }
+  }, [params?.id]);
 
-  const fetchOfferDetails = async () => {
+  useEffect(() => {
+    if (offerId && offerId !== 'default') {
+      fetchOfferDetails(offerId);
+    }
+  }, [offerId]);
+
+  const fetchOfferDetails = async (targetId?: string) => {
+    const idToFetch = targetId || offerId;
+    if (!idToFetch || idToFetch === 'default') return;
     try {
-      const response = await api.get(`/company/offers/${params.id}`);
-      if (response.data.success) {
+      setIsLoading(true);
+      const response = await api.get(`/company/offers/${idToFetch}`);
+      if (response.data?.success && response.data?.data) {
         setOffer(response.data.data);
-        setUpdatedSalary(response.data.data.salary);
-        setUpdatedStartDate(response.data.data.startDate.split('T')[0]);
+        setUpdatedSalary(response.data.data.salary ? String(response.data.data.salary) : '');
+        if (response.data.data.startDate) {
+          setUpdatedStartDate(response.data.data.startDate.split('T')[0]);
+        }
       }
     } catch (error) {
       console.error('Fetch offer details error:', error);
@@ -398,11 +426,20 @@ export default function OfferDetailsPage() {
                 <span className="text-[10px] font-bold text-[#86868b] bg-[#f2f2f7] dark:bg-[#2c2c2e] px-2 py-0.5 rounded-full">Pending</span>
               )}
             </div>
-            {offer.companySignature ? (
-              <img src={offer.companySignature} alt="Company Signature" className="h-16 object-contain bg-white rounded-lg p-1 border border-black/[0.06]" />
-            ) : (
-              <p className="text-xs text-[#86868b] italic">Not signed yet</p>
-            )}
+            {(() => {
+              const sig = typeof offer.companySignature === 'string' 
+                ? (offer.companySignature.startsWith('{') ? JSON.parse(offer.companySignature).signature : offer.companySignature)
+                : offer.companySignature?.signature || offer.companySignature;
+              return sig && typeof sig === 'string' && sig.startsWith('data:') ? (
+                <img src={sig} alt="Company Signature" className="h-16 object-contain bg-white rounded-lg p-1 border border-black/[0.06]" />
+              ) : offer.companySignature ? (
+                <div className="h-14 flex items-center px-3 bg-white dark:bg-[#2c2c2e] rounded-lg border border-black/[0.06] text-xs font-mono text-[#0071e3]">
+                  Digital e-Signature Recorded
+                </div>
+              ) : (
+                <p className="text-xs text-[#86868b] italic">Not signed yet</p>
+              );
+            })()}
           </div>
 
           <div className="p-4 rounded-2xl bg-[#fbfbfd] dark:bg-[#18181a] border border-black/[0.04] space-y-2">
@@ -414,11 +451,20 @@ export default function OfferDetailsPage() {
                 <span className="text-[10px] font-bold text-[#86868b] bg-[#f2f2f7] dark:bg-[#2c2c2e] px-2 py-0.5 rounded-full">Awaiting Response</span>
               )}
             </div>
-            {offer.candidateSignature ? (
-              <img src={offer.candidateSignature} alt="Candidate Signature" className="h-16 object-contain bg-white rounded-lg p-1 border border-black/[0.06]" />
-            ) : (
-              <p className="text-xs text-[#86868b] italic">No signature recorded</p>
-            )}
+            {(() => {
+              const sig = typeof offer.candidateSignature === 'string' 
+                ? (offer.candidateSignature.startsWith('{') ? JSON.parse(offer.candidateSignature).signature : offer.candidateSignature)
+                : offer.candidateSignature?.signature || offer.candidateSignature;
+              return sig && typeof sig === 'string' && sig.startsWith('data:') ? (
+                <img src={sig} alt="Candidate Signature" className="h-16 object-contain bg-white rounded-lg p-1 border border-black/[0.06]" />
+              ) : offer.candidateSignature ? (
+                <div className="h-14 flex items-center px-3 bg-white dark:bg-[#2c2c2e] rounded-lg border border-black/[0.06] text-xs font-mono text-emerald-600">
+                  Candidate e-Signature Verified
+                </div>
+              ) : (
+                <p className="text-xs text-[#86868b] italic">No signature recorded</p>
+              );
+            })()}
           </div>
         </div>
       </div>

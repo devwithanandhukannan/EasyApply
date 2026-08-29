@@ -351,9 +351,7 @@ export default function ProfilePage() {
       const formData = new FormData();
       formData.append('profileData', JSON.stringify(profileData));
       if (profileImageFile) formData.append('profileImage', profileImageFile);
-      const response = await api.put('/jobseeker/profile', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const response = await api.put('/jobseeker/profile', formData);
       if (response.data?.success) showToast('Success', 'Profile saved successfully!', 'success');
     } catch (error: any) {
       showToast('Error', error.response?.data?.error || error.response?.data?.message, 'danger');

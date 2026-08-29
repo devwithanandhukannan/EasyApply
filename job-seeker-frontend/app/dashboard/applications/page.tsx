@@ -319,9 +319,9 @@ export default function ApplicationsPage() {
 
   const stats = {
     total: applications.length,
-    applied: applications.filter(a => ((a.currentStage || (a as any).status || 'applied').toLowerCase() === 'applied') && !a.isWithdrawn).length,
-    activeRounds: applications.filter(a => ['screened', 'technical_round', 'hr_round'].includes((a.currentStage || (a as any).status || '').toLowerCase()) && !a.isWithdrawn).length,
-    offers: applications.filter(a => ['offer_sent', 'hired'].includes((a.currentStage || (a as any).status || '').toLowerCase())).length,
+    applied: applications.filter(a => ((a.currentStage || (a as any).status || 'applied').toLowerCase() === 'applied') && !a.isWithdrawn && !a.activeOffer).length,
+    activeRounds: applications.filter(a => ['screened', 'technical_round', 'hr_round'].includes((a.currentStage || (a as any).status || '').toLowerCase()) && !a.isWithdrawn && !a.activeOffer).length,
+    offers: applications.filter(a => Boolean(a.activeOffer) || ['offer_sent', 'hired'].includes((a.currentStage || (a as any).status || '').toLowerCase())).length,
     rejected: applications.filter(a => a.isWithdrawn || ((a.currentStage || (a as any).status || '').toLowerCase() === 'rejected')).length,
   };
 

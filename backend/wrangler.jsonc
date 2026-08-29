@@ -31,6 +31,7 @@
   "vars": {
     "NODE_ENV": "production",
     "CALLS_APP_ID": "02592ddefba24b423a23a6aa9796f716",
-    "CALLS_APP_TOKEN": "a8515980194cacf12eafdbaa71f0eb2d7900b237ae2bab8e8f126bd2a1b66623"
+    "CALLS_APP_TOKEN": "a8515980194cacf12eafdbaa71f0eb2d7900b237ae2bab8e8f126bd2a1b66623",
+    "CLOUDFLARE_TURN_KEY_ID": "5ad429cf3aa3178d86b8cf96061bab1f"
   }
 }

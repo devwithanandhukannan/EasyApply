@@ -1351,23 +1351,112 @@ var extractText = async (filePath, mimeType) => {
 
 // src/services/groq.service.ts
 import Groq from "groq-sdk";
-var groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-var DEFAULT_MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
-var FALLBACK_MODELS = [DEFAULT_MODEL, "qwen/qwen3.6-27b", "openai/gpt-oss-20b", "llama-3.3-70b-versatile"];
+
+// src/utils/settingsEncryption.ts
+import crypto2 from "crypto";
+var ALGORITHM = "aes-256-cbc";
+var IV_LENGTH = 16;
+function getKey() {
+  const raw = process.env.SETTINGS_ENCRYPTION_KEY ?? "default-dev-key-change-in-production!!";
+  return crypto2.createHash("sha256").update(raw).digest();
+}
+function encrypt(plaintext) {
+  const key = getKey();
+  const iv = crypto2.randomBytes(IV_LENGTH);
+  const cipher = crypto2.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  return `${iv.toString("hex")}:${encrypted.toString("hex")}`;
+}
+function decrypt(encryptedValue) {
+  const key = getKey();
+  const [ivHex, dataHex] = encryptedValue.split(":");
+  if (!ivHex || !dataHex) throw new Error("Invalid encrypted value format");
+  const iv = Buffer.from(ivHex, "hex");
+  const encryptedBuf = Buffer.from(dataHex, "hex");
+  const decipher = crypto2.createDecipheriv(ALGORITHM, key, iv);
+  const decrypted = Buffer.concat([decipher.update(encryptedBuf), decipher.final()]);
+  return decrypted.toString("utf8");
+}
+function safeDecrypt(encryptedValue) {
+  if (!encryptedValue) return null;
+  try {
+    return decrypt(encryptedValue);
+  } catch {
+    return null;
+  }
+}
+function maskSecret(value) {
+  if (!value) return null;
+  if (value.length <= 4) return "\u2022\u2022\u2022\u2022";
+  return `${"\u2022".repeat(Math.min(value.length - 4, 8))}${value.slice(-4)}`;
+}
+
+// src/services/platformSettings.service.ts
+var cachedSettings = null;
+var cacheExpiry = 0;
+var CACHE_TTL_MS = 6e4;
+async function getSettings() {
+  if (cachedSettings && Date.now() < cacheExpiry) return cachedSettings;
+  const s = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
+  cachedSettings = s;
+  cacheExpiry = Date.now() + CACHE_TTL_MS;
+  return s;
+}
+function invalidateSettingsCache() {
+  cachedSettings = null;
+  cacheExpiry = 0;
+}
+async function getGroqKey() {
+  const s = await getSettings();
+  return (s?.groqApiKey ? safeDecrypt(s.groqApiKey) : null) ?? process.env.GROQ_API_KEY ?? "";
+}
+async function getGroqModel() {
+  const s = await getSettings();
+  return s?.groqModel ?? process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
+}
+async function getWalkInQueueMax() {
+  const s = await getSettings();
+  return s?.walkInQueueMaxGlobal ?? 200;
+}
+
+// src/services/groq.service.ts
+var VALID_GROQ_MODELS = [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "mixtral-8x7b-32768",
+  "gemma2-9b-it",
+  "deepseek-r1-distill-llama-70b"
+];
+async function getGroqClient() {
+  const apiKey = await getGroqKey();
+  const configuredModel = await getGroqModel();
+  const activeModel = configuredModel && !configuredModel.includes("/") && !configuredModel.includes("gpt") ? configuredModel : "llama-3.3-70b-versatile";
+  return {
+    client: new Groq({ apiKey: apiKey || process.env.GROQ_API_KEY || "" }),
+    activeModel
+  };
+}
 async function createGroqChatCompletion(params) {
-  const targetModel = params.model || DEFAULT_MODEL;
-  const modelsToTry = [targetModel, ...FALLBACK_MODELS.filter((m) => m !== targetModel)];
+  const { client, activeModel } = await getGroqClient();
+  const requestedModel = params.model && !params.model.includes("/") && !params.model.includes("gpt") ? params.model : activeModel;
+  const modelsToTry = [
+    requestedModel,
+    ...VALID_GROQ_MODELS.filter((m) => m !== requestedModel)
+  ];
   let lastError = null;
   for (const model of modelsToTry) {
     try {
-      return await groq.chat.completions.create({
+      return await client.chat.completions.create({
         ...params,
         model
       });
     } catch (err) {
       lastError = err;
-      if (err?.status === 404 || err?.error?.error?.code === "model_not_found" || err?.error?.code === "model_not_found") {
-        console.warn(`[Groq AI] Model '${model}' not found or unavailable, attempting fallback model...`);
+      const status = err?.status || err?.statusCode;
+      const code = err?.error?.error?.code || err?.error?.code || err?.code;
+      const msg = err?.message || "";
+      if (status === 404 || status === 400 || code === "model_not_found" || msg.includes("model")) {
+        console.warn(`[Groq AI] Model '${model}' call failed (${msg}), attempting fallback model...`);
         continue;
       }
       throw err;
@@ -1375,7 +1464,7 @@ async function createGroqChatCompletion(params) {
   }
   throw lastError;
 }
-var MODEL = DEFAULT_MODEL;
+var MODEL = "llama-3.3-70b-versatile";
 var normalizeScores = (scores) => {
   if (!scores || typeof scores !== "object") return {};
   const normalized = {};
@@ -7968,24 +8057,24 @@ var updateCompanyProfile = async (req, res) => {
         return res.status(400).json({ success: false, message: "Company name already taken." });
       }
     }
+    const updateData = {};
+    if (name?.trim()) updateData.name = name.trim();
+    if (industry) updateData.industry = industry;
+    if (size) updateData.size = size;
+    if (registrationNumber) updateData.registrationNumber = registrationNumber;
+    if (tagline?.trim()) updateData.tagline = tagline.trim();
+    if (Array.isArray(services)) updateData.services = services;
+    if (products !== void 0) updateData.products = products;
+    if (Array.isArray(seoKeywords)) updateData.seoKeywords = seoKeywords.map((k) => k.trim());
+    if (Array.isArray(coreValues)) updateData.coreValues = coreValues;
+    if (Array.isArray(gallery)) updateData.gallery = gallery;
+    if (youtubeLink?.trim()) updateData.youtubeLink = youtubeLink.trim();
+    if (officeLocations !== void 0) updateData.officeLocations = officeLocations;
+    if (socialMedia !== void 0) updateData.socialMedia = socialMedia;
+    if (corporateLink?.trim()) updateData.corporateLink = corporateLink.trim();
     const updatedCompany = await prisma.company.update({
       where: { id: membership.companyId },
-      data: {
-        name: name?.trim() || void 0,
-        industry: industry || void 0,
-        size: size || void 0,
-        registrationNumber: registrationNumber || void 0,
-        tagline: tagline?.trim() || void 0,
-        services: Array.isArray(services) ? services : void 0,
-        products: products !== void 0 ? products : void 0,
-        seoKeywords: Array.isArray(seoKeywords) ? seoKeywords.map((k) => k.trim()) : void 0,
-        coreValues: Array.isArray(coreValues) ? coreValues : void 0,
-        gallery: Array.isArray(gallery) ? gallery : void 0,
-        youtubeLink: youtubeLink?.trim() || void 0,
-        officeLocations: officeLocations !== void 0 ? officeLocations : void 0,
-        socialMedia: socialMedia !== void 0 ? socialMedia : void 0,
-        corporateLink: corporateLink?.trim() || void 0
-      }
+      data: updateData
     });
     return res.status(200).json({
       success: true,
@@ -11803,49 +11892,6 @@ var deleteWalkInRoom = async (req, res) => {
 
 // src/controllers/adminSettings.controller.ts
 import nodemailer2 from "nodemailer";
-
-// src/utils/settingsEncryption.ts
-import crypto2 from "crypto";
-var ALGORITHM = "aes-256-cbc";
-var IV_LENGTH = 16;
-function getKey() {
-  const raw = process.env.SETTINGS_ENCRYPTION_KEY ?? "default-dev-key-change-in-production!!";
-  return crypto2.createHash("sha256").update(raw).digest();
-}
-function encrypt(plaintext) {
-  const key = getKey();
-  const iv = crypto2.randomBytes(IV_LENGTH);
-  const cipher = crypto2.createCipheriv(ALGORITHM, key, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-  return `${iv.toString("hex")}:${encrypted.toString("hex")}`;
-}
-function maskSecret(value) {
-  if (!value) return null;
-  if (value.length <= 4) return "\u2022\u2022\u2022\u2022";
-  return `${"\u2022".repeat(Math.min(value.length - 4, 8))}${value.slice(-4)}`;
-}
-
-// src/services/platformSettings.service.ts
-var cachedSettings = null;
-var cacheExpiry = 0;
-var CACHE_TTL_MS = 6e4;
-async function getSettings() {
-  if (cachedSettings && Date.now() < cacheExpiry) return cachedSettings;
-  const s = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
-  cachedSettings = s;
-  cacheExpiry = Date.now() + CACHE_TTL_MS;
-  return s;
-}
-function invalidateSettingsCache() {
-  cachedSettings = null;
-  cacheExpiry = 0;
-}
-async function getWalkInQueueMax() {
-  const s = await getSettings();
-  return s?.walkInQueueMaxGlobal ?? 200;
-}
-
-// src/controllers/adminSettings.controller.ts
 async function upsertSettings(data) {
   return prisma.platformSettings.upsert({
     where: { id: "singleton" },
@@ -11875,7 +11921,7 @@ var getSettings2 = async (_req, res) => {
         emailFromName: s?.emailFromName ?? "EasyApply",
         // Groq
         groqApiKey: maskSecret(s?.groqApiKey),
-        groqModel: s?.groqModel ?? process.env.GROQ_MODEL ?? "openai/gpt-oss-120b",
+        groqModel: s?.groqModel ?? process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile",
         // LiveKit
         livekitApiUrl: s?.livekitApiUrl ?? null,
         livekitApiKey: s?.livekitApiKey ?? null,
@@ -13248,10 +13294,10 @@ app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin) || origin.endsWith(".stibe.in") || origin.includes("localhost") || origin.includes("127.0.0.1") || origin.includes("192.168.") || origin.includes("10.")) {
+      if (allowedOrigins.includes(origin) || origin.endsWith(".pages.dev") || origin.endsWith(".workers.dev") || origin.endsWith(".stibe.in") || origin.includes("localhost") || origin.includes("127.0.0.1") || origin.includes("192.168.") || origin.includes("10.")) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS context"));
+        callback(null, true);
       }
     },
     credentials: true,

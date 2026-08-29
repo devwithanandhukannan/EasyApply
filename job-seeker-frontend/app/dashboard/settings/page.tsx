@@ -34,8 +34,9 @@ export default function SettingsPage() {
     try {
       setInitialLoading(true);
       const res = await api.get('/jobseeker/profile');
-      if (res.data?.success && res.data.profile) {
-        setDiscoverable(!!res.data.profile.discoverable);
+      const profileData = res.data?.data || res.data?.profile || res.data;
+      if (profileData && profileData.discoverable !== undefined) {
+        setDiscoverable(!!profileData.discoverable);
       }
     } catch (err) {
       console.error('Failed to load profile for discovery setting', err);

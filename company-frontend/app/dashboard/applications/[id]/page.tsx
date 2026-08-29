@@ -149,8 +149,17 @@ const VERDICT_CONFIG = {
 };
 
 export default function ApplicationDetailPage() {
-  const { id } = useParams();
+  const params = useParams();
   const router = useRouter();
+
+  const [applicationId, setApplicationId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/applications/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const raw = Array.isArray(params?.id) ? params.id[0] : params?.id;
+    return (raw && raw !== 'default') ? raw : '';
+  });
 
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
   const [session, setSession] = useState<SessionInfo | null>(null);
@@ -163,22 +172,37 @@ export default function ApplicationDetailPage() {
   // Talent Pool Modal State
   const [poolModalOpen, setPoolModalOpen] = useState(false);
 
-  const loadData = async () => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/dashboard/applications/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') {
+        setApplicationId(decodeURIComponent(match));
+        return;
+      }
+    }
+    if (params?.id && params.id !== 'default') {
+      setApplicationId(Array.isArray(params.id) ? params.id[0] : params.id);
+    }
+  }, [params?.id]);
+
+  const loadData = async (targetId?: string) => {
+    const idToFetch = targetId || applicationId;
+    if (!idToFetch || idToFetch === 'default') return;
     try {
       setIsLoading(true);
       const [sessionRes, appRes] = await Promise.all([
         api.get('/company/auth/session'),
-        api.get(`/company/applications/${id}/detail`),
+        api.get(`/company/applications/${idToFetch}/detail`),
       ]);
 
-      if (sessionRes.data.success) {
+      if (sessionRes.data?.success) {
         setSession({
           userId: sessionRes.data.userId ?? '',
           companyRoles: sessionRes.data.companyRoles ?? 0,
         });
       }
 
-      if (appRes.data.success) {
+      if (appRes.data?.success) {
         setApplication(appRes.data.data);
       }
     } catch (err) {
@@ -189,8 +213,10 @@ export default function ApplicationDetailPage() {
   };
 
   useEffect(() => {
-    if (id) loadData();
-  }, [id]);
+    if (applicationId && applicationId !== 'default') {
+      loadData(applicationId);
+    }
+  }, [applicationId]);
 
   const handleOpenFeedbackModal = (interviewId: string, existingFeedback: FeedbackEntry | null) => {
     setSelectedInterviewId(interviewId);

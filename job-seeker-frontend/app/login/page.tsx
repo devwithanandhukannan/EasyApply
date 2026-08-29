@@ -137,21 +137,6 @@ function LoginPageComponent() {
         fullName: fullName.trim(),
         email: email.trim(),
         phone: phoneNumber.trim(),
-        skills: [],
-        education: [],
-        experience: [],
-        projects: [],
-        certifications: [],
-        languages: [],
-        achievements: [],
-        preferences: {
-          roles: [],
-          industries: [],
-          jobType: '',
-          experience: '',
-          expectedSalary: '',
-          workLocationPreference: ''
-        }
       };
 
       const activeToken = verifiedToken || (typeof window !== 'undefined' ? (localStorage.getItem('seeker_access_token') || localStorage.getItem('token')) : '') || '';

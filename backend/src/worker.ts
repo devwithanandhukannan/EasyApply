@@ -2631,9 +2631,9 @@ const handleCreateSpotJob = async (c: any) => {
       now
     ).run();
 
-    // Match candidates who have spot_available
+    // Match candidates who have spot_available or available
     const candidatesRes = await c.env.DB.prepare(
-      'SELECT id, userId, fullName FROM "JobSeekerProfile" WHERE availabilityStatus = "spot_available"'
+      'SELECT id, userId, fullName FROM "JobSeekerProfile" WHERE availabilityStatus IN ("spot_available", "available") OR availabilityStatus IS NULL'
     ).all().catch(() => ({ results: [] }));
 
     const candidates = candidatesRes.results || [];
@@ -2858,18 +2858,564 @@ app.post('/api/company/offers/create', async (c) => {
 app.get('/api/company/offers/:id', async (c) => {
   try {
     const { id } = c.req.param();
-    const offer: any = await c.env.DB.prepare(
-      'SELECT o.*, j.title as jobTitle, p.fullName as candidateName, p.email as candidateEmail FROM "OfferLetter" o JOIN "Application" a ON o.applicationId = a.id JOIN "JobPosting" j ON a.jobPostingId = j.id JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id WHERE o.id = ?'
-    ).bind(id).first();
+    const offer: any = await c.env.DB.prepare(`
+      SELECT o.*, 
+             j.id as jobPostingId, j.title as jobTitle, j.department as jobDepartment,
+             c.id as companyId, c.name as companyName, c.logoUrl as companyLogoUrl,
+             p.id as profileId, p.fullName as candidateFullName, p.email as candidateEmail, p.phone as candidatePhone, p.profilePhotoUrl as candidatePhoto
+      FROM "OfferLetter" o 
+      JOIN "Application" a ON o.applicationId = a.id 
+      JOIN "JobPosting" j ON a.jobPostingId = j.id 
+      JOIN "Company" c ON j.companyId = c.id
+      JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id 
+      WHERE o.id = ?
+    `).bind(id).first();
+
     if (!offer) return c.json({ success: false, message: 'Offer not found' }, 404);
+
     if (offer.content && typeof offer.content === 'string') {
       try { offer.content = JSON.parse(offer.content); } catch {}
     }
-    return c.json({ success: true, data: offer });
+    if (offer.companySignature && typeof offer.companySignature === 'string') {
+      try { offer.companySignature = JSON.parse(offer.companySignature); } catch {}
+    }
+    if (offer.candidateSignature && typeof offer.candidateSignature === 'string') {
+      try { offer.candidateSignature = JSON.parse(offer.candidateSignature); } catch {}
+    }
+
+    // Attach nested structure for frontend compatibility
+    const enrichedOffer = {
+      ...offer,
+      candidateName: offer.candidateFullName,
+      application: {
+        jobSeekerProfile: {
+          id: offer.profileId,
+          fullName: offer.candidateFullName || 'Candidate',
+          email: offer.candidateEmail || '',
+          phone: offer.candidatePhone || '',
+          profilePhotoUrl: offer.candidatePhoto || null,
+        },
+        jobPosting: {
+          id: offer.jobPostingId,
+          title: offer.jobTitle || offer.position,
+          company: {
+            id: offer.companyId,
+            name: offer.companyName,
+            logoUrl: offer.companyLogoUrl,
+          },
+        },
+      },
+    };
+
+    return c.json({ success: true, data: enrichedOffer });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
 });
+
+// ─── R2 OFFER STORAGE & PDF ENGINE ──────────────────────────────────────
+function generateOfferPdfBinary(offer: any, company: any, candidate: any): Uint8Array {
+  const pages: string[][] = [[]];
+  let curPageIndex = 0;
+  let curY = 780;
+  const marginX = 50;
+  const contentWidth = 495;
+
+  const escapePdf = (str: string) => {
+    return (str || '')
+      .replace(/\\/g, '\\\\')
+      .replace(/\(/g, '\\(')
+      .replace(/\)/g, '\\)')
+      .replace(/[^\x20-\x7E\r\n\t]/g, ' ');
+  };
+
+  const drawText = (text: string, font: string, size: number, x: number, y: number) => {
+    pages[curPageIndex].push(`BT /${font} ${size} Tf ${x.toFixed(2)} ${y.toFixed(2)} Td (${escapePdf(text)}) Tj ET`);
+  };
+
+  const drawLine = (y: number) => {
+    pages[curPageIndex].push(`q 0.2 G 1 w ${marginX} ${y.toFixed(2)} m ${(marginX + contentWidth).toFixed(2)} ${y.toFixed(2)} l S Q`);
+  };
+
+  const checkPageBreak = (needed: number) => {
+    if (curY - needed < 60) {
+      pages.push([]);
+      curPageIndex++;
+      curY = 780;
+    }
+  };
+
+  const drawParagraph = (text: string, font = 'F1', size = 10, lineHeight = 14) => {
+    if (!text) return;
+    const maxChars = 85;
+    const words = text.split(' ');
+    let line = '';
+    for (const w of words) {
+      if ((line + (line ? ' ' : '') + w).length <= maxChars) {
+        line += (line ? ' ' : '') + w;
+      } else {
+        checkPageBreak(lineHeight);
+        curY -= lineHeight;
+        drawText(line, font, size, marginX, curY);
+        line = w;
+      }
+    }
+    if (line) {
+      checkPageBreak(lineHeight);
+      curY -= lineHeight;
+      drawText(line, font, size, marginX, curY);
+    }
+  };
+
+  // 1. Header & Title
+  const companyName = company?.name || 'Company';
+  drawText(companyName.toUpperCase(), 'F2', 16, marginX, curY);
+  curY -= 18;
+  drawText('FORMAL OFFER OF EMPLOYMENT', 'F2', 13, marginX, curY);
+  curY -= 14;
+  const offerDate = offer.createdAt ? new Date(offer.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString();
+  drawText(`Date: ${offerDate}   |   Reference: #${(offer.id || '').substring(0, 8).toUpperCase()}`, 'F1', 9, marginX, curY);
+  curY -= 8;
+  drawLine(curY);
+  curY -= 18;
+
+  // 2. Candidate Greeting
+  const candidateName = candidate?.fullName || 'Candidate';
+  drawText(`Dear ${candidateName},`, 'F2', 11, marginX, curY);
+  curY -= 14;
+  drawParagraph(`On behalf of ${companyName}, we are pleased to extend this formal offer of employment to you. We were very impressed with your background, skills, and experience, and we believe you will be an invaluable asset to our organization.`, 'F1', 10, 14);
+  curY -= 10;
+
+  // 3. Position & Compensation Details Table
+  drawText('POSITION & COMPENSATION SUMMARY', 'F2', 11, marginX, curY);
+  curY -= 6;
+  drawLine(curY);
+  curY -= 14;
+
+  const details = [
+    ['Position / Title:', offer.position || 'Software Engineer'],
+    ['Department:', offer.department || 'Engineering'],
+    ['Employment Type:', offer.employmentType || 'Full-time'],
+    ['Base Compensation:', `${offer.currency || 'INR'} ${Number(offer.salary || 0).toLocaleString()}`],
+    ['Target Start Date:', offer.startDate ? new Date(offer.startDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Immediate'],
+    ['Work Location:', offer.location || 'Remote / On-site'],
+  ];
+
+  for (const [label, val] of details) {
+    checkPageBreak(16);
+    curY -= 14;
+    drawText(label, 'F2', 10, marginX + 10, curY);
+    drawText(val, 'F1', 10, marginX + 160, curY);
+  }
+  curY -= 10;
+
+  // 4. Terms & Conditions
+  drawText('TERMS & CONDITIONS', 'F2', 11, marginX, curY);
+  curY -= 6;
+  drawLine(curY);
+  curY -= 12;
+  drawParagraph(`1. Duties and Responsibilities: You will perform the duties outlined for this position and other tasks as may be reasonably assigned.`, 'F1', 9.5, 13);
+  curY -= 4;
+  drawParagraph(`2. Confidentiality: You agree to protect and maintain the confidentiality of all proprietary company information, trade secrets, and client data.`, 'F1', 9.5, 13);
+  curY -= 4;
+  drawParagraph(`3. Acceptance: To accept this offer, please affix your digital signature below and submit confirmation through the DearResume platform.`, 'F1', 9.5, 13);
+  curY -= 16;
+
+  // 5. Verification & Signatures
+  checkPageBreak(90);
+  drawText('DIGITAL SIGNATURES & VERIFICATION', 'F2', 11, marginX, curY);
+  curY -= 6;
+  drawLine(curY);
+  curY -= 18;
+
+  const colWidth = 220;
+  // Left: Company Signature
+  const compSig = typeof offer.companySignature === 'string'
+    ? (offer.companySignature.startsWith('{') ? JSON.parse(offer.companySignature) : { signature: offer.companySignature })
+    : (offer.companySignature || {});
+  drawText('AUTHORIZED COMPANY SIGNATORY', 'F2', 9, marginX + 10, curY);
+  drawText('CANDIDATE ACCEPTANCE', 'F2', 9, marginX + colWidth + 40, curY);
+  curY -= 14;
+
+  if (compSig && (compSig.signature || compSig.signedAt)) {
+    drawText(`Signed By: ${compSig.signedBy || companyName}`, 'F1', 8.5, marginX + 10, curY);
+    curY -= 12;
+    drawText(`Timestamp: ${compSig.signedAt ? new Date(compSig.signedAt).toISOString() : 'Verified'}`, 'F1', 8, marginX + 10, curY);
+    curY -= 12;
+    drawText(`[DIGITALLY SIGNED & VERIFIED VIA DEARRESUME]`, 'F2', 7.5, marginX + 10, curY);
+  } else {
+    drawText('Signature: [Pending]', 'F1', 8.5, marginX + 10, curY);
+  }
+
+  // Right: Candidate Signature
+  const candSig = typeof offer.candidateSignature === 'string'
+    ? (offer.candidateSignature.startsWith('{') ? JSON.parse(offer.candidateSignature) : { signature: offer.candidateSignature })
+    : (offer.candidateSignature || {});
+
+  if (candSig && (candSig.signature || candSig.signedAt || offer.status === 'accepted')) {
+    drawText(`Signed By: ${candSig.signedBy || candSig.signature || candidateName}`, 'F1', 8.5, marginX + colWidth + 40, curY + 24);
+    drawText(`Timestamp: ${candSig.signedAt ? new Date(candSig.signedAt).toISOString() : (offer.respondedAt ? new Date(offer.respondedAt).toISOString() : 'Accepted')}`, 'F1', 8, marginX + colWidth + 40, curY + 12);
+    drawText(`[OFFICIALLY ACCEPTED & CONFIRMED]`, 'F2', 7.5, marginX + colWidth + 40, curY);
+  } else {
+    drawText('Status: [Awaiting Candidate Signature]', 'F1', 8.5, marginX + colWidth + 40, curY + 24);
+  }
+  curY -= 36;
+
+  // Build PDF structure
+  const pageCount = pages.length;
+  const kids: string[] = [];
+  for (let i = 0; i < pageCount; i++) kids.push(`${5 + i} 0 R`);
+
+  const objCatalog = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj`;
+  const objPages = `2 0 obj\n<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${pageCount} /MediaBox [0 0 595.28 841.89] >>\nendobj`;
+  const objF1 = `3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj`;
+  const objF2 = `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj`;
+
+  const pageObjs: string[] = [];
+  const contentObjs: string[] = [];
+
+  for (let i = 0; i < pageCount; i++) {
+    const pageObjNum = 5 + i;
+    const contentObjNum = 5 + pageCount + i;
+    const streamContent = pages[i].join('\n');
+    const streamBytes = new TextEncoder().encode(streamContent);
+
+    pageObjs.push(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObjNum} 0 R >>\nendobj`);
+    contentObjs.push(`${contentObjNum} 0 obj\n<< /Length ${streamBytes.length} >>\nstream\n${streamContent}\nendstream\nendobj`);
+  }
+
+  const allObjs = [objCatalog, objPages, objF1, objF2, ...pageObjs, ...contentObjs];
+  let pdfString = `%PDF-1.4\n%âãÏÓ\n`;
+  const xrefOffsets: number[] = [0];
+
+  for (const obj of allObjs) {
+    const currentOffset = new TextEncoder().encode(pdfString).length;
+    xrefOffsets.push(currentOffset);
+    pdfString += `${obj}\n`;
+  }
+
+  const startXref = new TextEncoder().encode(pdfString).length;
+  pdfString += `xref\n0 ${allObjs.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= allObjs.length; i++) {
+    pdfString += `${String(xrefOffsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+
+  pdfString += `trailer\n<< /Size ${allObjs.length + 1} /Root 1 0 R >>\nstartxref\n${startXref}\n%%EOF\n`;
+  return new TextEncoder().encode(pdfString);
+}
+
+async function saveSignatureToR2(bucket: any, offerId: string, type: 'company' | 'candidate', rawSignature: any, signerName?: string) {
+  if (!bucket) return;
+  const now = new Date().toISOString();
+  try {
+    const sigJson = typeof rawSignature === 'string' ? rawSignature : JSON.stringify(rawSignature);
+    await bucket.put(`signatures/${offerId}/${type}-signature.json`, sigJson, {
+      httpMetadata: { contentType: 'application/json' },
+      customMetadata: { offerId, type, signedAt: now, signerName: signerName || '' },
+    });
+
+    let dataUrl = typeof rawSignature === 'string' ? rawSignature : rawSignature?.signature;
+    if (dataUrl && typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
+      const base64Data = dataUrl.split(',')[1];
+      if (base64Data) {
+        const binStr = atob(base64Data);
+        const bytes = new Uint8Array(binStr.length);
+        for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+        await bucket.put(`signatures/${offerId}/${type}-signature.png`, bytes, {
+          httpMetadata: { contentType: 'image/png' },
+        });
+      }
+    }
+  } catch (e) {
+    console.error('saveSignatureToR2 error:', e);
+  }
+}
+
+async function generateAndStoreOfferPdfInR2(c: any, offerId: string) {
+  try {
+    const offer: any = await c.env.DB.prepare(`
+      SELECT o.*, 
+             j.title as jobTitle, j.department as jobDepartment,
+             c.name as companyName, c.logoUrl as companyLogoUrl,
+             p.fullName as candidateFullName, p.email as candidateEmail, p.phone as candidatePhone
+      FROM "OfferLetter" o 
+      JOIN "Application" a ON o.applicationId = a.id 
+      JOIN "JobPosting" j ON a.jobPostingId = j.id 
+      JOIN "Company" c ON j.companyId = c.id
+      JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id 
+      WHERE o.id = ?
+    `).bind(offerId).first();
+
+    if (!offer) return null;
+
+    const pdfBytes = generateOfferPdfBinary(
+      offer,
+      { name: offer.companyName, logoUrl: offer.companyLogoUrl },
+      { fullName: offer.candidateFullName, email: offer.candidateEmail, phone: offer.candidatePhone }
+    );
+
+    const r2Key = `offers/${offerId}/offer-letter.pdf`;
+    if (c.env.RESUME_BUCKET) {
+      await c.env.RESUME_BUCKET.put(r2Key, pdfBytes, {
+        httpMetadata: { contentType: 'application/pdf' },
+        customMetadata: { offerId, position: offer.position || '', company: offer.companyName || '' },
+      });
+      await c.env.DB.prepare('UPDATE "OfferLetter" SET filePath = ? WHERE id = ?').bind(r2Key, offerId).run().catch(() => {});
+    }
+
+    return { pdfBytes, r2Key, position: offer.position || 'Offer' };
+  } catch (e) {
+    console.error('generateAndStoreOfferPdfInR2 error:', e);
+    return null;
+  }
+}
+
+const handleSignOffer = async (c: any) => {
+  try {
+    const { id } = c.req.param();
+    const decoded = await getAuthUser(c);
+    const body = await c.req.json().catch(() => ({}));
+    const { signature } = body;
+    const now = new Date().toISOString();
+
+    const signatureData = {
+      signedBy: decoded?.userId || 'Company Admin',
+      signedAt: now,
+      signature: signature || '',
+    };
+    const signatureJson = JSON.stringify(signatureData);
+
+    // Save signature to R2 object storage
+    await saveSignatureToR2(c.env.RESUME_BUCKET, id, 'company', signatureData, decoded?.userId || 'Company Admin');
+
+    await c.env.DB.prepare(
+      'UPDATE "OfferLetter" SET companySignature = ?, status = "pending", updatedAt = ? WHERE id = ?'
+    ).bind(signatureJson, now, id).run();
+
+    // Generate offer PDF and store in R2
+    await generateAndStoreOfferPdfInR2(c, id);
+
+    return c.json({
+      success: true,
+      message: 'Offer signed and stored in object storage successfully',
+      data: { id, status: 'pending', companySignature: signatureJson, filePath: `offers/${id}/offer-letter.pdf` },
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleSendOffer = async (c: any) => {
+  try {
+    const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const { channels } = body;
+    const now = new Date().toISOString();
+
+    // Ensure PDF is generated and saved to R2
+    await generateAndStoreOfferPdfInR2(c, id);
+
+    await c.env.DB.prepare(
+      'UPDATE "OfferLetter" SET status = "sent", sentAt = ?, emailSentAt = ?, updatedAt = ? WHERE id = ?'
+    ).bind(now, now, now, id).run();
+
+    return c.json({
+      success: true,
+      message: 'Offer sent successfully',
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleRespondNegotiation = async (c: any) => {
+  try {
+    const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const { action, updatedSalary, updatedStartDate, responseNote, signature } = body;
+    const now = new Date().toISOString();
+
+    if (action === 'accept_negotiation') {
+      const signatureData = signature ? {
+        signedBy: 'Company Admin',
+        signedAt: now,
+        signature,
+      } : null;
+      const signatureJson = signatureData ? JSON.stringify(signatureData) : null;
+
+      if (signatureData) {
+        await saveSignatureToR2(c.env.RESUME_BUCKET, id, 'company', signatureData, 'Company Admin');
+      }
+
+      await c.env.DB.prepare(
+        'UPDATE "OfferLetter" SET salary = COALESCE(?, salary), startDate = COALESCE(?, startDate), negotiationNote = ?, companySignature = COALESCE(?, companySignature), status = "pending", updatedAt = ? WHERE id = ?'
+      ).bind(
+        updatedSalary ? Number(updatedSalary) : null,
+        updatedStartDate ? new Date(updatedStartDate).toISOString() : null,
+        responseNote || 'Company accepted negotiation with updated terms',
+        signatureJson,
+        now,
+        id
+      ).run();
+
+      await generateAndStoreOfferPdfInR2(c, id);
+
+      return c.json({ success: true, message: 'Negotiation accepted and offer updated.' });
+    } else {
+      await c.env.DB.prepare(
+        'UPDATE "OfferLetter" SET status = "declined", negotiationNote = ?, updatedAt = ? WHERE id = ?'
+      ).bind(responseNote || 'Company declined negotiation request', now, id).run();
+
+      return c.json({ success: true, message: 'Negotiation rejected.' });
+    }
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleUpdateOffer = async (c: any) => {
+  try {
+    const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const { position, department, salary, currency, startDate, location, employmentType, content } = body;
+    const now = new Date().toISOString();
+
+    await c.env.DB.prepare(
+      'UPDATE "OfferLetter" SET position = COALESCE(?, position), department = COALESCE(?, department), salary = COALESCE(?, salary), currency = COALESCE(?, currency), startDate = COALESCE(?, startDate), location = COALESCE(?, location), employmentType = COALESCE(?, employmentType), content = COALESCE(?, content), updatedAt = ? WHERE id = ?'
+    ).bind(
+      position || null,
+      department || null,
+      salary ? Number(salary) : null,
+      currency || null,
+      startDate ? new Date(startDate).toISOString() : null,
+      location || null,
+      employmentType || null,
+      content ? JSON.stringify(content) : null,
+      now,
+      id
+    ).run();
+
+    await generateAndStoreOfferPdfInR2(c, id);
+
+    return c.json({ success: true, message: 'Offer letter updated successfully' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleDownloadOfferPdf = async (c: any) => {
+  try {
+    const { id } = c.req.param();
+    const r2Key = `offers/${id}/offer-letter.pdf`;
+
+    if (c.env.RESUME_BUCKET) {
+      try {
+        const r2Obj = await c.env.RESUME_BUCKET.get(r2Key);
+        if (r2Obj) {
+          const headers = new Headers();
+          headers.set('Content-Type', 'application/pdf');
+          headers.set('Content-Disposition', `attachment; filename="offer-letter-${id.substring(0, 8)}.pdf"`);
+          return new Response(r2Obj.body, { headers });
+        }
+      } catch {}
+    }
+
+    // If not found in R2, generate on the fly, save to R2 and stream
+    const gen = await generateAndStoreOfferPdfInR2(c, id);
+    if (!gen) return c.json({ success: false, message: 'Offer letter document not found.' }, 404);
+
+    const safePos = (gen.position || 'Offer').replace(/[^a-zA-Z0-9-_]/g, '_');
+    const headers = new Headers();
+    headers.set('Content-Type', 'application/pdf');
+    headers.set('Content-Disposition', `attachment; filename="offer-letter-${safePos}.pdf"`);
+    return new Response(gen.pdfBytes, { headers });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleJobSeekerRespondOffer = async (c: any) => {
+  try {
+    const { id } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.userId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const body = await c.req.json().catch(() => ({}));
+    const { response, signature, negotiationNote } = body;
+    const now = new Date().toISOString();
+
+    const offer: any = await c.env.DB.prepare(`
+      SELECT o.*, a.id as appId, p.fullName as candidateFullName
+      FROM "OfferLetter" o
+      JOIN "Application" a ON o.applicationId = a.id
+      JOIN "JobSeekerProfile" p ON a.jobSeekerProfileId = p.id
+      WHERE o.id = ? AND p.userId = ?
+    `).bind(id, decoded.userId).first();
+
+    if (!offer) return c.json({ success: false, message: 'Offer not found' }, 404);
+
+    if (response === 'accept') {
+      const signatureData = {
+        signedBy: signature || offer.candidateFullName || 'Candidate',
+        signedAt: now,
+        signature: signature || offer.candidateFullName,
+      };
+
+      // Store signature in R2 object storage
+      await saveSignatureToR2(c.env.RESUME_BUCKET, id, 'candidate', signatureData, offer.candidateFullName);
+
+      await c.env.DB.prepare(
+        'UPDATE "OfferLetter" SET status = "accepted", candidateResponse = "accept", candidateSignature = ?, respondedAt = ?, updatedAt = ? WHERE id = ?'
+      ).bind(JSON.stringify(signatureData), now, now, id).run();
+
+      // Update application to hired
+      await c.env.DB.prepare(
+        'UPDATE "Application" SET status = "hired", updatedAt = ? WHERE id = ?'
+      ).bind(now, offer.appId).run();
+
+      // Log in status history
+      const histId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "ApplicationStatusHistory" (id, applicationId, toStatus, changedBy, changedByType, notes, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).bind(histId, offer.appId, 'hired', offer.candidateFullName || 'Candidate', 'candidate', 'Candidate accepted formal offer letter', now).run().catch(() => {});
+
+      // Regenerate counter-signed PDF and store in R2
+      await generateAndStoreOfferPdfInR2(c, id);
+
+      return c.json({ success: true, message: 'Offer letter accepted successfully!' });
+    } else if (response === 'decline') {
+      await c.env.DB.prepare(
+        'UPDATE "OfferLetter" SET status = "declined", candidateResponse = "decline", respondedAt = ?, updatedAt = ? WHERE id = ?'
+      ).bind(now, now, id).run();
+
+      return c.json({ success: true, message: 'Offer letter declined.' });
+    } else if (response === 'negotiate') {
+      await c.env.DB.prepare(
+        'UPDATE "OfferLetter" SET status = "negotiating", candidateResponse = "negotiate", negotiationNote = ?, respondedAt = ?, updatedAt = ? WHERE id = ?'
+      ).bind(negotiationNote || 'Candidate requested compensation/terms adjustment', now, now, id).run();
+
+      return c.json({ success: true, message: 'Negotiation request sent to company.' });
+    }
+
+    return c.json({ success: false, message: 'Invalid response action' }, 400);
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+app.post('/api/company/offers/:id/sign', handleSignOffer);
+app.post('/api/offers/:id/sign', handleSignOffer);
+app.post('/api/company/offers/:id/send', handleSendOffer);
+app.post('/api/offers/:id/send', handleSendOffer);
+app.post('/api/company/offers/:id/respond-negotiation', handleRespondNegotiation);
+app.post('/api/offers/:id/respond-negotiation', handleRespondNegotiation);
+app.put('/api/company/offers/:id', handleUpdateOffer);
+app.put('/api/offers/:id', handleUpdateOffer);
+app.get('/api/company/offers/:id/download', handleDownloadOfferPdf);
+app.get('/api/jobseeker/offers/:id/download', handleDownloadOfferPdf);
+app.get('/api/offers/:id/download', handleDownloadOfferPdf);
+app.post('/api/jobseeker/offers/:id/respond', handleJobSeekerRespondOffer);
+app.post('/api/offers/:id/respond', handleJobSeekerRespondOffer);
 
 
 
@@ -3636,7 +4182,44 @@ function getCallsCredentials(env: any) {
   return { appId, appToken };
 }
 
-// 1. Create a new Cloudflare Calls WebRTC Session
+// 0. Generate Cloudflare TURN server credentials for frontend ICE
+app.post('/api/calls/ice-config', async (c) => {
+  try {
+    const apiToken = c.env.CLOUDFLARE_API_TOKEN;
+    const turnKeyId = c.env.CLOUDFLARE_TURN_KEY_ID;
+
+    if (!turnKeyId || !apiToken) {
+      console.warn('[TURN] Missing CLOUDFLARE_TURN_KEY_ID or CLOUDFLARE_API_TOKEN env vars');
+      return c.json({ success: true, iceServers: [] });
+    }
+
+    const res = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${turnKeyId}/credentials/generate`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ttl: 86400 }),
+      }
+    );
+
+    if (!res.ok) {
+      console.error('[TURN] Credentials API error:', res.status, res.statusText);
+      return c.json({ success: true, iceServers: [] });
+    }
+
+    const data: any = await res.json();
+    console.log('[TURN] Credentials generated successfully');
+    return c.json({ success: true, iceServers: data.iceServers || [] });
+  } catch (err: any) {
+    console.error('[TURN] Exception generating credentials:', err);
+    return c.json({ success: true, iceServers: [] });
+  }
+});
+
+// 1. Create a new Cloudflare Calls WebRTC Session (also returns TURN iceServers)
 app.post('/api/calls/session/new', async (c) => {
   try {
     const { appId, appToken } = getCallsCredentials(c.env);
@@ -3653,13 +4236,66 @@ app.post('/api/calls/session/new', async (c) => {
       return c.json({ success: false, message: data.error || 'Failed to create Calls session' }, res.status as any);
     }
 
+    // Fetch TURN credentials in parallel and bundle into session response
+    // This avoids a separate browser request that can be blocked by tracking protection
+    let iceServers: any[] = [];
+    try {
+      const apiToken = c.env.CLOUDFLARE_API_TOKEN;
+      const turnKeyId = c.env.CLOUDFLARE_TURN_KEY_ID;
+      if (turnKeyId && apiToken) {
+        const turnRes = await fetch(
+          `https://rtc.live.cloudflare.com/v1/turn/keys/${turnKeyId}/credentials/generate`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ ttl: 86400 }),
+          }
+        );
+        if (turnRes.ok) {
+          const turnData: any = await turnRes.json();
+          iceServers = Array.isArray(turnData.iceServers) ? turnData.iceServers : (turnData.iceServers ? [turnData.iceServers] : []);
+          console.log('[Session] TURN credentials bundled, iceServers count:', iceServers.length);
+        } else {
+          console.warn('[Session] TURN credentials fetch failed:', turnRes.status);
+        }
+      }
+    } catch (turnErr) {
+      console.warn('[Session] TURN credentials exception (non-fatal):', turnErr);
+    }
+
+    return c.json({ success: true, sessionId: data.sessionId, iceServers });
+
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+// 1b. Lightweight session creation for subscribe-only PeerConnections.
+//     No TURN fetch — the caller already has iceServers from the main session.
+app.post('/api/calls/session/subscribe', async (c) => {
+  try {
+    const { appId, appToken } = getCallsCredentials(c.env);
+    const res = await fetch(`${CALLS_BASE_URL}/${appId}/sessions/new`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${appToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const data: any = await res.json();
+    if (!res.ok) {
+      return c.json({ success: false, message: data.error || 'Failed to create subscribe session' }, res.status as any);
+    }
     return c.json({ success: true, sessionId: data.sessionId });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
 });
 
-// 2. Publish / Subscribe tracks to Cloudflare Calls Session
+
 app.post('/api/calls/session/:sessionId/tracks/new', async (c) => {
   try {
     const { sessionId } = c.req.param();
@@ -3677,7 +4313,8 @@ app.post('/api/calls/session/:sessionId/tracks/new', async (c) => {
 
     const data: any = await res.json();
     if (!res.ok) {
-      return c.json({ success: false, message: data.error || 'Failed to negotiate tracks' }, res.status as any);
+      console.error('Cloudflare Calls tracks/new error:', data);
+      return c.json({ success: false, message: data.error || data.errors?.[0]?.message || 'Failed to negotiate tracks', details: data }, res.status as any);
     }
 
     return c.json({ success: true, ...data });
@@ -3702,7 +4339,12 @@ app.put('/api/calls/session/:sessionId/renegotiate', async (c) => {
       body: JSON.stringify(body),
     });
 
-    const data: any = await res.json();
+    const text = await res.text();
+    let data: any = {};
+    try {
+      if (text) data = JSON.parse(text);
+    } catch {}
+
     if (!res.ok) {
       return c.json({ success: false, message: data.error || 'Failed to renegotiate' }, res.status as any);
     }
@@ -3713,12 +4355,21 @@ app.put('/api/calls/session/:sessionId/renegotiate', async (c) => {
   }
 });
 
-// 4. Room Management (Join / Status / Heartbeat / Leave / End) using Cloudflare D1
+// 4. Room Management (Join / Status / Heartbeat / Leave / End / Admit) using Cloudflare D1
 const getCallsRoomState = async (c: any, roomName: string) => {
   try {
     const row: any = await c.env.DB.prepare('SELECT state FROM "CallsRoom" WHERE roomName = ?').bind(roomName).first();
     if (row?.state) {
-      return JSON.parse(row.state);
+      const state = JSON.parse(row.state);
+      // If room was ended more than 10 minutes ago, auto-reset so new interview sessions can start cleanly
+      if (state.isEnded && state.endedAt && (Date.now() - state.endedAt > 600000)) {
+        state.isEnded = false;
+        state.endedAt = null;
+        state.participants = [];
+        state.waitingQueue = [];
+        state.admittedCandidates = [];
+      }
+      return state;
     }
   } catch (e) {
     console.error('getCallsRoomState error:', e);
@@ -3743,15 +4394,16 @@ app.get('/api/calls/rooms/:roomName/status', async (c) => {
     const roomState = await getCallsRoomState(c, roomName);
     
     if (!roomState) {
-      return c.json({ success: true, exists: false, isHostPresent: false, isEnded: false, participants: [] });
-    }
-
-    if (roomState.isEnded) {
-      return c.json({ success: true, exists: true, isHostPresent: false, isEnded: true, participants: [] });
+      return c.json({ success: true, exists: false, isHostPresent: false, isEnded: false, isAdmitted: false, participants: [], waitingQueue: [] });
     }
 
     const now = Date.now();
-    const activeParticipants = (roomState.participants || []).filter((p: any) => (now - p.updatedAt < 120000));
+    const isRecentEnded = Boolean(roomState.isEnded && roomState.endedAt && (now - roomState.endedAt < 600000));
+    if (isRecentEnded) {
+      return c.json({ success: true, exists: true, isHostPresent: false, isEnded: true, isAdmitted: false, participants: [], waitingQueue: [] });
+    }
+
+    const activeParticipants = (roomState.participants || []).filter((p: any) => (now - p.updatedAt < 12000));
     const isHostPresent = activeParticipants.some((p: any) => p.role === 'company');
 
     return c.json({
@@ -3759,6 +4411,7 @@ app.get('/api/calls/rooms/:roomName/status', async (c) => {
       exists: true,
       isHostPresent,
       isEnded: false,
+      isAdmitted: true,
       participants: activeParticipants,
     });
   } catch (err: any) {
@@ -3766,11 +4419,23 @@ app.get('/api/calls/rooms/:roomName/status', async (c) => {
   }
 });
 
+// Join Room (Direct Access with IDOR Interview Check)
 app.post('/api/calls/rooms/:roomName/join', async (c) => {
   try {
     const { roomName } = c.req.param();
     const body = await c.req.json().catch(() => ({}));
     const { sessionId, participantId, name, role, tracks } = body;
+
+    // Optional IDOR Check: If roomName is an interview UUID, verify it exists in DB
+    try {
+      const interviewRow: any = await c.env.DB.prepare(`
+        SELECT id FROM "Interview" WHERE id = ?
+      `).bind(roomName).first();
+      // If room is an interview ID but not found in DB, return 404
+      if (roomName.includes('-') && !interviewRow) {
+        return c.json({ success: false, message: 'Interview session not found' }, 404);
+      }
+    } catch {}
 
     let roomState = await getCallsRoomState(c, roomName);
     if (!roomState) {
@@ -3797,123 +4462,72 @@ app.post('/api/calls/rooms/:roomName/join', async (c) => {
     }
     if (!resolvedName) resolvedName = role === 'company' ? 'Interviewer' : 'Candidate';
 
-    // Reset ended state if host rejoins
-    if (role === 'company') roomState.isEnded = false;
+    roomState.isEnded = false;
+    roomState.endedAt = null;
 
-    // Prune stale participants (>10s) AND remove any existing session of the same role (prevents refresh duplicates)
-    roomState.participants = roomState.participants.filter(
-      (p: any) => p.sessionId !== sessionId && p.role !== role && (now - p.updatedAt < 10000)
+    const remaining = (roomState.participants || []).filter(
+      (p: any) => p.sessionId !== sessionId && (now - p.updatedAt < 12000)
     );
 
-    roomState.participants.push({
+    const participant = {
       sessionId,
       participantId: participantId || sessionId,
       name: resolvedName,
       role: role || 'candidate',
       tracks: tracks || ['audio', 'video'],
+      isPublished: Boolean(body.isPublished),
       joinedAt: now,
       updatedAt: now,
+    };
+
+    roomState.participants = [...remaining, participant];
+    await saveCallsRoomState(c, roomName, roomState);
+
+    const isHostPresent = roomState.participants.some((p: any) => p.role === 'company');
+
+    return c.json({
+      success: true,
+      isHostPresent,
+      isAdmitted: true,
+      isEnded: false,
+      participants: roomState.participants,
     });
-
-    await saveCallsRoomState(c, roomName, roomState);
-
-    return c.json({ success: true, participants: roomState.participants });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
 });
 
-// Host Admits a Candidate
-app.post('/api/calls/rooms/:roomName/admit', async (c) => {
-  try {
-    const { roomName } = c.req.param();
-    const body = await c.req.json().catch(() => ({}));
-    const targetSessionId = body.sessionId || body.candidateSessionId;
-    if (!targetSessionId) return c.json({ success: false, message: 'Session ID required' }, 400);
-
-    let roomState = await getCallsRoomState(c, roomName);
-    if (!roomState) return c.json({ success: false, message: 'Room not found' }, 404);
-
-    if (!Array.isArray(roomState.admittedCandidates)) roomState.admittedCandidates = [];
-    if (!roomState.admittedCandidates.includes(targetSessionId)) {
-      roomState.admittedCandidates.push(targetSessionId);
-    }
-
-    const candQueueItem = (roomState.waitingQueue || []).find((w: any) => w.sessionId === targetSessionId);
-    if (Array.isArray(roomState.waitingQueue)) {
-      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== targetSessionId);
-    }
-
-    // Immediately register admitted candidate in participants so host sees candidate right away
-    if (!Array.isArray(roomState.participants)) roomState.participants = [];
-    roomState.participants = roomState.participants.filter((p: any) => p.role !== 'candidate');
-    roomState.participants.push({
-      sessionId: targetSessionId,
-      participantId: candQueueItem?.participantId || targetSessionId,
-      name: candQueueItem?.name || 'Candidate',
-      role: 'candidate',
-      tracks: ['audio', 'video'],
-      joinedAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-
-    await saveCallsRoomState(c, roomName, roomState);
-    return c.json({ success: true, message: 'Candidate admitted successfully', participants: roomState.participants });
-  } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
-  }
-});
-
-// Host Declines a Candidate
-app.post('/api/calls/rooms/:roomName/decline', async (c) => {
-  try {
-    const { roomName } = c.req.param();
-    const body = await c.req.json().catch(() => ({}));
-    const targetSessionId = body.sessionId || body.candidateSessionId;
-    if (!targetSessionId) return c.json({ success: false, message: 'Session ID required' }, 400);
-
-    let roomState = await getCallsRoomState(c, roomName);
-    if (!roomState) return c.json({ success: false, message: 'Room not found' }, 404);
-
-    if (!Array.isArray(roomState.declinedCandidates)) roomState.declinedCandidates = [];
-    if (!roomState.declinedCandidates.includes(targetSessionId)) {
-      roomState.declinedCandidates.push(targetSessionId);
-    }
-    if (Array.isArray(roomState.waitingQueue)) {
-      roomState.waitingQueue = roomState.waitingQueue.filter((w: any) => w.sessionId !== targetSessionId);
-    }
-
-    await saveCallsRoomState(c, roomName, roomState);
-    return c.json({ success: true, message: 'Candidate access declined' });
-  } catch (err: any) {
-    return c.json({ success: false, message: err.message }, 500);
-  }
-});
-
+// Get active participants
 app.get('/api/calls/rooms/:roomName/participants', async (c) => {
   try {
     const { roomName } = c.req.param();
     const roomState = await getCallsRoomState(c, roomName);
-    if (!roomState || roomState.isEnded) return c.json({ success: true, isEnded: Boolean(roomState?.isEnded), participants: [] });
-
     const now = Date.now();
-    const active = (roomState.participants || []).filter((p: any) => (now - p.updatedAt < 120000));
-    return c.json({ success: true, isEnded: false, participants: active });
+    const active = (roomState?.participants || []).filter((p: any) => now - p.updatedAt < 12000);
+    return c.json({ success: true, participants: active });
   } catch (err: any) {
-    return c.json({ success: false, participants: [] });
+    return c.json({ success: false, message: err.message }, 500);
   }
 });
 
+// Keepalive Heartbeat (Direct Access)
 app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const { sessionId, role, name } = await c.req.json().catch(() => ({}));
+    const body = await c.req.json().catch(() => ({}));
+    const { sessionId, role, name, isPublished } = body;
 
     let roomState = await getCallsRoomState(c, roomName);
-    if (!roomState) return c.json({ success: true, isEnded: false, participants: [] });
-    if (roomState.isEnded) return c.json({ success: true, isEnded: true, participants: [] });
+    if (!roomState) {
+      roomState = { isEnded: false, participants: [] };
+    }
 
     const now = Date.now();
+    const isRecentEnded = Boolean(roomState.isEnded && roomState.endedAt && (now - roomState.endedAt < 600000));
+    if (isRecentEnded && role !== 'company') {
+      return c.json({ success: true, isEnded: true, isHostPresent: false, isAdmitted: true, participants: [] });
+    }
+
     if (!Array.isArray(roomState.participants)) roomState.participants = [];
 
     // Resolve real name
@@ -3933,43 +4547,44 @@ app.post('/api/calls/rooms/:roomName/heartbeat', async (c) => {
     }
     if (!resolvedName) resolvedName = role === 'company' ? 'Interviewer' : 'Candidate';
 
-    // Filter stale participants (>10s) except current session
-    let active = roomState.participants.filter(
-      (p: any) => p.sessionId === sessionId || (now - p.updatedAt < 10000)
+    const otherParticipants = (roomState.participants || []).filter(
+      (p: any) => p.sessionId !== sessionId && (now - p.updatedAt < 12000)
     );
 
-    // Enforce 1 session per role: replace older session of same role with current
-    active = active.filter((p: any) => p.sessionId === sessionId || p.role !== role);
+    const existing = (roomState.participants || []).find((p: any) => p.sessionId === sessionId);
+    const updatedParticipant = {
+      sessionId,
+      participantId: sessionId,
+      name: resolvedName,
+      role: role || 'candidate',
+      tracks: ['audio', 'video'],
+      isPublished: isPublished !== undefined ? Boolean(isPublished) : Boolean(existing?.isPublished),
+      joinedAt: existing?.joinedAt || now,
+      updatedAt: now,
+    };
 
-    const existingIdx = active.findIndex((p: any) => p.sessionId === sessionId);
-    if (existingIdx >= 0) {
-      active[existingIdx].updatedAt = now;
-      if (resolvedName) active[existingIdx].name = resolvedName;
-    } else {
-      active.push({
-        sessionId,
-        participantId: sessionId,
-        name: resolvedName,
-        role: role || 'candidate',
-        tracks: ['audio', 'video'],
-        joinedAt: now,
-        updatedAt: now,
-      });
-    }
-
+    const active = [...otherParticipants, updatedParticipant];
     roomState.participants = active;
     await saveCallsRoomState(c, roomName, roomState);
 
-    return c.json({ success: true, isEnded: false, participants: active });
-  } catch {
-    return c.json({ success: true, isEnded: false, participants: [] });
+    const isHostPresent = active.some((p: any) => p.role === 'company');
+
+    return c.json({
+      success: true,
+      isHostPresent,
+      isAdmitted: true,
+      isEnded: false,
+      participants: active,
+    });
+  } catch (err: any) {
+    return c.json({ success: true, isEnded: false, isHostPresent: false, isAdmitted: true, participants: [] });
   }
 });
 
 app.post('/api/calls/rooms/:roomName/end', async (c) => {
   try {
     const { roomName } = c.req.param();
-    const roomState = { isEnded: true, endedAt: Date.now(), participants: [] };
+    const roomState = { isEnded: true, endedAt: Date.now(), participants: [], waitingQueue: [], admittedCandidates: [] };
     await saveCallsRoomState(c, roomName, roomState);
     return c.json({ success: true, message: 'Room ended successfully' });
   } catch (err: any) {
@@ -3985,6 +4600,9 @@ app.post('/api/calls/rooms/:roomName/leave', async (c) => {
     if (roomState) {
       roomState.participants = (roomState.participants || []).filter(
         (p: any) => (sessionId ? p.sessionId !== sessionId : true) && (role ? p.role !== role : true)
+      );
+      roomState.waitingQueue = (roomState.waitingQueue || []).filter(
+        (p: any) => (sessionId ? p.sessionId !== sessionId : true)
       );
       await saveCallsRoomState(c, roomName, roomState);
     }
@@ -4227,6 +4845,8 @@ app.get('/api/jobseeker/profile', async (c) => {
     const decoded = await getAuthUser(c);
     if (!decoded) return c.json({ success: false, message: 'Unauthorized' }, 401);
 
+    const user: any = await c.env.DB.prepare('SELECT id, mobileNumber FROM "User" WHERE id = ?').bind(decoded.userId).first().catch(() => null);
+
     const profile: any = await c.env.DB.prepare('SELECT * FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
     if (!profile) {
       return c.json({
@@ -4234,7 +4854,7 @@ app.get('/api/jobseeker/profile', async (c) => {
         data: {
           fullName: '',
           email: '',
-          phone: '',
+          phone: user?.mobileNumber || '',
           location: '',
           linkedin: '',
           github: '',
@@ -4361,7 +4981,7 @@ app.get('/api/jobseeker/profile', async (c) => {
         id: profile.id,
         fullName: profile.fullName === 'Candidate' ? '' : (profile.fullName || ''),
         email: profile.email || '',
-        phone: profile.phone || '',
+        phone: profile.phone || user?.mobileNumber || '',
         location: profile.location || '',
         linkedin: profile.linkedin || '',
         github: profile.github || '',
@@ -4404,7 +5024,11 @@ app.put('/api/jobseeker/profile', async (c) => {
       const formData = await c.req.formData();
       const rawData = formData.get('profileData');
       if (rawData && typeof rawData === 'string') {
-        profileData = JSON.parse(rawData);
+        try {
+          profileData = JSON.parse(rawData);
+        } catch {
+          profileData = {};
+        }
       }
       const imageFile = formData.get('profileImage');
       if (imageFile && typeof imageFile === 'object' && 'arrayBuffer' in imageFile) {
@@ -4418,7 +5042,16 @@ app.put('/api/jobseeker/profile', async (c) => {
         profilePhotoUrl = `data:${fileObj.type || 'image/jpeg'};base64,${btoa(binary)}`;
       }
     } else {
-      profileData = await c.req.json().catch(() => ({}));
+      const body = await c.req.json().catch(() => ({}));
+      if (body && body.profileData && typeof body.profileData === 'string') {
+        try {
+          profileData = JSON.parse(body.profileData);
+        } catch {
+          profileData = body;
+        }
+      } else {
+        profileData = body || {};
+      }
     }
 
     if (!profilePhotoUrl && profileData.profilePic) {
@@ -4443,48 +5076,83 @@ app.put('/api/jobseeker/profile', async (c) => {
       return c.json({ success: false, message: 'Unauthorized' }, 401);
     }
 
-    const fullName = profileData.fullName?.trim() || 'Candidate';
-    const email = profileData.email?.trim() || '';
-    const phone = profileData.phone?.trim() || '';
-    const location = profileData.location?.trim() || '';
-    const linkedin = profileData.linkedin?.trim() || '';
-    const github = profileData.github?.trim() || '';
-    const portfolio = profileData.portfolio?.trim() || '';
-    const bio = profileData.bio?.trim() || '';
-    const discoverable = profileData.discoverable !== undefined ? (profileData.discoverable ? 1 : 0) : 0;
-    const jobPreferences = JSON.stringify(profileData.preferences || {});
+    const user: any = await c.env.DB.prepare('SELECT id, mobileNumber FROM "User" WHERE id = ?').bind(userId).first().catch(() => null);
+    const existing: any = await c.env.DB.prepare('SELECT * FROM "JobSeekerProfile" WHERE userId = ?').bind(userId).first();
+
+    // Preserve non-empty existing values if field was not provided in partial payload
+    const fullName = profileData.fullName !== undefined
+      ? (profileData.fullName.trim() || (existing?.fullName && existing.fullName !== 'Candidate' ? existing.fullName : 'Candidate'))
+      : (existing?.fullName || 'Candidate');
+
+    const email = profileData.email !== undefined
+      ? profileData.email.trim()
+      : (existing?.email || '');
+
+    const phone = profileData.phone !== undefined
+      ? profileData.phone.trim()
+      : (existing?.phone || user?.mobileNumber || '');
+
+    const location = profileData.location !== undefined
+      ? profileData.location.trim()
+      : (existing?.location || '');
+
+    const linkedin = profileData.linkedin !== undefined
+      ? profileData.linkedin.trim()
+      : (existing?.linkedin || '');
+
+    const github = profileData.github !== undefined
+      ? profileData.github.trim()
+      : (existing?.github || '');
+
+    const portfolio = profileData.portfolio !== undefined
+      ? profileData.portfolio.trim()
+      : (existing?.portfolio || '');
+
+    const bio = profileData.bio !== undefined
+      ? profileData.bio.trim()
+      : (existing?.bio || '');
+
+    const discoverable = profileData.discoverable !== undefined
+      ? (profileData.discoverable ? 1 : 0)
+      : (existing?.discoverable ?? 0);
+
+    const availabilityStatus = profileData.availabilityStatus !== undefined
+      ? profileData.availabilityStatus
+      : (existing?.availabilityStatus || 'available');
+
+    let jobPreferences = existing?.jobPreferences || '{}';
+    if (profileData.preferences !== undefined) {
+      let existingPrefs: any = {};
+      try {
+        existingPrefs = typeof existing?.jobPreferences === 'string' ? JSON.parse(existing.jobPreferences) : (existing?.jobPreferences || {});
+      } catch {
+        existingPrefs = {};
+      }
+      jobPreferences = JSON.stringify({ ...existingPrefs, ...profileData.preferences });
+    }
+
+    const photoToSave = profilePhotoUrl !== null ? profilePhotoUrl : (existing?.profilePhotoUrl || null);
     const now = new Date().toISOString();
 
     let profileId: string;
-    const existing: any = await c.env.DB.prepare('SELECT id, profilePhotoUrl FROM "JobSeekerProfile" WHERE userId = ?').bind(userId).first();
-
-    const photoToSave = profilePhotoUrl !== null ? profilePhotoUrl : (existing?.profilePhotoUrl || null);
-
     if (existing) {
       profileId = existing.id;
       await c.env.DB.prepare(
-        'UPDATE "JobSeekerProfile" SET fullName = ?, email = ?, phone = ?, location = ?, linkedin = ?, github = ?, portfolio = ?, bio = ?, profilePhotoUrl = ?, jobPreferences = ?, discoverable = ?, updatedAt = ? WHERE userId = ?'
-      ).bind(fullName, email, phone, location, linkedin, github, portfolio, bio, photoToSave, jobPreferences, discoverable, now, userId).run();
+        'UPDATE "JobSeekerProfile" SET fullName = ?, email = ?, phone = ?, location = ?, linkedin = ?, github = ?, portfolio = ?, bio = ?, profilePhotoUrl = ?, jobPreferences = ?, discoverable = ?, availabilityStatus = ?, updatedAt = ? WHERE userId = ?'
+      ).bind(fullName, email, phone, location, linkedin, github, portfolio, bio, photoToSave, jobPreferences, discoverable, availabilityStatus, now, userId).run();
     } else {
       profileId = crypto.randomUUID();
       await c.env.DB.prepare(
         'INSERT INTO "JobSeekerProfile" (id, userId, fullName, email, phone, location, linkedin, github, portfolio, bio, profilePhotoUrl, jobPreferences, discoverable, availabilityStatus, aiResumeBuilderEnabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(profileId, userId, fullName, email, phone, location, linkedin, github, portfolio, bio, photoToSave, jobPreferences, discoverable, 'available', 1, now, now).run();
+      ).bind(profileId, userId, fullName, email, phone, location, linkedin, github, portfolio, bio, photoToSave, jobPreferences, discoverable, availabilityStatus, 1, now, now).run();
     }
 
-    // Prepare statements to sync child tables
-    const statements: any[] = [
-      c.env.DB.prepare('DELETE FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profileId),
-      c.env.DB.prepare('DELETE FROM "Education" WHERE jobSeekerProfileId = ?').bind(profileId),
-      c.env.DB.prepare('DELETE FROM "Experience" WHERE jobSeekerProfileId = ?').bind(profileId),
-      c.env.DB.prepare('DELETE FROM "Project" WHERE jobSeekerProfileId = ?').bind(profileId),
-      c.env.DB.prepare('DELETE FROM "Certification" WHERE jobSeekerProfileId = ?').bind(profileId),
-      c.env.DB.prepare('DELETE FROM "Language" WHERE jobSeekerProfileId = ?').bind(profileId),
-      c.env.DB.prepare('DELETE FROM "Achievement" WHERE jobSeekerProfileId = ?').bind(profileId),
-    ];
+    // Prepare statements to sync child tables ONLY IF provided as arrays in payload
+    const statements: any[] = [];
 
     // Skills
     if (Array.isArray(profileData.skills)) {
+      statements.push(c.env.DB.prepare('DELETE FROM "Skill" WHERE jobSeekerProfileId = ?').bind(profileId));
       for (const skillName of profileData.skills) {
         if (typeof skillName === 'string' && skillName.trim()) {
           statements.push(
@@ -4496,8 +5164,9 @@ app.put('/api/jobseeker/profile', async (c) => {
 
     // Education
     if (Array.isArray(profileData.education)) {
+      statements.push(c.env.DB.prepare('DELETE FROM "Education" WHERE jobSeekerProfileId = ?').bind(profileId));
       for (const edu of profileData.education) {
-        if (edu && (edu.institution?.trim() || edu.degree?.trim())) {
+        if (edu && (edu.institution?.trim() || edu.degree?.trim() || edu.field?.trim())) {
           statements.push(
             c.env.DB.prepare('INSERT INTO "Education" (id, jobSeekerProfileId, institution, degree, field, location, startMonth, startYear, endMonth, endYear, cgpa, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
               .bind(crypto.randomUUID(), profileId, (edu.institution || '').trim(), (edu.degree || '').trim(), (edu.field || '').trim(), edu.location || '', edu.startMonth || '', edu.startYear || '', edu.endMonth || '', edu.endYear || '', edu.cgpa || '', edu.description || '', now, now)
@@ -4508,6 +5177,7 @@ app.put('/api/jobseeker/profile', async (c) => {
 
     // Experience
     if (Array.isArray(profileData.experience)) {
+      statements.push(c.env.DB.prepare('DELETE FROM "Experience" WHERE jobSeekerProfileId = ?').bind(profileId));
       for (const exp of profileData.experience) {
         if (exp && (exp.company?.trim() || exp.role?.trim())) {
           const skillsUsed = JSON.stringify(Array.isArray(exp.skills) ? exp.skills : []);
@@ -4521,12 +5191,13 @@ app.put('/api/jobseeker/profile', async (c) => {
 
     // Projects
     if (Array.isArray(profileData.projects)) {
+      statements.push(c.env.DB.prepare('DELETE FROM "Project" WHERE jobSeekerProfileId = ?').bind(profileId));
       for (const proj of profileData.projects) {
-        if (proj && proj.name?.trim()) {
+        if (proj && (proj.name?.trim() || proj.description?.trim())) {
           const technologies = JSON.stringify(Array.isArray(proj.technologies) ? proj.technologies : []);
           statements.push(
             c.env.DB.prepare('INSERT INTO "Project" (id, jobSeekerProfileId, name, description, technologies, githubLink, liveLink, startDate, endDate, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-              .bind(crypto.randomUUID(), profileId, proj.name.trim(), proj.description || '', technologies, proj.githubLink || '', proj.liveLink || '', proj.startDate || '', proj.endDate || '', now, now)
+              .bind(crypto.randomUUID(), profileId, (proj.name || '').trim(), proj.description || '', technologies, proj.githubLink || '', proj.liveLink || '', proj.startDate || '', proj.endDate || '', now, now)
           );
         }
       }
@@ -4534,11 +5205,12 @@ app.put('/api/jobseeker/profile', async (c) => {
 
     // Certifications
     if (Array.isArray(profileData.certifications)) {
+      statements.push(c.env.DB.prepare('DELETE FROM "Certification" WHERE jobSeekerProfileId = ?').bind(profileId));
       for (const cert of profileData.certifications) {
-        if (cert && cert.name?.trim()) {
+        if (cert && (cert.name?.trim() || cert.organization?.trim())) {
           statements.push(
             c.env.DB.prepare('INSERT INTO "Certification" (id, jobSeekerProfileId, name, organization, issueDate, credentialUrl, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
-              .bind(crypto.randomUUID(), profileId, cert.name.trim(), cert.organization || '', cert.issueDate || '', cert.credentialUrl || '', now)
+              .bind(crypto.randomUUID(), profileId, (cert.name || '').trim(), cert.organization || '', cert.issueDate || '', cert.credentialUrl || '', now)
           );
         }
       }
@@ -4546,11 +5218,12 @@ app.put('/api/jobseeker/profile', async (c) => {
 
     // Languages
     if (Array.isArray(profileData.languages)) {
+      statements.push(c.env.DB.prepare('DELETE FROM "Language" WHERE jobSeekerProfileId = ?').bind(profileId));
       for (const lang of profileData.languages) {
-        if (lang && lang.language?.trim()) {
+        if (lang && (lang.language?.trim() || lang.name?.trim())) {
           statements.push(
             c.env.DB.prepare('INSERT INTO "Language" (id, jobSeekerProfileId, language, proficiency, createdAt) VALUES (?, ?, ?, ?, ?)')
-              .bind(crypto.randomUUID(), profileId, lang.language.trim(), lang.proficiency || 'Beginner', now)
+              .bind(crypto.randomUUID(), profileId, (lang.language || lang.name || '').trim(), lang.proficiency || 'Beginner', now)
           );
         }
       }
@@ -4558,18 +5231,21 @@ app.put('/api/jobseeker/profile', async (c) => {
 
     // Achievements
     if (Array.isArray(profileData.achievements)) {
+      statements.push(c.env.DB.prepare('DELETE FROM "Achievement" WHERE jobSeekerProfileId = ?').bind(profileId));
       for (const ach of profileData.achievements) {
-        if (ach && ach.title?.trim()) {
+        if (ach && (ach.title?.trim() || ach.description?.trim())) {
           statements.push(
             c.env.DB.prepare('INSERT INTO "Achievement" (id, jobSeekerProfileId, title, description, year, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
-              .bind(crypto.randomUUID(), profileId, ach.title.trim(), ach.description || '', ach.year || '', now)
+              .bind(crypto.randomUUID(), profileId, (ach.title || '').trim(), ach.description || '', ach.year || '', now)
           );
         }
       }
     }
 
-    // Execute in batch
-    await c.env.DB.batch(statements);
+    // Execute in batch if statements exist
+    if (statements.length > 0) {
+      await c.env.DB.batch(statements);
+    }
 
     const jwtSecret = getJwtSecret(c);
     const accessToken = jwt.sign(
@@ -4588,10 +5264,10 @@ app.put('/api/jobseeker/profile', async (c) => {
       token: accessToken,
       user: {
         id: userId,
-        fullName,
+        fullName: fullName === 'Candidate' ? '' : fullName,
         email,
         phone,
-        hasFullName: true,
+        hasFullName: Boolean(fullName && fullName !== 'Candidate'),
         hasEmail: Boolean(email),
       },
     });
@@ -5689,7 +6365,153 @@ app.delete('/api/jobseeker/saved-jobs/:jobId', async (c) => {
   }
 });
 
-app.get('/api/jobseeker/spot-jobs/invitations', async (c) => c.json({ success: true, data: [] }));
+const handleGetJobSeekerInvitations = async (c: any) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.userId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const profile: any = await c.env.DB.prepare('SELECT id, availabilityStatus FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+    if (!profile) return c.json({ success: true, data: [] });
+
+    const now = new Date().toISOString();
+
+    // Auto-match active spot gigs if candidate is open/available
+    if (profile.availabilityStatus === 'spot_available' || profile.availabilityStatus === 'available') {
+      const activeJobs: any = await c.env.DB.prepare(
+        'SELECT id, requiredSkills, location FROM "SpotJob" WHERE status IN ("POSTED", "SEARCHING")'
+      ).all().catch(() => ({ results: [] }));
+
+      for (const job of (activeJobs.results || [])) {
+        const existingBooking: any = await c.env.DB.prepare(
+          'SELECT id FROM "SpotJobBooking" WHERE spotJobId = ? AND jobSeekerProfileId = ?'
+        ).bind(job.id, profile.id).first().catch(() => null);
+
+        if (!existingBooking) {
+          const bId = crypto.randomUUID();
+          await c.env.DB.prepare(
+            'INSERT INTO "SpotJobBooking" (id, spotJobId, jobSeekerProfileId, status, notifiedAt, createdAt) VALUES (?, ?, ?, "PENDING_RESPONSE", ?, ?)'
+          ).bind(bId, job.id, profile.id, now, now).run().catch(() => {});
+
+          await c.env.DB.prepare('UPDATE "SpotJob" SET status = "SEARCHING", updatedAt = ? WHERE id = ?')
+            .bind(now, job.id).run().catch(() => {});
+        }
+      }
+    }
+
+    // Fetch all pending invitations for this candidate
+    const bookingsRes: any = await c.env.DB.prepare(`
+      SELECT b.id as bookingId, b.status as bookingStatus, b.createdAt as bookingCreatedAt,
+             s.id as spotJobId, s.title, s.description, s.requiredSkills, s.rate, s.rateType, s.currency,
+             s.startTime, s.endTime, s.location, s.status as spotJobStatus,
+             c.id as companyId, c.name as companyName, c.logoUrl as companyLogo, c.industry as companyIndustry
+      FROM "SpotJobBooking" b
+      JOIN "SpotJob" s ON b.spotJobId = s.id
+      JOIN "Company" c ON s.companyId = c.id
+      WHERE b.jobSeekerProfileId = ? AND b.status = "PENDING_RESPONSE" AND s.status IN ("POSTED", "SEARCHING")
+      ORDER BY b.createdAt DESC
+    `).bind(profile.id).all().catch(() => ({ results: [] }));
+
+    const invitations = (bookingsRes.results || []).map((row: any) => {
+      let skills = row.requiredSkills;
+      if (typeof skills === 'string') {
+        try { skills = JSON.parse(skills); } catch { skills = []; }
+      }
+      return {
+        id: row.bookingId,
+        status: row.bookingStatus,
+        createdAt: row.bookingCreatedAt,
+        spotJob: {
+          id: row.spotJobId,
+          title: row.title,
+          description: row.description || '',
+          requiredSkills: Array.isArray(skills) ? skills : [],
+          rate: Number(row.rate) || 0,
+          rateType: row.rateType || 'HOURLY',
+          currency: row.currency || 'INR',
+          startTime: row.startTime,
+          endTime: row.endTime,
+          location: row.location,
+          status: row.spotJobStatus,
+          company: {
+            id: row.companyId,
+            name: row.companyName,
+            logoUrl: row.companyLogo || null,
+            industry: row.companyIndustry || '',
+          },
+        },
+      };
+    });
+
+    return c.json({
+      success: true,
+      isSpotJobEnabled: profile.availabilityStatus === 'spot_available',
+      data: invitations,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+const handleRespondSpotJobBooking = async (c: any) => {
+  try {
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.userId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const bookingId = c.req.param('bookingId') || c.req.param('id');
+    const { action } = await c.req.json().catch(() => ({}));
+
+    if (!['ACCEPT', 'DECLINE'].includes(action)) {
+      return c.json({ success: false, message: 'Invalid response action (ACCEPT or DECLINE expected).' }, 400);
+    }
+
+    const profile: any = await c.env.DB.prepare('SELECT id FROM "JobSeekerProfile" WHERE userId = ?').bind(decoded.userId).first();
+    if (!profile) return c.json({ success: false, message: 'Candidate profile not found.' }, 404);
+
+    const booking: any = await c.env.DB.prepare(
+      'SELECT b.*, s.status as jobStatus FROM "SpotJobBooking" b JOIN "SpotJob" s ON b.spotJobId = s.id WHERE b.id = ?'
+    ).bind(bookingId).first();
+
+    if (!booking || booking.jobSeekerProfileId !== profile.id) {
+      return c.json({ success: false, message: 'Booking invitation not found.' }, 404);
+    }
+
+    if (booking.status !== 'PENDING_RESPONSE' || booking.jobStatus === 'CONFIRMED') {
+      return c.json({ success: false, message: 'This gig position has closed, expired, or been filled.' }, 400);
+    }
+
+    const now = new Date().toISOString();
+
+    if (action === 'DECLINE') {
+      await c.env.DB.prepare(
+        'UPDATE "SpotJobBooking" SET status = "DECLINED", respondedAt = ? WHERE id = ?'
+      ).bind(now, bookingId).run();
+      return c.json({ success: true, message: 'Spot job request declined.' });
+    }
+
+    // ACCEPT
+    await c.env.DB.prepare(
+      'UPDATE "SpotJobBooking" SET status = "ACCEPTED", respondedAt = ? WHERE id = ?'
+    ).bind(now, bookingId).run();
+
+    await c.env.DB.prepare(
+      'UPDATE "SpotJob" SET status = "CONFIRMED", updatedAt = ? WHERE id = ?'
+    ).bind(now, booking.spotJobId).run();
+
+    // Timeout other candidates for this gig
+    await c.env.DB.prepare(
+      'UPDATE "SpotJobBooking" SET status = "TIMED_OUT" WHERE spotJobId = ? AND id != ? AND status = "PENDING_RESPONSE"'
+    ).bind(booking.spotJobId, bookingId).run();
+
+    return c.json({ success: true, message: 'Spot job invitation accepted successfully!' });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+};
+
+app.get('/api/jobseeker/spot-jobs/invitations', handleGetJobSeekerInvitations);
+app.get('/api/spot-jobs/invitations', handleGetJobSeekerInvitations);
+app.patch('/api/jobseeker/spot-jobs/respond/:bookingId', handleRespondSpotJobBooking);
+app.patch('/api/spot-jobs/respond/:bookingId', handleRespondSpotJobBooking);
 app.get('/api/jobseeker/spot-jobs/toggle-status', async (c) => c.json({ success: true, status: 'available' }));
 
 app.get('/api/jobseeker/interviews', async (c) => {
@@ -5956,27 +6778,143 @@ app.get('/api/jobseeker/applications/tracker/timeline', async (c) => {
       ORDER BY a.appliedAt DESC
     `).bind(profile.id).all();
 
-    const formatted = (apps.results || []).map((app: any) => {
+    const formatted = await Promise.all((apps.results || []).map(async (app: any) => {
       const stage = app.status || 'applied';
       const isWithdrawn = Boolean(app.isWithdrawn);
+
+      // Fetch interviews
+      const interviewsRes: any = await c.env.DB.prepare(
+        'SELECT * FROM "Interview" WHERE applicationId = ? ORDER BY scheduledTime DESC'
+      ).bind(app.applicationId).all().catch(() => ({ results: [] }));
+      const interviews = (interviewsRes.results || []).map((i: any) => ({
+        interviewId: i.id,
+        scheduledTime: i.scheduledTime,
+        durationMinutes: i.durationMinutes || 30,
+        format: i.format || 'video',
+        status: i.status || 'scheduled',
+        livekitRoomName: i.livekitRoomName || '',
+        joinLink: ['scheduled', 'in_progress', 'confirmed'].includes(i.status) ? (i.joinLink || `/meet/${i.id}`) : null,
+        companyFeedback: [],
+      }));
+
+      // Fetch offer letters
+      const offerRes: any = await c.env.DB.prepare(
+        'SELECT * FROM "OfferLetter" WHERE applicationId = ? ORDER BY createdAt DESC'
+      ).bind(app.applicationId).first().catch(() => null);
+
+      let activeOffer = null;
+      if (offerRes) {
+        activeOffer = {
+          id: offerRes.id,
+          status: offerRes.status,
+          filePath: offerRes.filePath || '',
+          sentAt: offerRes.sentAt || offerRes.createdAt,
+          position: offerRes.position,
+          finalPosition: offerRes.position,
+          finalSalary: offerRes.salary,
+          currency: offerRes.currency,
+          startDate: offerRes.startDate,
+          employmentType: offerRes.employmentType,
+        };
+      }
+
+      // Fetch status history
+      const historyRes: any = await c.env.DB.prepare(
+        'SELECT * FROM "ApplicationStatusHistory" WHERE applicationId = ? ORDER BY createdAt ASC'
+      ).bind(app.applicationId).all().catch(() => ({ results: [] }));
+
+      let timelineView: any[] = [
+        {
+          stage: 'Applied',
+          status: 'completed',
+          date: app.appliedAt,
+          notes: 'Application submitted successfully',
+        }
+      ];
+
+      if (historyRes.results && historyRes.results.length > 0) {
+        for (const h of historyRes.results) {
+          if (h.toStatus && h.toStatus.toLowerCase() !== 'applied') {
+            timelineView.push({
+              stage: h.toStatus.replace(/_/g, ' '),
+              status: 'completed',
+              date: h.createdAt,
+              notes: h.notes || `Moved to stage: ${h.toStatus.replace(/_/g, ' ')}`,
+            });
+          }
+        }
+      } else if (stage && stage.toLowerCase() !== 'applied') {
+        // If no explicit history rows, synthesize the current active stage
+        timelineView.push({
+          stage: stage.replace(/_/g, ' '),
+          status: 'in_progress',
+          date: app.updatedAt || app.appliedAt,
+          notes: `Application progressing in ${stage.replace(/_/g, ' ')}`,
+        });
+      }
+
+      // If active offer exists, append offer stages to timeline
+      if (activeOffer) {
+        timelineView.push({
+          stage: 'Offer Sent',
+          status: 'completed',
+          date: activeOffer.sentAt,
+          notes: `Official offer letter issued (${activeOffer.currency} ${activeOffer.finalSalary} • ${activeOffer.finalPosition})`,
+        });
+
+        if (activeOffer.status === 'accepted') {
+          timelineView.push({
+            stage: 'Offer Accepted',
+            status: 'completed',
+            date: app.updatedAt,
+            notes: 'Candidate accepted offer terms',
+          });
+        } else if (activeOffer.status === 'declined') {
+          timelineView.push({
+            stage: 'Offer Declined',
+            status: 'completed',
+            date: app.updatedAt,
+            notes: 'Offer terms declined',
+          });
+        } else if (activeOffer.status === 'negotiating') {
+          timelineView.push({
+            stage: 'Negotiation',
+            status: 'in_progress',
+            date: app.updatedAt,
+            notes: 'Candidate requested terms negotiation',
+          });
+        }
+      }
+
+      const hasInterviewsStarted = interviews.some((i: any) =>
+        ['confirmed', 'in_progress', 'completed'].includes(i.status)
+      );
+
+      const canWithdraw = !isWithdrawn &&
+        !['hired', 'rejected', 'offer_sent'].includes(stage) &&
+        !activeOffer &&
+        !hasInterviewsStarted;
+
       return {
         applicationId: app.applicationId,
-        liveStatusBadge: stage,
+        liveStatusBadge: activeOffer ? (activeOffer.status === 'accepted' ? 'hired' : 'offer_sent') : stage,
         isWithdrawn,
-        currentStage: stage,
+        currentStage: activeOffer ? 'offer_sent' : stage,
         pipelineIndex: app.pipelineIndex || 0,
         candidateNotes: app.candidateNotes || '',
         appliedAt: app.appliedAt || new Date().toISOString(),
         updatedAt: app.updatedAt || app.appliedAt || new Date().toISOString(),
         jobDetails: {
           id: app.jobId,
-          title: app.jobTitle || 'Job Position',
+          title: activeOffer?.finalPosition || app.jobTitle || 'Job Position',
           department: app.jobDepartment || 'Engineering',
           jobType: app.jobType || 'Full-time',
           locationType: app.locationType || 'Remote',
           location: app.jobLocation || 'Remote',
           experienceRequired: app.experienceRequired || '',
-          compensationContext: app.compensationContext || '',
+          compensationContext: activeOffer
+            ? `${activeOffer.currency} ${Number(activeOffer.finalSalary).toLocaleString()}`
+            : app.compensationContext || '',
         },
         companyDetails: {
           name: app.companyName || 'Company',
@@ -5988,19 +6926,12 @@ app.get('/api/jobseeker/applications/tracker/timeline', async (c) => {
           name: app.resumeName || 'Primary Resume',
           downloadPath: app.resumeDownloadPath || null,
         },
-        timelineView: [
-          {
-            stage: 'Applied',
-            status: 'completed',
-            date: app.appliedAt,
-            notes: 'Application submitted successfully',
-          }
-        ],
-        interviewHistory: [],
-        activeOffer: null,
-        canWithdraw: !isWithdrawn && stage !== 'hired' && stage !== 'rejected',
+        timelineView,
+        interviewHistory: interviews,
+        activeOffer,
+        canWithdraw,
       };
-    });
+    }));
 
     return c.json({ success: true, data: formatted });
   } catch (err: any) {

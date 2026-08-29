@@ -1026,9 +1026,9 @@ function MeetPageContent() {
         </div>
       </main>
 
-      {/* Security Violations Overlay */}
+      {/* Security Violations Overlay - Positioned bottom-left so candidate PiP bottom-right is completely unblocked */}
       {roleType === 'jobseeker' && (securityViolations.length > 0 || audioCoachingWarning) && (
-        <div className="absolute bottom-5 right-5 z-50 max-w-sm rounded-xl bg-red-950/95 border border-red-500/40 p-3.5 backdrop-blur-md shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-300">
+        <div className="absolute bottom-5 left-5 z-50 max-w-sm rounded-xl bg-red-950/95 border border-red-500/40 p-3.5 backdrop-blur-md shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-300">
           {isSecurityMinimized ? (
             <button
               onClick={() => setIsSecurityMinimized(false)}
