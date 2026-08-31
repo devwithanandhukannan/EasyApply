@@ -1322,7 +1322,10 @@ app.post('/api/company/auth/register', async (c) => {
 });
 
 // ─── COMPANY AUTH: LOGIN & SESSION ───────────────────────
-app.post('/api/company/auth/login', async (c) => {
+app.post('/api/company/auth/login', handleCompanyLogin);
+app.post('/api/company/team/login', handleCompanyLogin);
+
+async function handleCompanyLogin(c: any) {
   try {
     const { email, password } = await c.req.json();
     if (!email || !password) {
@@ -1470,7 +1473,8 @@ app.post('/api/company/auth/login', async (c) => {
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
-});
+}
+
 
 
 app.get('/api/company/auth/verify-email', async (c) => {
@@ -1580,7 +1584,10 @@ app.post('/api/company/auth/resend-verification', async (c) => {
   }
 });
 
-app.post('/api/company/auth/forgot-password', async (c) => {
+app.post('/api/company/auth/forgot-password', handleCompanyForgotPassword);
+app.post('/api/company/team/forgot-password', handleCompanyForgotPassword);
+
+async function handleCompanyForgotPassword(c: any) {
   try {
     const { email, type } = await c.req.json().catch(() => ({}));
     if (!email) {
@@ -1611,12 +1618,12 @@ app.post('/api/company/auth/forgot-password', async (c) => {
     // 2. Check Team Member account
     if (!emailSent && (!type || type === 'team' || type === 'admin')) {
       const user: any = await c.env.DB.prepare(
-        'SELECT id, email, mobileNumber FROM "User" WHERE LOWER(email) = ? OR LOWER(mobileNumber) = ?'
-      ).bind(cleanEmail, cleanEmail).first().catch(() => null);
+        'SELECT id, mobileNumber FROM "User" WHERE LOWER(mobileNumber) = ?'
+      ).bind(cleanEmail).first().catch(() => null);
 
       if (user) {
         const member: any = await c.env.DB.prepare(
-          'SELECT id, companyId FROM "TeamMember" WHERE userId = ? AND status = "active"'
+          'SELECT id, companyId FROM "TeamMember" WHERE userId = ?'
         ).bind(user.id).first().catch(() => null);
 
         if (member) {
@@ -1655,9 +1662,13 @@ app.post('/api/company/auth/forgot-password', async (c) => {
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
-});
+}
 
-app.post('/api/company/auth/reset-password', async (c) => {
+
+app.post('/api/company/auth/reset-password', handleCompanyResetPassword);
+app.post('/api/company/team/reset-password', handleCompanyResetPassword);
+
+async function handleCompanyResetPassword(c: any) {
   try {
     const { token, newPassword } = await c.req.json().catch(() => ({}));
     if (!token || !newPassword) {
@@ -1708,7 +1719,8 @@ app.post('/api/company/auth/reset-password', async (c) => {
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
-});
+}
+
 
 app.get('/api/company/auth/session', async (c) => {
   try {
