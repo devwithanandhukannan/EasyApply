@@ -85,7 +85,8 @@ interface ActiveWalkInRoom {
 }
 
 export default function DashboardPage() {
-  const { company } = useAuth();
+  const { company, can, isAdmin, isViewer } = useAuth();
+
 
   const [summary, setSummary] = useState<DashboardSummary>({
     totalJobs: 0,
@@ -209,13 +210,15 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Post Job Primary Button */}
-        <Link
-          href="/dashboard/jobs"
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-tr from-[#0071e3] to-[#2563eb] hover:from-[#0062c4] hover:to-[#1d4ed8] text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Post a New Job</span>
-        </Link>
+        {(isAdmin || can('jobs', 'create')) && (
+          <Link
+            href="/dashboard/jobs"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-tr from-[#0071e3] to-[#2563eb] hover:from-[#0062c4] hover:to-[#1d4ed8] text-white font-bold text-xs shadow-md shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Post a New Job</span>
+          </Link>
+        )}
       </div>
 
       {/* Error Alert */}
@@ -228,18 +231,34 @@ export default function DashboardPage() {
 
       {/* ── 2. QUICK ACTION LAUNCHPAD ───────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Link
-          href="/dashboard/jobs"
-          className="p-3.5 rounded-2xl bg-zinc-100/80 dark:bg-[#18181b]/70 hover:bg-zinc-200/60 dark:hover:bg-[#27272a]/70 border border-zinc-200/80 dark:border-white/[0.08] transition-all flex items-center gap-3 group cursor-pointer"
-        >
-          <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-500 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <Plus className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-zinc-900 dark:text-white">Create Job</div>
-            <div className="text-[10px] text-zinc-500 dark:text-[#86868b]">AI Job Postings</div>
-          </div>
-        </Link>
+        {(isAdmin || can('jobs', 'create')) ? (
+          <Link
+            href="/dashboard/jobs"
+            className="p-3.5 rounded-2xl bg-zinc-100/80 dark:bg-[#18181b]/70 hover:bg-zinc-200/60 dark:hover:bg-[#27272a]/70 border border-zinc-200/80 dark:border-white/[0.08] transition-all flex items-center gap-3 group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Plus className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-zinc-900 dark:text-white">Create Job</div>
+              <div className="text-[10px] text-zinc-500 dark:text-[#86868b]">AI Job Postings</div>
+            </div>
+          </Link>
+        ) : (
+          <Link
+            href="/dashboard/jobs"
+            className="p-3.5 rounded-2xl bg-zinc-100/80 dark:bg-[#18181b]/70 hover:bg-zinc-200/60 dark:hover:bg-[#27272a]/70 border border-zinc-200/80 dark:border-white/[0.08] transition-all flex items-center gap-3 group cursor-pointer"
+          >
+            <div className="w-9 h-9 rounded-xl bg-blue-500/15 text-blue-500 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <Briefcase className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-zinc-900 dark:text-white">Browse Jobs</div>
+              <div className="text-[10px] text-zinc-500 dark:text-[#86868b]">Active Openings</div>
+            </div>
+          </Link>
+        )}
+
 
         <Link
           href="/dashboard/walkin"

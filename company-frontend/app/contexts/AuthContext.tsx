@@ -172,13 +172,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           const rawUser = response.data.user || {};
           const rawCompany = response.data.company || rawUser.company || {};
-          const computedRolesMask = rawUser.rolesMask || rawUser.companyRoles || rawUser.roles || (rawUser.role === 'owner' || rawUser.role === 'admin' ? 2 : 2);
+          const computedRolesMask = typeof rawUser.rolesMask === 'number'
+            ? rawUser.rolesMask
+            : (typeof rawUser.companyRoles === 'number'
+              ? rawUser.companyRoles
+              : (rawUser.role === 'owner' || rawUser.role === 'admin' ? 2 : 16));
 
           setUser({
             id: rawUser.id || rawCompany.id,
             userId: rawUser.userId || rawUser.id,
             name: rawUser.name || (rawCompany.name ? rawCompany.name + ' Admin' : 'Company Admin'),
-            email: rawUser.email || rawCompany.email,
+            email: rawUser.email || rawCompany.email || '',
             avatar: rawUser.avatar || null,
             rolesMask: computedRolesMask,
             globalRolesMask: rawUser.globalRoles || 2,
@@ -227,7 +231,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const rawUser = loginPayload.user || loginPayload;
     const rawCompany = loginPayload.company || rawUser.company || null;
-    const computedRolesMask = rawUser.rolesMask || rawUser.companyRoles || rawUser.roles || (rawUser.role === 'owner' || rawUser.role === 'admin' ? 2 : 2);
+    const computedRolesMask = typeof rawUser.rolesMask === 'number'
+      ? rawUser.rolesMask
+      : (typeof rawUser.companyRoles === 'number'
+        ? rawUser.companyRoles
+        : (rawUser.role === 'owner' || rawUser.role === 'admin' ? 2 : 16));
 
     setUser({
       id: rawUser.memberId || rawUser.id,
@@ -247,17 +255,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await api.post('/auth/logout');
+      await api.post('/company/auth/logout').catch(() => null);
+      await api.post('/auth/logout').catch(() => null);
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('companyToken');
+        localStorage.removeItem('token');
+      }
+      setAccessToken('');
       setIsAuthenticated(false);
       setUser(null);
       setCompany(null);
-      setAccessToken('');
       router.replace('/login');
     }
   };
+
 
   return (
     <AuthContext.Provider value={{

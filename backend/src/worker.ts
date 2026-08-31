@@ -1435,6 +1435,19 @@ async function handleCompanyLogin(c: any) {
           return c.json({ success: false, message: 'Invalid credentials' }, 401);
         }
 
+        let parsedPermissions: any = null;
+        if (teamMemberRow.permissions) {
+          try {
+            parsedPermissions = typeof teamMemberRow.permissions === 'string' ? JSON.parse(teamMemberRow.permissions) : teamMemberRow.permissions;
+          } catch {}
+        }
+        let parsedTags: any = [];
+        if (teamMemberRow.tags) {
+          try {
+            parsedTags = typeof teamMemberRow.tags === 'string' ? JSON.parse(teamMemberRow.tags) : teamMemberRow.tags;
+          } catch {}
+        }
+
         const jwtSecret = getJwtSecret(c);
         const token = jwt.sign(
           {
@@ -1443,6 +1456,7 @@ async function handleCompanyLogin(c: any) {
             userId: userRow.id,
             rolesMask: teamMemberRow.roles,
             isTeamMember: true,
+            role: 'team_member',
           },
           jwtSecret,
           { expiresIn: '7d' }
@@ -1461,9 +1475,15 @@ async function handleCompanyLogin(c: any) {
             subscription,
           },
           user: {
-            id: userRow.id,
+            id: teamMemberRow.id,
+            userId: userRow.id,
             email: cleanEmail,
+            name: cleanEmail,
+            role: 'team_member',
             rolesMask: teamMemberRow.roles,
+            companyRoles: teamMemberRow.roles,
+            permissions: parsedPermissions,
+            tags: parsedTags,
           },
         });
       }
@@ -1474,6 +1494,7 @@ async function handleCompanyLogin(c: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
 }
+
 
 
 
@@ -1748,19 +1769,64 @@ app.get('/api/company/auth/session', async (c) => {
       subscription,
     };
 
+    // Check if the authenticated session belongs to a Team Member
+    const isTeamMemberSession = decoded.isTeamMember || (decoded.userId && decoded.userId !== decoded.companyId && decoded.role !== 'owner');
+
+    if (isTeamMemberSession) {
+      const member: any = await c.env.DB.prepare(
+        'SELECT m.*, u.mobileNumber, p.fullName, p.profilePhotoUrl FROM "TeamMember" m JOIN "User" u ON m.userId = u.id LEFT JOIN "JobSeekerProfile" p ON p.userId = u.id WHERE m.companyId = ? AND (m.id = ? OR m.userId = ?)'
+      ).bind(decoded.companyId, decoded.memberId || decoded.userId, decoded.userId || decoded.memberId).first();
+
+      if (member) {
+        let permissions = null;
+        if (member.permissions) {
+          try { permissions = typeof member.permissions === 'string' ? JSON.parse(member.permissions) : member.permissions; } catch {}
+        }
+        let tags = [];
+        if (member.tags) {
+          try { tags = typeof member.tags === 'string' ? JSON.parse(member.tags) : member.tags; } catch {}
+        }
+
+        const memberEmail = member.mobileNumber || '';
+        const memberName = member.fullName || memberEmail || 'Team Member';
+
+        return c.json({
+          success: true,
+          company: companyObj,
+          user: {
+            id: member.id,
+            userId: member.userId,
+            name: memberName,
+            email: memberEmail,
+            avatar: member.profilePhotoUrl || null,
+            role: 'team_member',
+            rolesMask: member.roles,
+            companyRoles: member.roles,
+            permissions,
+            tags,
+            company: companyObj,
+          },
+        });
+      }
+    }
+
+    // Default: Company Owner / Admin
     return c.json({
       success: true,
       company: companyObj,
       user: {
-        id: decoded.memberId,
+        id: decoded.memberId || company.id,
+        userId: decoded.userId || company.id,
         name: company.name,
         email: company.email,
-        role: decoded.role || 'owner',
+        role: 'owner',
         rolesMask: 2, // Company Admin
         companyRoles: 2,
+        permissions: null,
         company: companyObj,
       },
     });
+
   } catch (err: any) {
     return c.json({ success: false, user: null, message: err.message }, 200);
   }
@@ -5259,6 +5325,17 @@ app.post('/api/auth/logout', (c) => {
   clearAuthCookies(c);
   return c.json({ success: true, message: 'Logged out.' });
 });
+
+app.post('/api/company/auth/logout', (c) => {
+  clearAuthCookies(c);
+  return c.json({ success: true, message: 'Logged out.' });
+});
+
+app.post('/api/company/team/logout', (c) => {
+  clearAuthCookies(c);
+  return c.json({ success: true, message: 'Logged out.' });
+});
+
 
 app.post('/api/auth/check-email', async (c) => {
   try {

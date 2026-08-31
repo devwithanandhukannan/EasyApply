@@ -275,8 +275,11 @@ const DEFAULT_STARTER_TAGS = [
 
 export default function TeamPage() {
   const { showToast } = useGlassToast();
-  const { user, company, isAdmin } = useAuth();
+  const { user, company, isAdmin, can, isViewer } = useAuth();
+  const canManageTeam = isAdmin || can('team', 'manage') || can('team', 'invite') || can('team', 'create') || can('team', 'edit');
+
   const [members, setMembers] = useState<TeamMember[]>([]);
+
   const [companyTags, setCompanyTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
@@ -639,15 +642,18 @@ export default function TeamPage() {
             </span>
           </div>
 
-          <button
-            onClick={handleOpenInvite}
-            className="px-4 py-2 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] hover:from-[#0062c4] hover:to-[#1d4ed8] text-white text-xs font-bold rounded-2xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-          >
-            <UserPlus size={15} />
-            <span>Invite Member &amp; Set Permissions</span>
-          </button>
+          {canManageTeam && (
+            <button
+              onClick={handleOpenInvite}
+              className="px-4 py-2 bg-gradient-to-tr from-[#0071e3] to-[#2563eb] hover:from-[#0062c4] hover:to-[#1d4ed8] text-white text-xs font-bold rounded-2xl shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+            >
+              <UserPlus size={15} />
+              <span>Invite Member &amp; Set Permissions</span>
+            </button>
+          )}
         </div>
       </div>
+
 
       {/* ── FILTER & TAGS TOOLBAR ───────────────────────────────────── */}
       <div className="bg-white dark:bg-[#1c1c1e] rounded-3xl border border-black/[0.06] dark:border-white/[0.08] p-4 sm:p-5 shadow-xs space-y-4">
@@ -832,7 +838,7 @@ export default function TeamPage() {
                                 </button>
                               );
                             })
-                          ) : (
+                          ) : canManageTeam ? (
                             <button
                               onClick={() => handleOpenEdit(member)}
                               className="text-[11px] text-[#86868b] hover:text-[#0071e3] flex items-center gap-1 font-medium transition-colors cursor-pointer"
@@ -840,6 +846,8 @@ export default function TeamPage() {
                               <Plus size={12} />
                               <span>Add Tag</span>
                             </button>
+                          ) : (
+                            <span className="text-[11px] text-[#86868b] italic">None</span>
                           )}
                         </div>
                       </td>
@@ -861,42 +869,51 @@ export default function TeamPage() {
 
                       <td className="px-6 py-4 text-right align-middle">
                         <div className="flex items-center justify-end gap-2">
-                          {isPending && (
-                            <button
-                              onClick={() => handleResendInvite(member)}
-                              disabled={resendingId === member.id}
-                              className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                              title="Resend invitation email"
-                            >
-                              {resendingId === member.id ? (
-                                <Loader2 size={12} className="animate-spin text-amber-500" />
-                              ) : (
-                                <Mail size={12} className="text-amber-500" />
+                          {canManageTeam ? (
+                            <>
+                              {isPending && (
+                                <button
+                                  onClick={() => handleResendInvite(member)}
+                                  disabled={resendingId === member.id}
+                                  className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                  title="Resend invitation email"
+                                >
+                                  {resendingId === member.id ? (
+                                    <Loader2 size={12} className="animate-spin text-amber-500" />
+                                  ) : (
+                                    <Mail size={12} className="text-amber-500" />
+                                  )}
+                                  <span>{resendingId === member.id ? 'Sending...' : 'Resend Invite'}</span>
+                                </button>
                               )}
-                              <span>{resendingId === member.id ? 'Sending...' : 'Resend Invite'}</span>
-                            </button>
-                          )}
 
-                          <button
-                            onClick={() => handleOpenEdit(member)}
-                            className="px-3 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <SlidersHorizontal size={13} className="text-[#0071e3]" />
-                            <span>Edit</span>
-                          </button>
+                              <button
+                                onClick={() => handleOpenEdit(member)}
+                                className="px-3 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <SlidersHorizontal size={13} className="text-[#0071e3]" />
+                                <span>Edit</span>
+                              </button>
 
-                          {isAdmin && (
-                            <button
-                              onClick={() => handleRemove(member.id, member.name || member.email)}
-                              className="p-1.5 text-[#86868b] hover:text-red-500 rounded-xl transition-colors cursor-pointer"
-                              title="Revoke access"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                              {isAdmin && (
+                                <button
+                                  onClick={() => handleRemove(member.id, member.name || member.email)}
+                                  className="p-1.5 text-[#86868b] hover:text-red-500 rounded-xl transition-colors cursor-pointer"
+                                  title="Revoke access"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-[#86868b] px-2.5 py-1 rounded-lg bg-black/[0.03] dark:bg-white/[0.04]">
+                              Read Only
+                            </span>
                           )}
                         </div>
                       </td>
                     </tr>
+
                   );
                 })
               )}
