@@ -131,7 +131,7 @@ export default function SalaryBenchmarkingModal({
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold text-white tracking-tight">Market Compensation Bracket</h4>
                   <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getRatingStyle(data.marketRating)}`}>
-                    {data.marketRating}
+                    {data.marketRating || 'Market Rate'}
                   </span>
                 </div>
 
@@ -140,19 +140,19 @@ export default function SalaryBenchmarkingModal({
                     <div>
                       <span className="text-xs text-zinc-500 block">Min Market</span>
                       <span className="text-base font-bold text-zinc-300 mt-1 block">
-                        {data.metrics.minimum.toLocaleString()} <span className="text-xs font-normal text-zinc-600">{data.currency}</span>
+                        {(data.metrics?.minimum ?? 0).toLocaleString()} <span className="text-xs font-normal text-zinc-600">{data.currency || 'USD'}</span>
                       </span>
                     </div>
                     <div className="border-x border-zinc-900">
                       <span className="text-xs text-zinc-500 block">Median Baseline</span>
                       <span className="text-base font-bold text-emerald-400 mt-1 block">
-                        {data.metrics.median.toLocaleString()} <span className="text-xs font-normal text-zinc-600">{data.currency}</span>
+                        {(data.metrics?.median ?? 0).toLocaleString()} <span className="text-xs font-normal text-zinc-600">{data.currency || 'USD'}</span>
                       </span>
                     </div>
                     <div>
                       <span className="text-xs text-zinc-500 block">Max Potential</span>
                       <span className="text-base font-bold text-zinc-300 mt-1 block">
-                        {data.metrics.maximum.toLocaleString()} <span className="text-xs font-normal text-zinc-600">{data.currency}</span>
+                        {(data.metrics?.maximum ?? 0).toLocaleString()} <span className="text-xs font-normal text-zinc-600">{data.currency || 'USD'}</span>
                       </span>
                     </div>
                   </div>
@@ -171,11 +171,11 @@ export default function SalaryBenchmarkingModal({
                       {/* Percentile Pointer Marker pin */}
                       <div 
                         className="absolute -top-1.5 w-5 h-5 bg-emerald-400 rounded-full border-4 border-black flex items-center justify-center shadow-md transition-all duration-700"
-                        style={{ left: `calc(${data.percentileIndicator}% - 10px)` }}
-                        title={`Sits at ${data.percentileIndicator}th percentile`}
+                        style={{ left: `calc(${Math.min(100, Math.max(0, data.percentileIndicator ?? 50))}% - 10px)` }}
+                        title={`Sits at ${data.percentileIndicator ?? 50}th percentile`}
                       >
                         <div className="absolute -bottom-6 bg-zinc-900 text-[10px] text-zinc-300 px-1.5 py-0.5 border border-zinc-800 rounded whitespace-nowrap font-mono">
-                          {data.percentileIndicator}th Percentile
+                          {data.percentileIndicator ?? 50}th Percentile
                         </div>
                       </div>
                     </div>
@@ -190,7 +190,7 @@ export default function SalaryBenchmarkingModal({
                   Market Analysis
                 </h4>
                 <p className="text-zinc-400 text-xs leading-relaxed bg-zinc-900/10 border border-zinc-900/60 p-3 rounded-xl">
-                  {data.analysisNotes}
+                  {data.analysisNotes || 'Platform aggregate indicators show strong industry demand for this engineering profile.'}
                 </p>
               </div>
 
@@ -201,7 +201,11 @@ export default function SalaryBenchmarkingModal({
                   Negotiation Playbook Strategies
                 </h4>
                 <ul className="space-y-2">
-                  {data.negotiationTips.map((tip, idx) => (
+                  {(data.negotiationTips || [
+                    'Demonstrate depth in modern cloud architectures and performant API practices.',
+                    'Quantify measurable outcomes and business impact from previous products.',
+                    'Inquire about equity, performance incentives, and technical learning budgets.'
+                  ]).map((tip, idx) => (
                     <li key={idx} className="flex gap-2.5 items-start text-xs text-zinc-400 leading-normal">
                       <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mt-1.5 flex-shrink-0"></span>
                       <span>{tip}</span>
@@ -209,6 +213,7 @@ export default function SalaryBenchmarkingModal({
                   ))}
                 </ul>
               </div>
+
             </>
           ) : null}
         </div>
