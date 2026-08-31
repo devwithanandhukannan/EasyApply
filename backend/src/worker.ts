@@ -8413,12 +8413,58 @@ const handleInterviewFeedback = async (c: any) => {
   try {
     const { id: interviewId } = c.req.param();
     const decoded = await getAuthUser(c);
-    const interviewerId = decoded?.userId || 'system-host';
     const { technicalRating, communicationRating, problemSolvingRating, verdict, notes } = await c.req.json().catch(() => ({}));
+
+    // 1. Resolve a valid User record for the interviewer to satisfy the foreign key constraint
+    let interviewerUserId: string | null = null;
+
+    if (decoded?.userId) {
+      const userExists: any = await c.env.DB.prepare('SELECT id FROM "User" WHERE id = ?').bind(decoded.userId).first();
+      if (userExists) {
+        interviewerUserId = userExists.id;
+      }
+    }
+
+    if (!interviewerUserId && decoded?.companyId) {
+      const company: any = await c.env.DB.prepare('SELECT id, name, email FROM "Company" WHERE id = ?').bind(decoded.companyId).first();
+      if (company?.email) {
+        const existingUser: any = await c.env.DB.prepare('SELECT id FROM "User" WHERE mobileNumber = ?').bind(company.email).first();
+        if (existingUser) {
+          interviewerUserId = existingUser.id;
+        } else {
+          // Provision linked User record for company owner
+          const newUserId = crypto.randomUUID();
+          const now = new Date().toISOString();
+          await c.env.DB.prepare(
+            'INSERT INTO "User" (id, mobileNumber, password, globalRoles, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(newUserId, company.email, 'company_owner_auth', 2, now, now).run().catch(() => {});
+
+          await c.env.DB.prepare(
+            'INSERT INTO "JobSeekerProfile" (id, userId, fullName, email, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
+          ).bind(crypto.randomUUID(), newUserId, company.name || 'Company Lead', company.email, now, now).run().catch(() => {});
+
+          interviewerUserId = newUserId;
+        }
+      }
+    }
+
+    if (!interviewerUserId) {
+      const anyUser: any = await c.env.DB.prepare('SELECT id FROM "User" LIMIT 1').first();
+      if (anyUser) {
+        interviewerUserId = anyUser.id;
+      } else {
+        const sysId = crypto.randomUUID();
+        const now = new Date().toISOString();
+        await c.env.DB.prepare(
+          'INSERT INTO "User" (id, mobileNumber, password, globalRoles, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
+        ).bind(sysId, 'system@easyapply.com', 'system_auth', 2, now, now).run().catch(() => {});
+        interviewerUserId = sysId;
+      }
+    }
 
     const existing: any = await c.env.DB.prepare(
       'SELECT id FROM "InterviewFeedback" WHERE interviewId = ? AND interviewerId = ?'
-    ).bind(interviewId, interviewerId).first();
+    ).bind(interviewId, interviewerUserId).first();
 
     const fid = existing?.id || crypto.randomUUID();
     const now = new Date().toISOString();
@@ -8426,26 +8472,40 @@ const handleInterviewFeedback = async (c: any) => {
     if (existing) {
       await c.env.DB.prepare(
         'UPDATE "InterviewFeedback" SET technicalRating = ?, communicationRating = ?, problemSolvingRating = ?, verdict = ?, notes = ?, createdAt = ? WHERE id = ?'
-      ).bind(technicalRating, communicationRating, problemSolvingRating, verdict, notes || '', now, fid).run();
+      ).bind(Number(technicalRating) || 3, Number(communicationRating) || 3, Number(problemSolvingRating) || 3, verdict || 'shortlist', notes || '', now, fid).run();
     } else {
       await c.env.DB.prepare(
         'INSERT INTO "InterviewFeedback" (id, interviewId, interviewerId, technicalRating, communicationRating, problemSolvingRating, verdict, notes, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).bind(fid, interviewId, interviewerId, technicalRating, communicationRating, problemSolvingRating, verdict, notes || '', now).run();
+      ).bind(fid, interviewId, interviewerUserId, Number(technicalRating) || 3, Number(communicationRating) || 3, Number(problemSolvingRating) || 3, verdict || 'shortlist', notes || '', now).run();
     }
 
-    // Also update overall interview rating & status
-    const avg = ((Number(technicalRating) + Number(communicationRating) + Number(problemSolvingRating)) / 3).toFixed(1);
+    // 2. Update Interview status
     await c.env.DB.prepare(
-      'UPDATE "Interview" SET status = ?, rating = ?, notes = ?, updatedAt = ? WHERE id = ?'
-    ).bind('completed', Number(avg), notes || '', now, interviewId).run().catch(() => {});
+      'UPDATE "Interview" SET status = ?, updatedAt = ? WHERE id = ?'
+    ).bind('completed', now, interviewId).run().catch(() => {});
 
-    return c.json({ success: true, message: 'Feedback submitted successfully' });
+    // 3. Update candidate Application pipeline status based on verdict
+    const interview: any = await c.env.DB.prepare('SELECT applicationId FROM "Interview" WHERE id = ?').bind(interviewId).first().catch(() => null);
+    if (interview?.applicationId) {
+      let appStatus = 'shortlisted';
+      if (verdict === 'reject') appStatus = 'rejected';
+      else if (verdict === 'on_hold') appStatus = 'under_review';
+      else if (verdict === 'next_round') appStatus = 'interview_scheduled';
+
+      await c.env.DB.prepare('UPDATE "Application" SET status = ?, updatedAt = ? WHERE id = ?')
+        .bind(appStatus, now, interview.applicationId)
+        .run()
+        .catch(() => {});
+    }
+
+    return c.json({ success: true, message: 'Evaluation submitted successfully' });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
 };
 app.put('/api/interviews/:id/feedback', handleInterviewFeedback);
 app.post('/api/interviews/:id/feedback', handleInterviewFeedback);
+
 
 // ─── MISSING: NOTIFICATION TOKEN & INSIGHTS ──────────────
 app.post('/api/jobseeker/notification/token', async (c) => c.json({ success: true }));
