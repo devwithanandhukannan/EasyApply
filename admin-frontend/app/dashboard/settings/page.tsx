@@ -25,7 +25,7 @@ import {
 import { useTheme } from '@/lib/theme';
 import { useGlassToast } from '@/app/components/GlassToastContainer';
 
-type Tab = 'payment' | 'email' | 'ai' | 'video' | 'general' | 'queue';
+type Tab = 'payment' | 'email' | 'ai' | 'video' | 'queue';
 
 export default function SettingsPage() {
   const { mode, setMode } = useTheme();
@@ -55,20 +55,12 @@ export default function SettingsPage() {
   // AI
   const [groqApiKey, setGroqApiKey] = useState('');
   const [groqModel, setGroqModel] = useState('llama-3.3-70b-versatile');
+  const [allowSeekerAiResumeCreation, setAllowSeekerAiResumeCreation] = useState(true);
 
   // Video
   const [livekitApiUrl, setLivekitApiUrl] = useState('');
   const [livekitApiKey, setLivekitApiKey] = useState('');
   const [livekitApiSecret, setLivekitApiSecret] = useState('');
-
-  // General
-  const [platformName, setPlatformName] = useState('DearResume');
-  const [platformLogoUrl, setPlatformLogoUrl] = useState('');
-  const [supportEmail, setSupportEmail] = useState('');
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [allowNewCompanyReg, setAllowNewCompanyReg] = useState(true);
-  const [allowNewSeekerReg, setAllowNewSeekerReg] = useState(true);
-  const [allowSeekerAiResumeCreation, setAllowSeekerAiResumeCreation] = useState(true);
 
   // Queue
   const [walkInQueueMaxGlobal, setWalkInQueueMaxGlobal] = useState(200);
@@ -97,18 +89,11 @@ export default function SettingsPage() {
 
         setGroqApiKey(s.groqApiKey || '');
         setGroqModel(s.groqModel || 'llama-3.3-70b-versatile');
+        setAllowSeekerAiResumeCreation(s.allowSeekerAiResumeCreation !== undefined ? !!s.allowSeekerAiResumeCreation : true);
 
         setLivekitApiUrl(s.livekitApiUrl || '');
         setLivekitApiKey(s.livekitApiKey || '');
         setLivekitApiSecret(s.livekitApiSecret || '');
-
-        setPlatformName(s.platformName || 'DearResume');
-        setPlatformLogoUrl(s.platformLogoUrl || '');
-        setSupportEmail(s.supportEmail || '');
-        setMaintenanceMode(!!s.maintenanceMode);
-        setAllowNewCompanyReg(!!s.allowNewCompanyReg);
-        setAllowNewSeekerReg(!!s.allowNewSeekerReg);
-        setAllowSeekerAiResumeCreation(s.allowSeekerAiResumeCreation !== undefined ? !!s.allowSeekerAiResumeCreation : true);
 
         setWalkInQueueMaxGlobal(s.walkInQueueMaxGlobal || 200);
       }
@@ -148,16 +133,6 @@ export default function SettingsPage() {
           livekitApiUrl,
           livekitApiKey,
           livekitApiSecret,
-        });
-      } else if (activeTab === 'general') {
-        res = await api.put('/admin/settings/general', {
-          platformName,
-          platformLogoUrl,
-          supportEmail,
-          maintenanceMode,
-          allowNewCompanyReg,
-          allowNewSeekerReg,
-          allowSeekerAiResumeCreation,
         });
       } else if (activeTab === 'queue') {
         res = await api.put('/admin/settings/queue', {
@@ -227,7 +202,6 @@ export default function SettingsPage() {
     { id: 'email', label: 'SMTP Email', icon: Mail },
     { id: 'ai', label: 'Groq AI Model', icon: Bot },
     { id: 'video', label: 'LiveKit Streaming', icon: Video },
-    { id: 'general', label: 'Platform & Flags', icon: Sliders },
     { id: 'queue', label: 'Queue Capacity', icon: Users },
   ];
 
@@ -497,78 +471,7 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* GENERAL TAB */}
-          {activeTab === 'general' && (
-            <div className="space-y-5">
-              <div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white">General &amp; Platform Controls</h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
-                  Brand name, support routing, and platform registration gate switches.
-                </p>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Platform Name</label>
-                  <input className="input" value={platformName} onChange={(e) => setPlatformName(e.target.value)} placeholder="DearResume" />
-                </div>
-                <div>
-                  <label className="label">Support Email</label>
-                  <input className="input" value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="support@dearresume.com" />
-                </div>
-              </div>
-
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06]">
-                  <div className="flex items-center gap-3">
-                    <AlertTriangle size={18} className="text-amber-500" />
-                    <div>
-                      <div className="text-xs font-bold text-zinc-900 dark:text-white">Maintenance Mode</div>
-                      <div className="text-[11px] text-zinc-400">Displays a maintenance screen across candidate &amp; company portals</div>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={maintenanceMode}
-                    onChange={(e) => setMaintenanceMode(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06]">
-                  <div className="flex items-center gap-3">
-                    <Building2 size={18} className="text-[#0071e3]" />
-                    <div>
-                      <div className="text-xs font-bold text-zinc-900 dark:text-white">Allow New Company Registrations</div>
-                      <div className="text-[11px] text-zinc-400">When disabled, new employer signups are temporarily blocked</div>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={allowNewCompanyReg}
-                    onChange={(e) => setAllowNewCompanyReg(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-zinc-50 dark:bg-[#181b2e] border border-black/[0.04] dark:border-white/[0.06]">
-                  <div className="flex items-center gap-3">
-                    <Users size={18} className="text-purple-500" />
-                    <div>
-                      <div className="text-xs font-bold text-zinc-900 dark:text-white">Allow New Job Seeker Registrations</div>
-                      <div className="text-[11px] text-zinc-400">When disabled, candidate onboarding is temporarily paused</div>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={allowNewSeekerReg}
-                    onChange={(e) => setAllowNewSeekerReg(e.target.checked)}
-                    className="w-4 h-4 rounded text-[#0071e3] focus:ring-[#0071e3] cursor-pointer"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* QUEUE TAB */}
           {activeTab === 'queue' && (
