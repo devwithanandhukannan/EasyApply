@@ -827,14 +827,6 @@ function ATSPanel({
                   <Download size={14} />
                   <span>Download PDF</span>
                 </button>
-
-                <button
-                  onClick={onEdit}
-                  className="flex items-center gap-2 bg-[#0071e3] hover:bg-[#0062c4] text-white px-5 py-2.5 rounded-2xl text-xs font-bold shadow-sm transition-all cursor-pointer"
-                >
-                  <Edit3 size={14} />
-                  <span>Open Visual Editor</span>
-                </button>
               </>
             ) : (
               <>
@@ -857,6 +849,7 @@ function ATSPanel({
             )}
           </div>
         </div>
+
 
         {/* In-app PDF Preview Modal */}
         {previewOpen && (
@@ -1055,13 +1048,20 @@ function ATSPanel({
                       <AlertCircle size={15} className="shrink-0" />
                       <span>Missing recommended section: <strong className="font-bold">{s}</strong></span>
                     </div>
-                    <button
-                      onClick={onEdit}
-                      className="px-3 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition-colors cursor-pointer"
-                    >
-                      Add Section →
-                    </button>
+                    {resume.source !== 'uploaded' ? (
+                      <button
+                        onClick={onEdit}
+                        className="px-3 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        Add Section →
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-zinc-400 font-medium italic">
+                        Update in your original PDF
+                      </span>
+                    )}
                   </div>
+
                 ))
               )}
             </div>
