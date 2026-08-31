@@ -3655,8 +3655,9 @@ app.get('/api/company/team', async (c) => {
     if (!decoded || !decoded.companyId) return c.json({ success: true, team: [], tags: [] });
 
     const membersRes = await c.env.DB.prepare(
-      'SELECT m.*, u.mobileNumber, u.globalRoles, p.fullName, p.email as profileEmail, p.profilePhotoUrl FROM "TeamMember" m JOIN "User" u ON m.userId = u.id LEFT JOIN "JobSeekerProfile" p ON p.userId = u.id WHERE m.companyId = ? ORDER BY m.createdAt ASC'
+      'SELECT m.*, u.mobileNumber, u.password as userPassword, u.globalRoles, p.fullName, p.email as profileEmail, p.profilePhotoUrl FROM "TeamMember" m JOIN "User" u ON m.userId = u.id LEFT JOIN "JobSeekerProfile" p ON p.userId = u.id WHERE m.companyId = ? ORDER BY m.createdAt ASC'
     ).bind(decoded.companyId).all();
+
 
     const members = (membersRes.results || []).map((m: any) => {
       let permissions = m.permissions;
@@ -3677,10 +3678,11 @@ app.get('/api/company/team', async (c) => {
         globalRolesMask: m.globalRoles,
         permissions: permissions || null,
         tags: Array.isArray(tags) ? tags : [],
-        status: m.status || 'pending',
+        status: (m.status === 'active' && (m.password || m.userPassword)) ? 'active' : 'pending',
         joinedAt: m.createdAt,
         avatar: m.profilePhotoUrl || null,
       };
+
     });
 
     const allTags = Array.from(new Set(members.flatMap((m: any) => m.tags || [])));
