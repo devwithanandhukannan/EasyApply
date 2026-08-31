@@ -878,8 +878,57 @@ app.put('/api/admin/settings/queue', async (c) => {
 });
 
 app.post('/api/admin/settings/email/test', async (c) => {
-  return c.json({ success: true, message: 'Test email simulated successfully.' });
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const { sendTo, smtpUser, emailFrom, emailFromName, smtpHost, smtpPort } = body;
+    const recipient = sendTo || smtpUser || 'workbridge.anandhu@gmail.com';
+
+    const result = await sendSmtpEmail({
+      to: recipient,
+      subject: 'DearResume Platform SMTP Relay Test',
+      from: emailFrom ? `"${emailFromName || 'DearResume'}" <${emailFrom}>` : undefined,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">DearResume</h1>
+            <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Admin Platform Configuration</p>
+          </div>
+          <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+            <p style="margin: 0; color: #166534; font-size: 14px; font-weight: 600;">✅ Live SMTP Relay Connection Succeeded</p>
+          </div>
+          <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 16px;">
+            This is an automated test message dispatched directly from your DearResume Platform Admin settings panel to verify transactional email delivery.
+          </p>
+          <ul style="font-size: 13px; color: #424245; line-height: 1.8; margin-bottom: 24px; padding-left: 20px;">
+            <li><strong>Recipient:</strong> ${recipient}</li>
+            <li><strong>Host:</strong> ${smtpHost || 'smtp.gmail.com'}</li>
+            <li><strong>Port:</strong> ${smtpPort || 465} (SSL / TLS)</li>
+            <li><strong>Timestamp:</strong> ${new Date().toISOString()}</li>
+          </ul>
+          <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
+          <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+            DearResume Admin Platform Diagnostics
+          </p>
+        </div>
+      `,
+    });
+
+    if (!result.success) {
+      return c.json({
+        success: false,
+        message: result.error || 'Failed to deliver test email via SMTP relay.',
+      }, 500);
+    }
+
+    return c.json({
+      success: true,
+      message: `Test email successfully dispatched to ${recipient}`,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message || 'SMTP test error' }, 500);
+  }
 });
+
 
 
 app.post('/api/admin/settings/payment/test', async (c) => {
