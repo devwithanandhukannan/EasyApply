@@ -8885,11 +8885,42 @@ app.get('/api/public/companies/:identifier', async (c) => {
       'SELECT id, name, industry, size, logoUrl, tagline, verificationBadge, isVerified, services, seoKeywords, coreValues, gallery, youtubeLink, officeLocations, socialMedia, corporateLink FROM "Company" WHERE id = ? OR name = ?'
     ).bind(identifier, identifier).first();
     if (!company) return c.json({ success: false, message: 'Company not found' }, 404);
-    return c.json({ success: true, data: company });
+
+    // Parse JSON fields safely
+    const parseField = (f: any, fallback: any) => {
+      if (!f) return fallback;
+      if (typeof f === 'object') return f;
+      try { return JSON.parse(f); } catch { return fallback; }
+    };
+
+    const formattedCompany = {
+      ...company,
+      services: parseField(company.services, []),
+      seoKeywords: parseField(company.seoKeywords, []),
+      coreValues: parseField(company.coreValues, []),
+      gallery: parseField(company.gallery, []),
+      officeLocations: parseField(company.officeLocations, []),
+      socialMedia: parseField(company.socialMedia, {}),
+      isVerified: Boolean(company.isVerified),
+    };
+
+    const jobs = await c.env.DB.prepare(
+      'SELECT j.*, c.name as companyName, c.logoUrl as companyLogoUrl, c.industry as companyIndustry, c.verificationBadge FROM "JobPosting" j LEFT JOIN "Company" c ON j.companyId = c.id WHERE j.companyId = ? AND j.status = ? ORDER BY j.createdAt DESC LIMIT 50'
+    ).bind(company.id, 'active').all();
+    const formattedJobs = (jobs.results || []).map(formatJobResponse);
+
+    return c.json({
+      success: true,
+      data: {
+        company: formattedCompany,
+        jobs: formattedJobs,
+      }
+    });
   } catch (err: any) {
     return c.json({ success: false, error: err.message }, 500);
   }
 });
+
 
 app.get('/api/public/companies/:identifier/jobs', async (c) => {
   try {

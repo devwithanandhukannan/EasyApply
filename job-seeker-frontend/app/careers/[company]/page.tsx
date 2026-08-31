@@ -105,22 +105,29 @@ export default function CompanyCareerPage() {
         axios.get('/walkin/active-rooms'),
       ]);
 
-      if (profileRes.status === 'fulfilled' && profileRes.value?.data?.success) {
-        const resData = profileRes.value.data;
-        const comp = resData.data.company;
-        setCompany(comp);
-        setJobs(resData.data.jobs || []);
-        setFilteredJobs(resData.data.jobs || []);
+      if (profileRes.status === 'fulfilled') {
+        const raw: any = profileRes.value;
+        const resData = raw?.data || raw;
+        const comp = resData?.company || (resData?.id ? resData : null);
+        const compJobs = resData?.jobs || (Array.isArray(resData) ? resData : []);
 
-        if (walkinRes.status === 'fulfilled' && walkinRes.value?.data?.success) {
-          const allRooms: any[] = walkinRes.value.data.rooms || [];
-          const companyRooms = allRooms.filter(
-            (r) =>
-              r.companyId === comp.id ||
-              r.company?.id === comp.id ||
-              r.company?.name?.toLowerCase() === comp.name?.toLowerCase()
-          );
-          setWalkinRooms(companyRooms);
+        if (comp) {
+          setCompany(comp);
+          setJobs(compJobs);
+          setFilteredJobs(compJobs);
+
+          if (walkinRes.status === 'fulfilled') {
+            const rawWalkin: any = walkinRes.value;
+            const walkinData = rawWalkin?.data || rawWalkin;
+            const allRooms: any[] = walkinData?.rooms || (Array.isArray(walkinData) ? walkinData : []);
+            const companyRooms = allRooms.filter(
+              (r) =>
+                r.companyId === comp.id ||
+                r.company?.id === comp.id ||
+                r.company?.name?.toLowerCase() === comp.name?.toLowerCase()
+            );
+            setWalkinRooms(companyRooms);
+          }
         }
       }
     } catch (error) {
@@ -129,6 +136,7 @@ export default function CompanyCareerPage() {
       setLoading(false);
     }
   };
+
 
   const handleCopyCode = (code: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
