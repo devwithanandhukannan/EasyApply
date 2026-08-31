@@ -14,13 +14,15 @@ async function sendSmtpEmail({
   subject: string;
   html: string;
   from?: string;
-}): Promise<boolean> {
+}): Promise<{ success: boolean; error?: string; logs?: string[] }> {
   const user = 'workbridge.anandhu@gmail.com';
-  const pass = 'rget fqku jaad wkku';
+  const pass = 'rgetfqkujaadwkku';
   let socket: any = null;
+  const logs: string[] = [];
 
   try {
-    socket = connect('smtp.gmail.com:465', {
+    logs.push('Connecting to smtp.gmail.com:465 via SSL socket...');
+    socket = connect({ hostname: 'smtp.gmail.com', port: 465 }, {
       secureTransport: 'on',
       allowHalfOpen: false,
     });
@@ -55,6 +57,7 @@ async function sendSmtpEmail({
         const line = await readLine();
         if (!line) break;
         lastLine = line;
+        logs.push(`SMTP << ${line}`);
         if (line.length >= 4 && line[3] === ' ') {
           break;
         }
@@ -66,6 +69,7 @@ async function sendSmtpEmail({
     };
 
     const sendCommand = async (cmd: string): Promise<string> => {
+      logs.push(`SMTP >> ${cmd.startsWith('AUTH') || cmd.length > 50 ? cmd.slice(0, 20) + '...' : cmd}`);
       await writer.write(encoder.encode(cmd + '\r\n'));
       return await readSmtpResponse();
     };
@@ -90,7 +94,7 @@ async function sendSmtpEmail({
       throw new Error(`Username prompt error: ${userRes}`);
     }
 
-    const passRes = await sendCommand(btoa(pass.replace(/\s+/g, '')));
+    const passRes = await sendCommand(btoa(pass));
     if (!passRes.startsWith('235')) {
       throw new Error(`Authentication failed: ${passRes}`);
     }
@@ -112,6 +116,9 @@ async function sendSmtpEmail({
 
     const messageId = `<${crypto.randomUUID()}@dearresume.com>`;
     const dateStr = new Date().toUTCString();
+    // Strict RFC 5321 CRLF formatting: replace single LFs with CRLFs
+    const cleanHtml = html.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '\r\n');
+
     const rawMessage = [
       `From: ${from}`,
       `To: ${to}`,
@@ -122,31 +129,36 @@ async function sendSmtpEmail({
       'Content-Type: text/html; charset=UTF-8',
       'Content-Transfer-Encoding: 8bit',
       '',
-      html,
-      '',
+      cleanHtml,
       '.',
     ].join('\r\n');
 
-    const sendRes = await sendCommand(rawMessage);
+    await writer.write(encoder.encode(rawMessage + '\r\n'));
+    const sendRes = await readSmtpResponse();
     if (!sendRes.startsWith('250')) {
       throw new Error(`Body delivery error: ${sendRes}`);
     }
 
     await sendCommand('QUIT');
 
-    reader.releaseLock();
-    writer.releaseLock();
-    await socket.close();
+    try { reader.releaseLock(); } catch {}
+    try { writer.releaseLock(); } catch {}
+    try { await socket.close(); } catch {}
+
+    logs.push(`✉️ Successfully delivered email to ${to}`);
     console.log(`✉️ Direct Worker SMTP email successfully delivered to ${to}`);
-    return true;
+    return { success: true, logs };
   } catch (err: any) {
-    console.error(`❌ Worker SMTP Delivery Error for ${to}:`, err.message || err);
+    const errMsg = err.message || String(err);
+    logs.push(`❌ Error: ${errMsg}`);
+    console.error(`❌ Worker SMTP Delivery Error for ${to}:`, errMsg);
     if (socket) {
       try { await socket.close(); } catch {}
     }
-    return false;
+    return { success: false, error: errMsg, logs };
   }
 }
+
 
 async function sendCompanyVerificationEmail(email: string, companyName: string, token: string) {
   const verifyUrl = `https://company.dearresume.com/verify-email?token=${token}`;
@@ -868,6 +880,7 @@ app.put('/api/admin/settings/queue', async (c) => {
 app.post('/api/admin/settings/email/test', async (c) => {
   return c.json({ success: true, message: 'Test email simulated successfully.' });
 });
+
 
 app.post('/api/admin/settings/payment/test', async (c) => {
   return c.json({ success: true, message: 'Payment gateway configuration verified.' });
@@ -3797,14 +3810,32 @@ app.post('/api/company/team/:memberId/resend-invite', async (c) => {
     else if (member.roles === 8) roleLabel = 'Interviewer';
     else if (member.roles === 16) roleLabel = 'Viewer';
 
+    let parsedPermissions = null;
+    if (member.permissions) {
+      if (typeof member.permissions === 'string') {
+        try { parsedPermissions = JSON.parse(member.permissions); } catch {}
+      } else {
+        parsedPermissions = member.permissions;
+      }
+    }
+
+    let parsedTags: string[] = [];
+    if (member.tags) {
+      if (typeof member.tags === 'string') {
+        try { parsedTags = JSON.parse(member.tags); } catch {}
+      } else if (Array.isArray(member.tags)) {
+        parsedTags = member.tags;
+      }
+    }
+
     const secret = getJwtSecret(c);
     const inviteToken = jwt.sign(
       {
         email: normalizedEmail,
         companyId: decoded.companyId,
         targetRoles: member.roles,
-        targetPermissions: member.permissions ? JSON.parse(member.permissions) : null,
-        targetTags: member.tags ? JSON.parse(member.tags) : [],
+        targetPermissions: parsedPermissions,
+        targetTags: parsedTags,
         invitedBy: decoded.userId || decoded.companyId,
         type: 'team_invite',
       },
@@ -3812,11 +3843,16 @@ app.post('/api/company/team/:memberId/resend-invite', async (c) => {
       { expiresIn: '7d' }
     );
 
-    c.executionCtx?.waitUntil(
-      sendTeamInviteEmail(normalizedEmail, companyName, roleLabel, inviteToken).catch((e: any) => console.error('Resend invite email error:', e))
-    );
+    const emailRes = await sendTeamInviteEmail(normalizedEmail, companyName, roleLabel, inviteToken);
 
-    return c.json({ success: true, message: `Invitation resent to ${normalizedEmail}`, inviteToken });
+    return c.json({
+      success: true,
+      message: `Invitation resent to ${normalizedEmail}`,
+      emailDelivered: emailRes.success,
+      emailError: emailRes.error,
+      inviteToken,
+    });
+
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
