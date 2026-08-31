@@ -40,7 +40,9 @@ const ROLES = {
   COMPANY_HR: 4,
   COMPANY_INTERVIEWER: 8,
   COMPANY_VIEWER: 16,
+  COMPANY_CUSTOM: 32,
 };
+
 
 // ─── MODULE PERMISSION DEFINITIONS ───────────────────────────────────────────
 interface ModuleConfig {
@@ -225,7 +227,7 @@ const PRESET_TEMPLATES: Record<string, { label: string; roleType: string; bitwis
   custom: {
     label: 'Custom Permissions Matrix',
     roleType: 'custom',
-    bitwise: ROLES.COMPANY_HR,
+    bitwise: ROLES.COMPANY_CUSTOM,
     permissions: {
       jobs: ['read'],
       walkin: ['read'],
@@ -237,6 +239,7 @@ const PRESET_TEMPLATES: Record<string, { label: string; roleType: string; bitwis
       team: ['read'],
     },
   },
+
 };
 
 // ─── COLOR PALETTE FOR CUSTOM TAGS ──────────────────────────────────────────

@@ -10,6 +10,7 @@ const ROLES = {
   COMPANY_HR: 4,
   COMPANY_INTERVIEWER: 8,
   COMPANY_VIEWER: 16,
+  COMPANY_CUSTOM: 32,
 };
 
 interface WorkspaceSummary {
@@ -61,6 +62,7 @@ interface AuthContextType {
   isHR: boolean;
   isInterviewer: boolean;
   isViewer: boolean;
+  isCustom: boolean;
   features: Record<string, boolean>;
   hasFeature: (key: string) => boolean;
   can: (moduleName: string, action?: string) => boolean;
@@ -80,10 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Runtime Bitwise Context Helpers Derived from active mask matrix state
   const rolesMask = user?.rolesMask || 0;
+  const hasCustomPermissions = Boolean(
+    user?.permissions && Object.keys(user.permissions).some((k) => (user.permissions![k] || []).length > 0)
+  );
+
   const isAdmin = (rolesMask & ROLES.COMPANY_ADMIN) === ROLES.COMPANY_ADMIN;
-  const isHR = (rolesMask & ROLES.COMPANY_HR) === ROLES.COMPANY_HR;
-  const isInterviewer = (rolesMask & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER;
-  const isViewer = !isAdmin && !isHR && !isInterviewer;
+  const isCustom = !isAdmin && (rolesMask === ROLES.COMPANY_CUSTOM || hasCustomPermissions);
+  const isHR = !isAdmin && !isCustom && (rolesMask & ROLES.COMPANY_HR) === ROLES.COMPANY_HR;
+  const isInterviewer = !isAdmin && !isCustom && (rolesMask & ROLES.COMPANY_INTERVIEWER) === ROLES.COMPANY_INTERVIEWER;
+  const isViewer = !isAdmin && !isCustom && !isHR && !isInterviewer;
+
 
   const features = useMemo(() => {
     const raw = company?.subscription?.features || company?.subscription?.plan?.features;
@@ -283,6 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isHR,
       isInterviewer,
       isViewer,
+      isCustom,
       features,
       hasFeature,
       can,

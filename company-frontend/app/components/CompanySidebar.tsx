@@ -43,18 +43,20 @@ export default function CompanySidebar({
   setIsMobileOpen 
 }: SidebarProps) {
   const pathname = usePathname();
-  const { user, company: authCompany, isAdmin, isHR, isInterviewer, isViewer, isLoading, logout, features, can } = useAuth();
+  const { user, company: authCompany, isAdmin, isHR, isInterviewer, isViewer, isCustom, isLoading, logout, features, can } = useAuth();
   const company = propCompany || authCompany;
   const [isMounted, setIsMounted] = useState(false);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
 
   const getRoleLabel = () => {
     if (isAdmin) return 'Admin';
+    if (isCustom) return 'Custom';
     if (isHR) return 'HR';
     if (isInterviewer) return 'Interviewer';
     if (isViewer) return 'Viewer';
     return 'Member';
   };
+
 
   useEffect(() => {
     setIsMounted(true);
