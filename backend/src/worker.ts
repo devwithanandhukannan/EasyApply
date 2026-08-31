@@ -3485,12 +3485,42 @@ app.delete('/api/crm/talent-pools/:id', async (c) => {
 app.get('/api/crm/talent-pools/:id/members', async (c) => {
   try {
     const { id } = c.req.param();
+    const pool = await c.env.DB.prepare(
+      'SELECT id, name, description FROM "TalentPool" WHERE id = ?'
+    ).bind(id).first();
+
     const members = await c.env.DB.prepare(
-      'SELECT m.*, p.fullName, p.email, p.phone, p.location FROM "TalentPoolMember" m JOIN "JobSeekerProfile" p ON m.jobSeekerProfileId = p.id WHERE m.talentPoolId = ?'
+      'SELECT m.id as memberId, m.talentPoolId, m.jobSeekerProfileId, m.createdAt as memberCreatedAt, p.id as profileId, p.fullName, p.email, p.phone, p.location, p.profilePhotoUrl, p.availabilityStatus FROM "TalentPoolMember" m JOIN "JobSeekerProfile" p ON m.jobSeekerProfileId = p.id WHERE m.talentPoolId = ? ORDER BY m.createdAt DESC'
     ).bind(id).all();
-    return c.json({ success: true, data: members.results || [] });
-  } catch {
-    return c.json({ success: true, data: [] });
+
+    const data = await Promise.all((members.results || []).map(async (row: any) => {
+      let skills: { name: string }[] = [];
+      try {
+        const sRes = await c.env.DB.prepare('SELECT name FROM "Skill" WHERE jobSeekerProfileId = ?').bind(row.jobSeekerProfileId).all();
+        skills = (sRes.results || []).map((s: any) => ({ name: s.name }));
+      } catch {}
+      return {
+        id: row.memberId || row.id,
+        createdAt: row.memberCreatedAt || row.createdAt || new Date().toISOString(),
+        talentPoolId: row.talentPoolId || id,
+        jobSeekerProfileId: row.jobSeekerProfileId,
+        jobSeekerProfile: {
+          id: row.jobSeekerProfileId,
+          fullName: row.fullName || 'Candidate',
+          email: row.email || '',
+          phone: row.phone || '',
+          location: row.location || '',
+          profilePhotoUrl: row.profilePhotoUrl || '',
+          availabilityStatus: row.availabilityStatus || 'available',
+          skills,
+        },
+      };
+    }));
+
+    return c.json({ success: true, pool: pool || null, data });
+  } catch (err: any) {
+    console.error('Error fetching talent pool members:', err);
+    return c.json({ success: true, pool: null, data: [] });
   }
 });
 

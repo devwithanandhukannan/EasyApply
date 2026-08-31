@@ -11,17 +11,26 @@ import {
 interface Member {
   id: string;
   createdAt: string;
-  jobSeekerProfile: {
-    id: string;
-    fullName: string;
-    email: string;
+  jobSeekerProfile?: {
+    id?: string;
+    fullName?: string;
+    email?: string;
     phone?: string;
     profilePhotoUrl?: string;
     location?: string;
-    availabilityStatus: string;
-    skills: { name: string }[];
+    availabilityStatus?: string;
+    skills?: { name: string }[];
   };
+  // Fallbacks if flat
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  profilePhotoUrl?: string;
+  availabilityStatus?: string;
+  skills?: { name: string }[];
 }
+
 
 interface Pool {
   id: string;
@@ -83,7 +92,7 @@ export default function TalentPoolDetailPage() {
     try {
       const res = await getTalentPoolMembers(idToFetch);
       if (res.data?.pool) setPool(res.data.pool);
-      setMembers(res.data?.data ?? []);
+      setMembers(Array.isArray(res.data?.data) ? res.data.data : []);
     } catch {
       setError('Failed to load pool members.');
     } finally {
@@ -98,7 +107,9 @@ export default function TalentPoolDetailPage() {
   }, [poolId, fetchMembers]);
 
   const handleRemove = async (member: Member) => {
-    if (!confirm(`Remove ${member.jobSeekerProfile.fullName} from this pool?`)) return;
+    const p = member.jobSeekerProfile || member;
+    const name = p.fullName || 'Candidate';
+    if (!confirm(`Remove ${name} from this pool?`)) return;
     setRemovingId(member.id);
     try {
       await removeTalentPoolMember(poolId, member.id);
@@ -111,12 +122,18 @@ export default function TalentPoolDetailPage() {
   };
 
   const filtered = members.filter(m => {
+    const p = m.jobSeekerProfile || m || {};
+    const fullName = p.fullName || '';
+    const email = p.email || '';
+    const location = p.location || '';
+    const skills = Array.isArray(p.skills) ? p.skills : [];
     const q = search.toLowerCase();
+
     return (
-      m.jobSeekerProfile.fullName.toLowerCase().includes(q) ||
-      m.jobSeekerProfile.email.toLowerCase().includes(q) ||
-      (m.jobSeekerProfile.location ?? '').toLowerCase().includes(q) ||
-      m.jobSeekerProfile.skills.some(s => s.name.toLowerCase().includes(q))
+      fullName.toLowerCase().includes(q) ||
+      email.toLowerCase().includes(q) ||
+      location.toLowerCase().includes(q) ||
+      skills.some(s => (s?.name || '').toLowerCase().includes(q))
     );
   });
 
@@ -201,8 +218,18 @@ export default function TalentPoolDetailPage() {
         /* Sourcing Row Cards */
         <div className="space-y-3">
           {filtered.map(member => {
-            const p = member.jobSeekerProfile;
-            const initials = p.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+            const p = member.jobSeekerProfile || member || {};
+            const fullName = p.fullName || 'Candidate';
+            const initials = fullName
+              .split(' ')
+              .filter(Boolean)
+              .map(n => n[0])
+              .join('')
+              .slice(0, 2)
+              .toUpperCase() || 'CA';
+            const availability = p.availabilityStatus || 'available';
+            const skills = Array.isArray(p.skills) ? p.skills : [];
+
             return (
               <div
                 key={member.id}
@@ -214,7 +241,7 @@ export default function TalentPoolDetailPage() {
                     {p.profilePhotoUrl ? (
                       <img
                         src={p.profilePhotoUrl}
-                        alt={p.fullName}
+                        alt={fullName}
                         className="w-12 h-12 rounded-full object-cover border border-zinc-800"
                       />
                     ) : (
@@ -227,28 +254,28 @@ export default function TalentPoolDetailPage() {
                   {/* Operational Metrics metadata */}
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-zinc-100 text-sm tracking-tight">{p.fullName}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${availabilityColors[p.availabilityStatus] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
-                        {availabilityLabels[p.availabilityStatus] ?? p.availabilityStatus}
+                      <span className="font-semibold text-zinc-100 text-sm tracking-tight">{fullName}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold border ${availabilityColors[availability] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+                        {availabilityLabels[availability] ?? availability}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-400 mt-0.5 truncate">{p.email}</p>
+                    {p.email && <p className="text-xs text-zinc-400 mt-0.5 truncate">{p.email}</p>}
                     {p.location && (
                       <p className="text-[11px] text-zinc-500 mt-1 flex items-center gap-1">
                         <span className="text-zinc-600">📍</span> {p.location}
                       </p>
                     )}
                     
-                    {p.skills.length > 0 && (
+                    {skills.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 mt-3">
-                        {p.skills.slice(0, 5).map(s => (
-                          <span key={s.name} className="text-[11px] font-medium bg-zinc-950 border border-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded-md">
-                            {s.name}
+                        {skills.slice(0, 5).map((s, idx) => (
+                          <span key={s.name || idx} className="text-[11px] font-medium bg-zinc-950 border border-zinc-800/80 text-zinc-300 px-2 py-0.5 rounded-md">
+                            {s.name || String(s)}
                           </span>
                         ))}
-                        {p.skills.length > 5 && (
+                        {skills.length > 5 && (
                           <span className="text-[10px] font-medium text-zinc-500 self-center pl-1">
-                            +{p.skills.length - 5} additional
+                            +{skills.length - 5} additional
                           </span>
                         )}
                       </div>
@@ -261,7 +288,7 @@ export default function TalentPoolDetailPage() {
                   <div>
                     <span className="block text-[10px] uppercase font-semibold tracking-wider text-zinc-600 sm:hidden">Segmented</span>
                     <p className="text-xs text-zinc-500 font-medium">
-                      {new Date(member.createdAt).toLocaleDateString('en-IN', {
+                      {new Date(member.createdAt || Date.now()).toLocaleDateString('en-IN', {
                         day: 'numeric', month: 'short', year: 'numeric'
                       })}
                     </p>
@@ -287,3 +314,5 @@ export default function TalentPoolDetailPage() {
     </div>
   );
 }
+
+
