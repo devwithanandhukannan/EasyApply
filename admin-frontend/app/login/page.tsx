@@ -62,7 +62,8 @@ function LoginForm() {
               <div className="relative flex items-center">
                 <Mail className="absolute left-3.5 w-4 h-4 text-zinc-400 pointer-events-none" />
                 <input
-                  className="input pl-10"
+                  className="input input-with-icon !pl-11"
+                  style={{ paddingLeft: '2.75rem' }}
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -79,7 +80,8 @@ function LoginForm() {
               <div className="relative flex items-center">
                 <Lock className="absolute left-3.5 w-4 h-4 text-zinc-400 pointer-events-none" />
                 <input
-                  className="input pl-10"
+                  className="input input-with-icon !pl-11"
+                  style={{ paddingLeft: '2.75rem' }}
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -88,6 +90,7 @@ function LoginForm() {
                 />
               </div>
             </div>
+
 
             <button
               type="submit"
