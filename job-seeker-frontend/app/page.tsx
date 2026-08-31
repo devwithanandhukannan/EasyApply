@@ -44,50 +44,54 @@ export default function Home() {
     {
       icon: Video,
       title: 'Instant Walk-In Video Rooms',
-      desc: 'No more waiting weeks for recruiter screening calls. Enter public walk-in queues, grab room codes, and speak 1-on-1 with hiring teams directly in your browser.',
-      badge: 'Live Now',
+      desc: 'Skip weeks of silence. Enter public walk-in queues, grab room codes, and speak 1-on-1 with hiring teams directly in your browser with real-time video evaluation.',
+      badge: 'Live Queue',
       color: '#0071e3',
-      href: '/companies?tab=walkin'
+      href: '/companies?tab=walkin',
+      image: '/images/walkin-hero.jpg',
     },
     {
       icon: Brain,
       title: 'Deep ATS & Skill Intelligence',
-      desc: 'Our neural resume parser highlights critical missing keywords, computes deep compatibility scores, and applies aging score boosts to keep your profile on top.',
-      badge: 'AI Powered',
+      desc: 'Our neural resume parser highlights critical keywords, calculates semantic role compatibility scores, and boosts your visibility with instant ranking insights.',
+      badge: 'AI Neural Match',
       color: '#8b5cf6',
-      href: '/login'
+      href: '/login',
+      image: '/images/ai-ats-parser.jpg',
+    },
+    {
+      icon: Shield,
+      title: 'Proctored Code & Video Interviews',
+      desc: 'Integrated LiveKit HD video environments with built-in Monaco code editor, low-latency audio/video streaming, and secure browser-based evaluation.',
+      badge: 'Integrated IDE',
+      color: '#0284c7',
+      href: '/login',
+      image: '/images/proctored-code.jpg',
     },
     {
       icon: Zap,
       title: 'Same-Day Spot Placements',
-      desc: 'Toggle your real-time availability badge to receive immediate placement invitations from fast-moving startups and high-growth engineering teams.',
-      badge: 'Instant Offers',
-      color: '#ff9500',
-      href: '/login'
+      desc: 'Toggle your real-time availability badge to receive immediate placement invitations and verified offers from fast-moving startups and high-growth teams.',
+      badge: 'Direct Offers',
+      color: '#f59e0b',
+      href: '/login',
+      image: '/images/spot-placement.jpg',
     },
     {
       icon: Building2,
       title: 'Public Ecosystem Directory',
       desc: 'Browse hundreds of verified engineering companies, discover their tech stacks, explore open roles, and access active walk-in rooms with zero barriers.',
       badge: 'Public Access',
-      color: '#34c759',
-      href: '/companies'
-    },
-    {
-      icon: Shield,
-      title: 'Proctored Code & Video Interviews',
-      desc: 'Integrated LiveKit HD video environments with built-in Monaco code editor, real-time audio/video streaming, and secure browser-based evaluation.',
-      badge: 'Integrated',
-      color: '#0071e3',
-      href: '/login'
+      color: '#10b981',
+      href: '/companies',
     },
     {
       icon: MessageSquare,
       title: 'Frictionless WhatsApp OTP Auth',
-      desc: 'Never forget a password again. Sign in securely in under 3 seconds with a lightning-fast one-time verification code sent right to your WhatsApp.',
-      badge: 'Seamless',
-      color: '#10b981',
-      href: '/login'
+      desc: 'Never forget a password again. Sign in securely in under 3 seconds with a lightning-fast one-time verification code sent directly to your WhatsApp.',
+      badge: '3-Sec Login',
+      color: '#06b6d4',
+      href: '/login',
     }
   ];
 
@@ -440,44 +444,84 @@ export default function Home() {
                   key={idx}
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.2 }}
+                  viewport={{ once: true, amount: 0.15 }}
                   transition={{ duration: 0.6, delay: idx * 0.08 }}
                   onClick={() => router.push(item.href)}
-                  className="p-6 md:p-8 rounded-3xl bg-white dark:bg-[#1c1c1e] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.15] dark:hover:border-white/[0.2] shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_12px_32px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col justify-between cursor-pointer group hover:-translate-y-1"
+                  className="rounded-3xl bg-white dark:bg-[#121214] border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.15] dark:hover:border-white/[0.2] shadow-[0_2px_12px_rgba(0,0,0,0.03)] hover:shadow-[0_16px_40px_rgba(0,0,0,0.12)] transition-all duration-500 flex flex-col justify-between cursor-pointer group hover:-translate-y-1.5 overflow-hidden"
                 >
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-110"
-                        style={{ backgroundColor: `${item.color}15`, color: item.color }}
-                      >
-                        <Icon className="w-6 h-6" />
+                  <div>
+                    {/* Visual Card Image / Preview Banner */}
+                    {item.image && (
+                      <div className="relative h-44 sm:h-48 w-full overflow-hidden bg-black border-b border-black/[0.06] dark:border-white/[0.08]">
+                        <img
+                          src={item.image}
+                          alt={item.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out opacity-90 group-hover:opacity-100"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                        
+                        {/* Floating Badge */}
+                        <div className="absolute top-3.5 right-3.5 z-10">
+                          <span
+                            className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md border shadow-sm"
+                            style={{
+                              backgroundColor: `${item.color}25`,
+                              borderColor: `${item.color}50`,
+                              color: '#ffffff'
+                            }}
+                          >
+                            {item.badge}
+                          </span>
+                        </div>
                       </div>
-                      <span
-                        className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border"
-                        style={{
-                          backgroundColor: `${item.color}10`,
-                          borderColor: `${item.color}30`,
-                          color: item.color
-                        }}
-                      >
-                        {item.badge}
-                      </span>
-                    </div>
+                    )}
 
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-bold text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-[#86868b] leading-relaxed font-medium">
-                        {item.desc}
-                      </p>
+                    <div className="p-6 md:p-7 space-y-4">
+                      {!item.image && (
+                        <div className="flex items-center justify-between">
+                          <div
+                            className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-110"
+                            style={{ backgroundColor: `${item.color}15`, color: item.color }}
+                          >
+                            <Icon className="w-6 h-6" />
+                          </div>
+                          <span
+                            className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border"
+                            style={{
+                              backgroundColor: `${item.color}10`,
+                              borderColor: `${item.color}30`,
+                              color: item.color
+                            }}
+                          >
+                            {item.badge}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {item.image && (
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                            >
+                              <Icon className="w-4 h-4" />
+                            </div>
+                          )}
+                          <h3 className="text-lg font-bold text-[#1d1d1f] dark:text-white group-hover:text-[#0071e3] transition-colors">
+                            {item.title}
+                          </h3>
+                        </div>
+                        <p className="text-xs sm:text-sm text-[#86868b] leading-relaxed font-medium">
+                          {item.desc}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="pt-6 mt-4 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-xs font-bold text-[#0071e3]">
-                    <span>Learn More</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  <div className="px-6 md:px-7 pb-6 pt-3 mt-auto flex items-center justify-between text-xs font-bold text-[#0071e3]">
+                    <span className="group-hover:underline">Explore Feature</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1.5 transition-transform" />
                   </div>
                 </motion.div>
               );
@@ -486,6 +530,7 @@ export default function Home() {
 
         </div>
       </section>
+
 
       {/* ── PUBLIC DIRECTORY SPOTLIGHT ────────────────────────────────── */}
       <section className="py-16 bg-gradient-to-b from-[#f2f2f7]/50 to-[#fafafa] dark:from-[#151516]/50 dark:to-[#000000] border-t border-black/[0.06] dark:border-white/[0.08]">
