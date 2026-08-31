@@ -217,6 +217,44 @@ async function sendCompanyPasswordResetEmail(email: string, token: string) {
   });
 }
 
+async function sendTeamInviteEmail(email: string, companyName: string, roleName: string, token: string) {
+  const inviteUrl = `https://company.dearresume.com/accept-invite?token=${token}`;
+  return await sendSmtpEmail({
+    to: email,
+    subject: `You're invited to join ${companyName || 'the workspace'} on DearResume`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; background: #ffffff; border-radius: 16px; border: 1px solid #e5e5ea;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1 style="color: #0071e3; margin: 0; font-size: 26px; font-weight: 700;">DearResume</h1>
+          <p style="color: #86868b; font-size: 14px; margin-top: 4px; font-weight: 500;">Team Workspace Invitation</p>
+        </div>
+        <h2 style="font-size: 18px; color: #1d1d1f; margin-bottom: 12px; font-weight: 600;">Join ${companyName || 'Corporate Workspace'}</h2>
+        <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 16px;">
+          You have been invited to join <strong>${companyName || 'the company workspace'}</strong> as a <strong>${roleName || 'Team Member'}</strong>.
+        </p>
+        <p style="font-size: 14px; color: #424245; line-height: 1.6; margin-bottom: 24px;">
+          Click the button below to accept your invitation, set your account password, and access your workspace:
+        </p>
+        <div style="text-align: center; margin: 32px 0;">
+          <a href="${inviteUrl}" target="_blank" style="background-color: #0071e3; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 12px rgba(0, 113, 227, 0.25);">
+            Accept Invitation &amp; Set Password
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #86868b; margin-top: 24px; line-height: 1.5;">
+          This invitation link is valid for 7 days.<br/>
+          Or copy and paste this link: <br/>
+          <a href="${inviteUrl}" style="color: #0071e3; word-break: break-all;">${inviteUrl}</a>
+        </p>
+        <hr style="border: none; border-top: 1px solid #f2f2f7; margin: 24px 0;"/>
+        <p style="font-size: 11px; color: #a1a1a6; text-align: center;">
+          This email was sent automatically by DearResume. If you did not expect this invitation, you can safely ignore this email.
+        </p>
+      </div>
+    `,
+  });
+}
+
+
 async function getCompanySubscription(db: D1Database, companyId: string) {
   try {
     const sub: any = await db.prepare(`
@@ -1242,88 +1280,147 @@ app.post('/api/company/auth/login', async (c) => {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // Login via Company table
+    // 1. Try finding primary Company owner
     const company: any = await c.env.DB.prepare(
       'SELECT id, name, email, password, isVerified, verificationBadge FROM "Company" WHERE LOWER(email) = ?'
     ).bind(cleanEmail).first();
 
-    if (!company) {
-      return c.json({ success: false, message: 'Invalid credentials or company not registered.' }, 401);
-    }
+    if (company) {
+      const valid = await bcrypt.compare(password, company.password);
+      if (!valid) {
+        return c.json({ success: false, message: 'Invalid credentials' }, 401);
+      }
 
-    const valid = await bcrypt.compare(password, company.password);
-    if (!valid) {
-      return c.json({ success: false, message: 'Invalid credentials' }, 401);
-    }
+      // Enforce Company Email Verification
+      const isCompVerified = company.isVerified === 1 || company.isVerified === true || company.isVerified === '1' || company.isVerified === 'true';
+      if (!isCompVerified) {
+        const jwtSecret = getJwtSecret(c);
+        const verifyToken = jwt.sign(
+          { companyId: company.id, email: company.email, purpose: 'company_email_verification' },
+          jwtSecret,
+          { expiresIn: '24h' }
+        );
 
-    // Enforce Company Email Verification
-    const isCompVerified = company.isVerified === 1 || company.isVerified === true || company.isVerified === '1' || company.isVerified === 'true';
-    if (!isCompVerified) {
+        // Dispatch verification link via Gmail SMTP
+        await sendCompanyVerificationEmail(company.email, company.name, verifyToken);
+
+        return c.json({
+          success: false,
+          emailVerified: false,
+          message: `Your company workspace is unverified. We have sent a verification link to your corporate email address (${company.email}). Please check your inbox and click the link to verify.`,
+          email: company.email,
+        }, 403);
+      }
+
+      // Get owner TeamMember record
+      const member: any = await c.env.DB.prepare(
+        'SELECT id, userId FROM "TeamMember" WHERE companyId = ? AND roles = 1 LIMIT 1'
+      ).bind(company.id).first();
+
+      const memberId = member?.id || company.id;
+      const userId = member?.userId || null;
+
       const jwtSecret = getJwtSecret(c);
-      const verifyToken = jwt.sign(
-        { companyId: company.id, email: company.email, purpose: 'company_email_verification' },
+      const token = jwt.sign(
+        { memberId, companyId: company.id, userId, role: 'owner' },
         jwtSecret,
-        { expiresIn: '24h' }
+        { expiresIn: '7d' }
       );
 
-      // Dispatch verification link via Gmail SMTP
-      await sendCompanyVerificationEmail(company.email, company.name, verifyToken);
+      // Set HttpOnly Cookies
+      setAuthCookies(c, token, token);
+
+      const subscription = await getCompanySubscription(c.env.DB, company.id);
 
       return c.json({
-        success: false,
-        emailVerified: false,
-        message: `Your company workspace is unverified. We have sent a verification link to your corporate email address (${company.email}). Please check your inbox and click the link to verify.`,
-        email: company.email,
-      }, 403);
+        success: true,
+        token,
+        company: {
+          id: company.id,
+          name: company.name,
+          email: company.email,
+          verificationBadge: Boolean(company.verificationBadge),
+          subscription,
+        },
+        user: {
+          id: userId || company.id,
+          email: company.email,
+          rolesMask: 2, // Admin
+        },
+      });
     }
 
-    // Get owner TeamMember record
-    const member: any = await c.env.DB.prepare(
-      'SELECT id, userId FROM "TeamMember" WHERE companyId = ? AND roles = 1 LIMIT 1'
-    ).bind(company.id).first();
+    // 2. Check if user is an invited TeamMember
+    const userRow: any = await c.env.DB.prepare(
+      'SELECT id, mobileNumber, password, globalRoles FROM "User" WHERE LOWER(mobileNumber) = ?'
+    ).bind(cleanEmail).first();
 
-    const memberId = member?.id || company.id;
-    const userId = member?.userId || null;
+    if (userRow) {
+      const teamMemberRow: any = await c.env.DB.prepare(
+        'SELECT m.*, c.name as companyName, c.email as companyEmail, c.isVerified FROM "TeamMember" m JOIN "Company" c ON m.companyId = c.id WHERE m.userId = ? ORDER BY m.createdAt DESC LIMIT 1'
+      ).bind(userRow.id).first();
 
-    const jwtSecret = getJwtSecret(c);
-    const token = jwt.sign(
-      { memberId, companyId: company.id, userId, role: 'owner' },
-      jwtSecret,
-      { expiresIn: '7d' }
-    );
+      if (teamMemberRow) {
+        if (teamMemberRow.status === 'pending') {
+          return c.json({
+            success: false,
+            message: 'Your workspace invitation is pending. Please check your email and click the invitation link to set your password.',
+          }, 403);
+        }
 
-    // Set HttpOnly Cookies
-    setAuthCookies(c, token, token);
+        const passwordToCompare = teamMemberRow.password || userRow.password;
+        if (!passwordToCompare) {
+          return c.json({
+            success: false,
+            message: 'Account not yet activated. Please use the invitation link sent to your email to set your password.',
+          }, 403);
+        }
 
-    const subscription = await getCompanySubscription(c.env.DB, company.id);
+        const valid = await bcrypt.compare(password, passwordToCompare);
+        if (!valid) {
+          return c.json({ success: false, message: 'Invalid credentials' }, 401);
+        }
 
-    const companyObj = {
-      id: company.id,
-      name: company.name,
-      email: company.email,
-      verificationBadge: company.verificationBadge || 'none',
-      subscription,
-    };
+        const jwtSecret = getJwtSecret(c);
+        const token = jwt.sign(
+          {
+            memberId: teamMemberRow.id,
+            companyId: teamMemberRow.companyId,
+            userId: userRow.id,
+            rolesMask: teamMemberRow.roles,
+            isTeamMember: true,
+          },
+          jwtSecret,
+          { expiresIn: '7d' }
+        );
 
-    return c.json({
-      success: true,
-      message: 'Login successful',
-      token,
-      company: companyObj,
-      user: {
-        id: memberId,
-        name: company.name,
-        email: company.email,
-        role: 'owner',
-        rolesMask: 2,
-        companyRoles: 2,
-        company: companyObj,
-      },
-    });
+        setAuthCookies(c, token, token);
+        const subscription = await getCompanySubscription(c.env.DB, teamMemberRow.companyId);
+
+        return c.json({
+          success: true,
+          token,
+          company: {
+            id: teamMemberRow.companyId,
+            name: teamMemberRow.companyName,
+            email: teamMemberRow.companyEmail,
+            subscription,
+          },
+          user: {
+            id: userRow.id,
+            email: cleanEmail,
+            rolesMask: teamMemberRow.roles,
+          },
+        });
+      }
+    }
+
+    return c.json({ success: false, message: 'Invalid credentials or company not registered.' }, 401);
   } catch (err: any) {
     return c.json({ success: false, message: err.message || 'Server error' }, 500);
   }
 });
+
 
 app.get('/api/company/auth/verify-email', async (c) => {
   try {
@@ -3558,7 +3655,7 @@ app.get('/api/company/team', async (c) => {
     if (!decoded || !decoded.companyId) return c.json({ success: true, team: [], tags: [] });
 
     const membersRes = await c.env.DB.prepare(
-      'SELECT m.*, u.mobileNumber, u.globalRoles, p.fullName, p.email as profileEmail, p.profilePhotoUrl FROM "TeamMember" m JOIN "User" u ON m.userId = u.id LEFT JOIN "JobSeekerProfile" p ON p.userId = u.id WHERE m.companyId = ? AND m.status = "active" ORDER BY m.createdAt ASC'
+      'SELECT m.*, u.mobileNumber, u.globalRoles, p.fullName, p.email as profileEmail, p.profilePhotoUrl FROM "TeamMember" m JOIN "User" u ON m.userId = u.id LEFT JOIN "JobSeekerProfile" p ON p.userId = u.id WHERE m.companyId = ? ORDER BY m.createdAt ASC'
     ).bind(decoded.companyId).all();
 
     const members = (membersRes.results || []).map((m: any) => {
@@ -3580,7 +3677,7 @@ app.get('/api/company/team', async (c) => {
         globalRolesMask: m.globalRoles,
         permissions: permissions || null,
         tags: Array.isArray(tags) ? tags : [],
-        status: m.status,
+        status: m.status || 'pending',
         joinedAt: m.createdAt,
         avatar: m.profilePhotoUrl || null,
       };
@@ -3603,9 +3700,11 @@ app.post('/api/company/team/invite', async (c) => {
 
     const normalizedEmail = String(email).toLowerCase().trim();
     let bitwiseRole = 16; // COMPANY_VIEWER
-    if (roleType === 'admin') bitwiseRole = 2; // COMPANY_ADMIN
-    else if (roleType === 'hr' || roleType === 'recruiter') bitwiseRole = 4; // COMPANY_HR
-    else if (roleType === 'interviewer') bitwiseRole = 8; // COMPANY_INTERVIEWER
+    let roleLabel = 'Viewer';
+    if (roleType === 'admin') { bitwiseRole = 2; roleLabel = 'Admin'; }
+    else if (roleType === 'hr') { bitwiseRole = 4; roleLabel = 'HR Manager'; }
+    else if (roleType === 'interviewer') { bitwiseRole = 8; roleLabel = 'Interviewer'; }
+    else if (roleType === 'recruiter') { bitwiseRole = 4; roleLabel = 'Recruiter'; }
 
     let existingUser: any = await c.env.DB.prepare('SELECT * FROM "User" WHERE mobileNumber = ?').bind(normalizedEmail).first();
     let userId = existingUser?.id;
@@ -3622,11 +3721,228 @@ app.post('/api/company/team/invite', async (c) => {
     const tagsJson = JSON.stringify(Array.isArray(tags) ? tags : []);
     const permJson = permissions ? JSON.stringify(permissions) : null;
 
-    await c.env.DB.prepare(
-      'INSERT INTO "TeamMember" (id, companyId, userId, roles, permissions, tags, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, "active", ?, ?) ON CONFLICT("companyId", "userId") DO UPDATE SET roles = excluded.roles, permissions = excluded.permissions, tags = excluded.tags, status = "active", updatedAt = excluded.updatedAt'
-    ).bind(memberId, decoded.companyId, userId, bitwiseRole, permJson, tagsJson, now, now).run();
+    // Check if membership already exists
+    const existingMember: any = await c.env.DB.prepare(
+      'SELECT id, status FROM "TeamMember" WHERE companyId = ? AND userId = ?'
+    ).bind(decoded.companyId, userId).first();
 
-    return c.json({ success: true, message: `Team member added: ${normalizedEmail}` });
+    const memberStatus = existingMember?.status === 'active' ? 'active' : 'pending';
+
+    if (existingMember) {
+      await c.env.DB.prepare(
+        'UPDATE "TeamMember" SET roles = ?, permissions = ?, tags = ?, updatedAt = ? WHERE id = ?'
+      ).bind(bitwiseRole, permJson, tagsJson, now, existingMember.id).run();
+    } else {
+      await c.env.DB.prepare(
+        'INSERT INTO "TeamMember" (id, companyId, userId, roles, permissions, tags, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).bind(memberId, decoded.companyId, userId, bitwiseRole, permJson, tagsJson, memberStatus, now, now).run();
+    }
+
+    // Fetch company name
+    const companyRow: any = await c.env.DB.prepare('SELECT name FROM "Company" WHERE id = ?').bind(decoded.companyId).first();
+    const companyName = companyRow?.name || 'DearResume Workspace';
+
+    // Sign invitation token (7 days expiry)
+    const secret = getJwtSecret(c);
+    const inviteToken = jwt.sign(
+      {
+        email: normalizedEmail,
+        companyId: decoded.companyId,
+        targetRoles: bitwiseRole,
+        targetPermissions: permissions || null,
+        targetTags: Array.isArray(tags) ? tags : [],
+        invitedBy: decoded.userId || decoded.companyId,
+        type: 'team_invite',
+      },
+      secret,
+      { expiresIn: '7d' }
+    );
+
+    // Send invitation email in background
+    c.executionCtx?.waitUntil(
+      sendTeamInviteEmail(normalizedEmail, companyName, roleLabel, inviteToken).catch((e: any) => console.error('Invite email error:', e))
+    );
+
+    return c.json({
+      success: true,
+      message: `Invitation email dispatched to ${normalizedEmail}`,
+      inviteToken,
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/company/team/:memberId/resend-invite', async (c) => {
+  try {
+    const { memberId } = c.req.param();
+    const decoded = await getAuthUser(c);
+    if (!decoded || !decoded.companyId) return c.json({ success: false, message: 'Unauthorized' }, 401);
+
+    const member: any = await c.env.DB.prepare(
+      'SELECT m.*, u.mobileNumber FROM "TeamMember" m JOIN "User" u ON m.userId = u.id WHERE m.id = ? AND m.companyId = ?'
+    ).bind(memberId, decoded.companyId).first();
+
+    if (!member) return c.json({ success: false, message: 'Team member not found' }, 404);
+
+    const normalizedEmail = member.mobileNumber;
+    const companyRow: any = await c.env.DB.prepare('SELECT name FROM "Company" WHERE id = ?').bind(decoded.companyId).first();
+    const companyName = companyRow?.name || 'DearResume Workspace';
+
+    let roleLabel = 'Team Member';
+    if (member.roles === 2) roleLabel = 'Admin';
+    else if (member.roles === 4) roleLabel = 'HR Manager';
+    else if (member.roles === 8) roleLabel = 'Interviewer';
+    else if (member.roles === 16) roleLabel = 'Viewer';
+
+    const secret = getJwtSecret(c);
+    const inviteToken = jwt.sign(
+      {
+        email: normalizedEmail,
+        companyId: decoded.companyId,
+        targetRoles: member.roles,
+        targetPermissions: member.permissions ? JSON.parse(member.permissions) : null,
+        targetTags: member.tags ? JSON.parse(member.tags) : [],
+        invitedBy: decoded.userId || decoded.companyId,
+        type: 'team_invite',
+      },
+      secret,
+      { expiresIn: '7d' }
+    );
+
+    c.executionCtx?.waitUntil(
+      sendTeamInviteEmail(normalizedEmail, companyName, roleLabel, inviteToken).catch((e: any) => console.error('Resend invite email error:', e))
+    );
+
+    return c.json({ success: true, message: `Invitation resent to ${normalizedEmail}`, inviteToken });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.get('/api/company/team/accept-invite', async (c) => {
+  try {
+    const token = c.req.query('token');
+    if (!token) return c.json({ success: false, message: 'Invalid or missing invitation token' }, 400);
+
+    const secret = getJwtSecret(c);
+    let payload: any;
+    try {
+      payload = jwt.verify(token, secret);
+    } catch {
+      return c.json({ success: false, message: 'Invitation link has expired or is invalid.' }, 400);
+    }
+
+    const { email, companyId } = payload;
+    const company: any = await c.env.DB.prepare('SELECT id, name, logoUrl FROM "Company" WHERE id = ?').bind(companyId).first();
+    if (!company) return c.json({ success: false, message: 'Workspace no longer exists' }, 404);
+
+    const user: any = await c.env.DB.prepare('SELECT id FROM "User" WHERE mobileNumber = ?').bind(email).first();
+    if (user) {
+      const member: any = await c.env.DB.prepare(
+        'SELECT id, status, password FROM "TeamMember" WHERE companyId = ? AND userId = ?'
+      ).bind(companyId, user.id).first();
+      if (member && member.status === 'active' && member.password) {
+        return c.json({ success: true, alreadyMember: true, email, companyName: company.name });
+      }
+    }
+
+    return c.json({
+      success: true,
+      isNewUser: true,
+      email,
+      companyName: company.name,
+      companyLogoUrl: company.logoUrl,
+      message: 'Invitation valid. Please create your account password.',
+    });
+  } catch (err: any) {
+    return c.json({ success: false, message: err.message }, 500);
+  }
+});
+
+app.post('/api/company/team/set-password', async (c) => {
+  try {
+    const { token, password } = await c.req.json().catch(() => ({}));
+    if (!token || !password) return c.json({ success: false, message: 'Token and password are required' }, 400);
+    if (password.length < 8) return c.json({ success: false, message: 'Password must be at least 8 characters' }, 400);
+
+    const secret = getJwtSecret(c);
+    let payload: any;
+    try {
+      payload = jwt.verify(token, secret);
+    } catch {
+      return c.json({ success: false, message: 'Invitation token expired or invalid' }, 400);
+    }
+
+    const { email, companyId, targetRoles, targetPermissions, targetTags } = payload;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const now = new Date().toISOString();
+
+    let user: any = await c.env.DB.prepare('SELECT * FROM "User" WHERE mobileNumber = ?').bind(email).first();
+    let userId = user?.id;
+
+    if (!user) {
+      userId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "User" (id, mobileNumber, password, globalRoles, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(userId, email, hashedPassword, targetRoles || 16, now, now).run();
+    } else {
+      await c.env.DB.prepare(
+        'UPDATE "User" SET password = ?, globalRoles = ?, updatedAt = ? WHERE id = ?'
+      ).bind(hashedPassword, targetRoles || user.globalRoles, now, userId).run();
+    }
+
+    const member: any = await c.env.DB.prepare(
+      'SELECT id FROM "TeamMember" WHERE companyId = ? AND userId = ?'
+    ).bind(companyId, userId).first();
+
+    const permJson = targetPermissions ? JSON.stringify(targetPermissions) : null;
+    const tagsJson = JSON.stringify(targetTags || []);
+
+    if (member) {
+      await c.env.DB.prepare(
+        'UPDATE "TeamMember" SET status = "active", password = ?, roles = ?, permissions = ?, tags = ?, updatedAt = ? WHERE id = ?'
+      ).bind(hashedPassword, targetRoles || 16, permJson, tagsJson, now, member.id).run();
+    } else {
+      const newMemberId = crypto.randomUUID();
+      await c.env.DB.prepare(
+        'INSERT INTO "TeamMember" (id, companyId, userId, roles, permissions, tags, status, password, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, "active", ?, ?, ?)'
+      ).bind(newMemberId, companyId, userId, targetRoles || 16, permJson, tagsJson, hashedPassword, now, now).run();
+    }
+
+    const company: any = await c.env.DB.prepare('SELECT * FROM "Company" WHERE id = ?').bind(companyId).first();
+
+    // Issue session token and cookie
+    const accessToken = jwt.sign(
+      {
+        userId,
+        companyId,
+        email,
+        rolesMask: targetRoles || 16,
+        isTeamMember: true,
+      },
+      secret,
+      { expiresIn: '7d' }
+    );
+
+    setAuthCookies(c, accessToken, accessToken);
+
+    return c.json({
+      success: true,
+      token: accessToken,
+      user: {
+        id: userId,
+        email,
+        rolesMask: targetRoles || 16,
+      },
+      company: {
+        id: companyId,
+        name: company?.name || 'Workspace',
+        email: company?.email || '',
+        logoUrl: company?.logoUrl || null,
+      },
+      message: 'Password set successfully. Welcome to your workspace!',
+    });
   } catch (err: any) {
     return c.json({ success: false, message: err.message }, 500);
   }
@@ -3682,6 +3998,7 @@ app.delete('/api/company/team/:memberId', async (c) => {
     return c.json({ success: false, message: err.message }, 500);
   }
 });
+
 
 
 // ─── SEEKER DIRECT DISCOVERY ENDPOINTS ───────────────────

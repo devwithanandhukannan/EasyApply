@@ -30,4 +30,7 @@ export const teamApi = {
     
   remove: (memberId: string) => 
     axios.delete<{ success: boolean; message: string }>(`/company/team/${memberId}`),
+
+  resendInvite: (memberId: string) =>
+    axios.post<{ success: boolean; message: string; inviteToken?: string }>(`/company/team/${memberId}/resend-invite`),
 };

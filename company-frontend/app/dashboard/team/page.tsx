@@ -284,6 +284,8 @@ export default function TeamPage() {
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PENDING'>('ALL');
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   // Invite & Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -299,6 +301,19 @@ export default function TeamPage() {
 
   const maxTeamMembers = company?.subscription?.plan?.maxTeamMembers ?? 1;
   const isTeamLocked = members.length >= maxTeamMembers;
+
+  const handleResendInvite = async (member: TeamMember) => {
+    setResendingId(member.id);
+    try {
+      const res = await teamApi.resendInvite(member.id);
+      showToast('Invitation Dispatched', res.data.message || `Invite email resent to ${member.email}`, 'success');
+    } catch (err: any) {
+      showToast('Dispatch Failed', err.response?.data?.message || 'Failed to resend invitation email', 'danger');
+    } finally {
+      setResendingId(null);
+    }
+  };
+
 
   const fetchTeam = async () => {
     try {
@@ -328,9 +343,14 @@ export default function TeamPage() {
     return combined.filter((t) => !formTags.includes(t));
   }, [companyTags, formTags]);
 
-  // Filtered members list based on search and active tag filter
+  // Filtered members list based on search, active tag filter, and status filter
   const filteredMembers = useMemo(() => {
     return members.filter((m) => {
+      // Status match
+      const isPending = (m.status || 'pending').toLowerCase() === 'pending';
+      if (statusFilter === 'ACTIVE' && isPending) return false;
+      if (statusFilter === 'PENDING' && !isPending) return false;
+
       // Search match
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
@@ -344,7 +364,11 @@ export default function TeamPage() {
 
       return matchesSearch && matchesTag;
     });
-  }, [members, searchQuery, activeTagFilter]);
+  }, [members, searchQuery, activeTagFilter, statusFilter]);
+
+  // Compute status counts
+  const activeCount = useMemo(() => members.filter(m => (m.status || '').toLowerCase() === 'active').length, [members]);
+  const pendingCount = useMemo(() => members.filter(m => (m.status || 'pending').toLowerCase() === 'pending').length, [members]);
 
   // Compute tag counts for the filter bar
   const tagCounts = useMemo(() => {
@@ -494,7 +518,7 @@ export default function TeamPage() {
           permissions: customPermissions,
           tags: formTags,
         });
-        showToast('Success', `Invitation email sent to ${formEmail}`, 'success');
+        showToast('Success', `Invitation email dispatched to ${formEmail}`, 'success');
       }
 
       setIsModalOpen(false);
@@ -515,6 +539,27 @@ export default function TeamPage() {
     } catch (error) {
       showToast('Error', 'Failed to revoke member access', 'danger');
     }
+  };
+
+  const getStatusBadge = (member: TeamMember) => {
+    const isPending = (member.status || 'pending').toLowerCase() === 'pending';
+    if (isPending) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+          </span>
+          <span>Pending Invite</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+        <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+        <span>Active</span>
+      </span>
+    );
   };
 
   const getRoleBadge = (member: TeamMember) => {
@@ -632,41 +677,73 @@ export default function TeamPage() {
           </div>
         </div>
 
-        {/* Tag Filter Pills */}
+        {/* Status and Tag Filter Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 scrollbar-none flex-wrap">
+          {/* Status Filters */}
           <button
-            onClick={() => setActiveTagFilter(null)}
+            onClick={() => setStatusFilter('ALL')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTagFilter === null
+              statusFilter === 'ALL' && activeTagFilter === null
                 ? 'bg-[#0071e3] text-white shadow-xs'
                 : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border border-black/[0.04] dark:border-white/[0.06]'
             }`}
           >
             <span>All Members</span>
-            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${activeTagFilter === null ? 'bg-white/20 text-white' : 'bg-black/[0.06] dark:bg-white/10'}`}>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${statusFilter === 'ALL' && activeTagFilter === null ? 'bg-white/20 text-white' : 'bg-black/[0.06] dark:bg-white/10'}`}>
               {members.length}
             </span>
           </button>
 
-          {allAvailableTags.map((tag) => {
-            const style = getTagStyle(tag);
-            const isSelected = activeTagFilter === tag;
-            const count = tagCounts[tag] || 0;
+          <button
+            onClick={() => { setStatusFilter('ACTIVE'); setActiveTagFilter(null); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              statusFilter === 'ACTIVE'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border border-black/[0.04] dark:border-white/[0.06]'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span>Active</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${statusFilter === 'ACTIVE' ? 'bg-white/20 text-white' : 'bg-black/[0.06] dark:bg-white/10'}`}>
+              {activeCount}
+            </span>
+          </button>
 
+          <button
+            onClick={() => { setStatusFilter('PENDING'); setActiveTagFilter(null); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              statusFilter === 'PENDING'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border border-black/[0.04] dark:border-white/[0.06]'
+            }`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            <span>Pending Invite</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${statusFilter === 'PENDING' ? 'bg-white/20 text-white' : 'bg-black/[0.06] dark:bg-white/10'}`}>
+              {pendingCount}
+            </span>
+          </button>
+
+          <div className="h-4 w-[1px] bg-black/[0.08] dark:bg-white/[0.1] mx-1" />
+
+          {/* Tag filters */}
+          {allAvailableTags.map((tag) => {
+            const isSelected = activeTagFilter === tag;
+            const style = getTagStyle(tag);
             return (
               <button
                 key={tag}
-                onClick={() => setActiveTagFilter(isSelected ? null : tag)}
+                onClick={() => { setActiveTagFilter(isSelected ? null : tag); setStatusFilter('ALL'); }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
                   isSelected
-                    ? `${style.bg} ${style.border} ${style.text} shadow-xs ring-2 ring-blue-500/30`
-                    : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#86868b] hover:text-[#1d1d1f] dark:hover:text-white border-black/[0.04] dark:border-white/[0.06]'
+                    ? `${style.bg} ${style.text} ${style.border} ring-2 ring-[#0071e3]/30`
+                    : 'bg-[#f2f2f7] dark:bg-[#2c2c2e] text-[#86868b] border-black/[0.04] dark:border-white/[0.06] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c]'
                 }`}
               >
-                <span className={`w-2 h-2 rounded-full ${style.dot}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
                 <span>{tag}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/[0.06] dark:bg-white/10 font-semibold">
-                  {count}
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/[0.06] dark:bg-white/10">
+                  {tagCounts[tag]}
                 </span>
               </button>
             );
@@ -681,6 +758,7 @@ export default function TeamPage() {
             <thead>
               <tr className="border-b border-black/[0.06] dark:border-white/[0.08] bg-[#fbfbfd] dark:bg-[#18181a] text-[10px] font-bold uppercase tracking-wider text-[#86868b]">
                 <th className="px-6 py-3.5">Workspace Member</th>
+                <th className="px-6 py-3.5">Status</th>
                 <th className="px-6 py-3.5">Assigned Role &amp; Capabilities</th>
                 <th className="px-6 py-3.5">Team / Custom Tags</th>
                 <th className="px-6 py-3.5">Joined Date</th>
@@ -690,114 +768,137 @@ export default function TeamPage() {
             <tbody className="divide-y divide-black/[0.04] dark:divide-white/[0.04]">
               {filteredMembers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-xs text-[#86868b]">
+                  <td colSpan={6} className="px-6 py-12 text-center text-xs text-[#86868b]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Users size={28} className="text-[#86868b]/40" />
                       <p className="font-semibold">No team members match the selected filter or search.</p>
-                      {activeTagFilter && (
+                      {(activeTagFilter || statusFilter !== 'ALL') && (
                         <button
-                          onClick={() => setActiveTagFilter(null)}
+                          onClick={() => { setActiveTagFilter(null); setStatusFilter('ALL'); }}
                           className="text-[#0071e3] hover:underline font-bold mt-1 cursor-pointer"
                         >
-                          Clear tag filter
+                          Clear filters
                         </button>
                       )}
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredMembers.map((member) => (
-                  <tr key={member.id} className="hover:bg-black/[0.015] dark:hover:bg-white/[0.015] transition-colors">
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      <div className="h-10 w-10 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex-shrink-0 flex items-center justify-center overflow-hidden">
-                        {member.avatar ? (
-                          <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <span className="text-[#0071e3] text-sm font-bold">
-                            {member.name ? member.name.charAt(0).toUpperCase() : 'U'}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
-                          {member.name || 'Team Member'}
+                filteredMembers.map((member) => {
+                  const isPending = (member.status || 'pending').toLowerCase() === 'pending';
+                  return (
+                    <tr key={member.id} className="hover:bg-black/[0.015] dark:hover:bg-white/[0.015] transition-colors">
+                      <td className="px-6 py-4 flex items-center gap-3">
+                        <div className="h-10 w-10 border border-black/[0.06] dark:border-white/[0.08] rounded-2xl bg-[#f2f2f7] dark:bg-[#2c2c2e] flex-shrink-0 flex items-center justify-center overflow-hidden">
+                          {member.avatar ? (
+                            <img src={member.avatar} alt={member.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <span className="text-[#0071e3] text-sm font-bold">
+                              {member.name ? member.name.charAt(0).toUpperCase() : 'U'}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[11px] text-[#86868b]">{member.email}</div>
-                      </div>
-                    </td>
+                        <div>
+                          <div className="text-xs font-bold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                            {member.name || 'Team Member'}
+                          </div>
+                          <div className="text-[11px] text-[#86868b]">{member.email}</div>
+                        </div>
+                      </td>
 
-                    <td className="px-6 py-4 align-middle">
-                      {getRoleBadge(member)}
-                    </td>
+                      <td className="px-6 py-4 align-middle">
+                        {getStatusBadge(member)}
+                      </td>
 
-                    {/* Custom Tags Column */}
-                    <td className="px-6 py-4 align-middle">
-                      <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
-                        {member.tags && member.tags.length > 0 ? (
-                          member.tags.map((tag) => {
-                            const style = getTagStyle(tag);
-                            return (
-                              <button
-                                key={tag}
-                                onClick={() => setActiveTagFilter(tag)}
-                                title={`Filter by ${tag}`}
-                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 hover:scale-105 ${style.bg} ${style.text} ${style.border}`}
-                              >
-                                <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-                                <span>{tag}</span>
-                              </button>
-                            );
-                          })
-                        ) : (
+                      <td className="px-6 py-4 align-middle">
+                        {getRoleBadge(member)}
+                      </td>
+
+                      {/* Custom Tags Column */}
+                      <td className="px-6 py-4 align-middle">
+                        <div className="flex items-center gap-1.5 flex-wrap max-w-xs">
+                          {member.tags && member.tags.length > 0 ? (
+                            member.tags.map((tag) => {
+                              const style = getTagStyle(tag);
+                              return (
+                                <button
+                                  key={tag}
+                                  onClick={() => setActiveTagFilter(tag)}
+                                  title={`Filter by ${tag}`}
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1 hover:scale-105 ${style.bg} ${style.text} ${style.border}`}
+                                >
+                                  <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                                  <span>{tag}</span>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <button
+                              onClick={() => handleOpenEdit(member)}
+                              className="text-[11px] text-[#86868b] hover:text-[#0071e3] flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                            >
+                              <Plus size={12} />
+                              <span>Add Tag</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 text-xs text-[#86868b] align-middle font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-[#0071e3]" />
+                          <span>
+                            {member.joinedAt
+                              ? new Date(member.joinedAt).toLocaleDateString(undefined, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })
+                              : 'Pending'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 text-right align-middle">
+                        <div className="flex items-center justify-end gap-2">
+                          {isPending && (
+                            <button
+                              onClick={() => handleResendInvite(member)}
+                              disabled={resendingId === member.id}
+                              className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              title="Resend invitation email"
+                            >
+                              {resendingId === member.id ? (
+                                <Loader2 size={12} className="animate-spin text-amber-500" />
+                              ) : (
+                                <Mail size={12} className="text-amber-500" />
+                              )}
+                              <span>{resendingId === member.id ? 'Sending...' : 'Resend Invite'}</span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => handleOpenEdit(member)}
-                            className="text-[11px] text-[#86868b] hover:text-[#0071e3] flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                            className="px-3 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
                           >
-                            <Plus size={12} />
-                            <span>Add Tag</span>
+                            <SlidersHorizontal size={13} className="text-[#0071e3]" />
+                            <span>Edit</span>
                           </button>
-                        )}
-                      </div>
-                    </td>
 
-                    <td className="px-6 py-4 text-xs text-[#86868b] align-middle font-medium">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-[#0071e3]" />
-                        <span>
-                          {member.joinedAt
-                            ? new Date(member.joinedAt).toLocaleDateString(undefined, {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })
-                            : 'Pending'}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 text-right align-middle">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleOpenEdit(member)}
-                          className="px-3 py-1.5 bg-[#f2f2f7] dark:bg-[#2c2c2e] hover:bg-[#e5e5ea] dark:hover:bg-[#3a3a3c] text-[#1d1d1f] dark:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <SlidersHorizontal size={13} className="text-[#0071e3]" />
-                          <span>Edit</span>
-                        </button>
-
-                        {isAdmin && (
-                          <button
-                            onClick={() => handleRemove(member.id, member.name || member.email)}
-                            className="p-1.5 text-[#86868b] hover:text-red-500 rounded-xl transition-colors cursor-pointer"
-                            title="Revoke access"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleRemove(member.id, member.name || member.email)}
+                              className="p-1.5 text-[#86868b] hover:text-red-500 rounded-xl transition-colors cursor-pointer"
+                              title="Revoke access"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
