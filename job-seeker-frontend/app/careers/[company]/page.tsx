@@ -70,7 +70,15 @@ export default function CompanyCareerPage() {
   const params = useParams();
   const router = useRouter();
   const { isAuthenticated, user, isLoading: authLoading } = useAuth();
-  const companyIdentifier = params.company as string;
+
+  const [companyIdentifier, setCompanyIdentifier] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/careers/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const pId = Array.isArray(params?.company) ? params.company[0] : params?.company;
+    return pId && pId !== 'default' ? (pId as string) : '';
+  });
 
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -88,10 +96,20 @@ export default function CompanyCareerPage() {
   const [activeTab, setActiveTab] = useState<'jobs' | 'walkin' | 'about'>('jobs');
 
   useEffect(() => {
-    if (companyIdentifier) {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/careers/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') {
+        setCompanyIdentifier(decodeURIComponent(match));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (companyIdentifier && companyIdentifier !== 'default') {
       loadCompanyData();
     }
   }, [companyIdentifier]);
+
 
   useEffect(() => {
     filterJobs();

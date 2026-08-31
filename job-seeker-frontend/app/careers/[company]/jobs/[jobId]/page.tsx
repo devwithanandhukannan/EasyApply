@@ -48,18 +48,45 @@ export default function JobDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const companyIdentifier = params.company as string;
-  const jobId = params.jobId as string;
+
+  const [companyIdentifier, setCompanyIdentifier] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/careers/')[1]?.split('/jobs/')[0]?.split('?')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const pId = Array.isArray(params?.company) ? params.company[0] : params?.company;
+    return pId && pId !== 'default' ? (pId as string) : '';
+  });
+
+  const [jobId, setJobId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.split('/jobs/')[1]?.split('/')[0]?.split('?')[0];
+      if (match && match !== 'default') return decodeURIComponent(match);
+    }
+    const jId = Array.isArray(params?.jobId) ? params.jobId[0] : params?.jobId;
+    return jId && jId !== 'default' ? (jId as string) : '';
+  });
 
   const [loading, setLoading] = useState(true);
   const [job, setJob] = useState<JobDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && jobId) {
+    if (typeof window !== 'undefined') {
+      const compMatch = window.location.pathname.split('/careers/')[1]?.split('/jobs/')[0]?.split('?')[0];
+      if (compMatch && compMatch !== 'default') setCompanyIdentifier(decodeURIComponent(compMatch));
+
+      const jobMatch = window.location.pathname.split('/jobs/')[1]?.split('/')[0]?.split('?')[0];
+      if (jobMatch && jobMatch !== 'default') setJobId(decodeURIComponent(jobMatch));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && jobId && jobId !== 'default') {
       loadJobDetails();
     }
   }, [jobId, authLoading]);
+
 
   const loadJobDetails = async () => {
     setLoading(true);
